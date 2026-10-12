@@ -1,5 +1,5 @@
 [application]
-config/name="万界冒险团 - 第一阶段原型"
+config/name="万界冒险团 V0.2A"
 run/main_scene="res://scenes/main.tscn"
 
 [display]

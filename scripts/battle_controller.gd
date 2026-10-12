@@ -42,7 +42,7 @@ func _ready() -> void:
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
 	add_child(inventory)
-	if "--equipment-test" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args():
 		inventory.clear_test_save()
 	inventory.load_from_disk()
 	inventory.equipment_changed.connect(_on_equipment_changed)

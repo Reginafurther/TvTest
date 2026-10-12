@@ -1,0 +1,12 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+SMOKE_TEST_PASS elapsed=20.0 kills=7 heroes=4 wave=2
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+EQUIPMENT_TEST_PASS elapsed=20.0 kills=6 drops=8 unique_ids=true slots=36 save_reload=true
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+PERSISTENCE_WRITE_PASS id=6acc910e-1-af433a affixes=5
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+PERSISTENCE_READ_PASS id=6acc910e-1-af433a items=1 affixes=5

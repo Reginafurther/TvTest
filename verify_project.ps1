@@ -10,8 +10,13 @@ $required = @(
     'scripts/data_loader.gd',
     'scripts/floating_text.gd',
     'scripts/effect_ring.gd',
+    'scripts/equipment_generator.gd',
+    'scripts/inventory_manager.gd',
+    'scripts/inventory_ui.gd',
     'data/actors.json',
-    'data/skills.json'
+    'data/skills.json',
+    'data/equipment.json',
+    'data/loot_tables.json'
 )
 
 foreach ($relative in $required) {
@@ -34,12 +39,32 @@ foreach ($id in $requiredActors) {
     }
 }
 
-$godot = Get-Command godot4, godot -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($godot) {
-    & $godot.Source --headless --path $root -- --smoke-test
+$equipment = Get-Content -Raw -LiteralPath (Join-Path $root 'data/equipment.json') | ConvertFrom-Json
+$requiredSlots = @('main_hand', 'off_hand', 'helmet', 'armor', 'gloves', 'boots', 'necklace', 'ring_1', 'ring_2')
+$requiredAffixes = @('health', 'attack', 'defense', 'crit_chance', 'crit_damage', 'attack_speed', 'cooldown_reduction', 'physical_damage', 'elemental_damage', 'life_regen')
+foreach ($slot in $requiredSlots) {
+    if (-not $equipment.slots.PSObject.Properties.Name.Contains($slot)) { throw "Missing equipment slot: $slot" }
+}
+foreach ($affix in $requiredAffixes) {
+    if (-not $equipment.affixes.PSObject.Properties.Name.Contains($affix)) { throw "Missing affix: $affix" }
+}
+
+$godotPath = $env:GODOT_BIN
+if (-not $godotPath) {
+    $godot = Get-Command godot4, godot -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($godot) { $godotPath = $godot.Source }
+}
+if ($godotPath -and (Test-Path -LiteralPath $godotPath)) {
+    & $godotPath --headless --path $root -- --smoke-test
     if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
-    Write-Host 'PASS: Files, data references, and the automated battle smoke test are valid.' -ForegroundColor Green
+    & $godotPath --headless --path $root -- --equipment-test
+    if ($LASTEXITCODE -ne 0) { throw "Equipment validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --persistence-write
+    if ($LASTEXITCODE -ne 0) { throw "Persistence write failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --persistence-read
+    if ($LASTEXITCODE -ne 0) { throw "Persistence read failed with exit code $LASTEXITCODE" }
+    Write-Host 'PASS: Static checks, battle regression, equipment, drops, unique IDs, and cross-process save reload are valid.' -ForegroundColor Green
 } else {
-    Write-Host 'PASS: Files and data references are valid.' -ForegroundColor Green
-    Write-Warning 'Godot is not installed or not on PATH; runtime startup was not executed.'
+    Write-Host 'PASS: Files, actor/skill references, 9 slots, and 10 affix definitions are valid.' -ForegroundColor Green
+    Write-Warning 'Godot was not found. Set GODOT_BIN to the Godot executable to run both runtime tests.'
 }

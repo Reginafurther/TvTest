@@ -28,7 +28,11 @@ func _ready() -> void:
 	inventory_ui.setup(battle)
 	update_party(battle.heroes)
 	add_log("四人小队已进入青草渡口，自动战斗开始")
-	if "--equipment-test" in OS.get_cmdline_user_args():
+	if "--persistence-write" in OS.get_cmdline_user_args():
+		finish_persistence_write()
+	elif "--persistence-read" in OS.get_cmdline_user_args():
+		finish_persistence_read()
+	elif "--equipment-test" in OS.get_cmdline_user_args():
 		Engine.time_scale = 4.0
 		get_tree().create_timer(20.0).timeout.connect(finish_equipment_test)
 	elif "--smoke-test" in OS.get_cmdline_user_args():
@@ -216,4 +220,26 @@ func finish_equipment_test() -> void:
 			push_error("EQUIPMENT_TEST_FAIL: " + failure)
 	Engine.time_scale = 1.0
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_persistence_write() -> void:
+	var item: Dictionary = battle.equipment_generator.generate(12, "跨进程存档测试", "orange", "main_hand")
+	var added: bool = battle.inventory.add_item(item, false)
+	var equipped: bool = battle.inventory.equip_item("pikachu", item.instance_id, "main_hand")
+	var saved: bool = battle.inventory.save_to_disk()
+	var passed: bool = added and equipped and saved and not item.get("affixes", []).is_empty()
+	if passed:
+		print("PERSISTENCE_WRITE_PASS id=%s affixes=%d" % [item.instance_id, item.affixes.size()])
+	else:
+		push_error("PERSISTENCE_WRITE_FAIL")
+	get_tree().quit(0 if passed else 1)
+
+func finish_persistence_read() -> void:
+	var equipped_id: String = battle.inventory.equipped.get("pikachu", {}).get("main_hand", "")
+	var item = battle.inventory.find_item(equipped_id)
+	var passed: bool = item != null and not equipped_id.is_empty() and not item.get("affixes", []).is_empty() and battle.inventory.all_ids_unique()
+	if passed:
+		print("PERSISTENCE_READ_PASS id=%s items=%d affixes=%d" % [equipped_id, battle.inventory.items.size(), item.affixes.size()])
+	else:
+		push_error("PERSISTENCE_READ_FAIL")
+	get_tree().quit(0 if passed else 1)
 
