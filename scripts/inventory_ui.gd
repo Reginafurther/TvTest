@@ -227,6 +227,10 @@ func show_item(item: Dictionary) -> void:
 		text += "无\n"
 	for affix in item.get("affixes", []):
 		text += "%s  %s\n" % [stat_name(affix.stat), format_value(affix.stat, affix.value)]
+	if not item.get("special_effects", []).is_empty():
+		text += "\n[b][color=#FFB65B]特殊机制[/color][/b]\n"
+		for effect_id in item.special_effects:
+			text += "%s\n" % battle.special_config.effects.get(effect_id, {"name": effect_id}).name
 	text += "\n[color=#718895]实例ID：%s[/color]" % item.instance_id
 	detail.text = text
 	show_comparison(item)

@@ -1,5 +1,6 @@
 [application]
-config/name="万界冒险团 V0.2A"
+config/name="万界冒险团 V0.3 双世界冒险版"
+config/features=PackedStringArray("4.3")
 run/main_scene="res://scenes/main.tscn"
 
 [display]
