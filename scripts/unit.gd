@@ -257,7 +257,7 @@ func _draw() -> void:
 	if hit_flash > 0:
 		base = Color.WHITE
 	# Soft shadow, oversized head and compact body form the placeholder chibi silhouette.
-	draw_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
+	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
 	draw_circle(Vector2(0, 5), 16, base.darkened(0.16))
 	draw_rect(Rect2(-12, -2, 24, 26), base, true)
 	draw_circle(Vector2(0, -14), 22, base)
@@ -273,7 +273,7 @@ func _draw() -> void:
 	draw_rect(Rect2(-24, -47, 48, 6), Color(0.08, 0.09, 0.1, 0.85), true)
 	draw_rect(Rect2(-23, -46, 46 * (hp / max_hp), 4), Color("#65D97B") if faction == "heroes" else Color("#EE6158"), true)
 
-func draw_ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
+func draw_chibi_ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
 	var points := PackedVector2Array()
 	for i in range(24):
 		var angle := TAU * i / 24.0
@@ -291,4 +291,3 @@ func _accent_color() -> Color:
 
 func _skill_color() -> Color:
 	return Color(skill_data.get("color", "FFFFFF"))
-

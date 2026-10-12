@@ -46,6 +46,7 @@ func _process(_delta: float) -> void:
 func build_background() -> void:
 	var backdrop := ColorRect.new()
 	backdrop.color = Color("#16232A")
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	backdrop.size = Vector2(1100, 700)
 	add_child(backdrop)
 
@@ -242,4 +243,5 @@ func finish_persistence_read() -> void:
 	else:
 		push_error("PERSISTENCE_READ_FAIL")
 	get_tree().quit(0 if passed else 1)
+
 
