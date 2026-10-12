@@ -5,14 +5,21 @@ const DataLoaderScript = preload("res://scripts/data_loader.gd")
 const BattleMapScript = preload("res://scripts/battle_map.gd")
 const BattleUnitScript = preload("res://scripts/unit.gd")
 const EffectRingScript = preload("res://scripts/effect_ring.gd")
+const InventoryManagerScript = preload("res://scripts/inventory_manager.gd")
+const EquipmentGeneratorScript = preload("res://scripts/equipment_generator.gd")
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
 signal log_message(message: String)
 signal battle_state_changed(message: String)
+signal loot_obtained(item: Dictionary)
 
 var actors: Dictionary
 var skills: Dictionary
+var equipment_config: Dictionary
+var loot_config: Dictionary
+var inventory
+var equipment_generator
 var battle_map: Node2D
 var astar := AStarGrid2D.new()
 var heroes: Array = []
@@ -24,10 +31,20 @@ var spawn_timer := 0.0
 var is_paused := false
 var game_over := false
 var obstacle_cells: Dictionary = {}
+var loot_test_mode := false
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
 	skills = DataLoaderScript.load_json("res://data/skills.json")
+	equipment_config = DataLoaderScript.load_json("res://data/equipment.json")
+	loot_config = DataLoaderScript.load_json("res://data/loot_tables.json")
+	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args()
+	inventory = InventoryManagerScript.new()
+	inventory.setup(equipment_config)
+	add_child(inventory)
+	inventory.load_from_disk()
+	inventory.equipment_changed.connect(_on_equipment_changed)
+	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0)
 	battle_map = BattleMapScript.new()
 	add_child(battle_map)
 	setup_navigation()
@@ -82,6 +99,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2):
 	add_child(unit)
 	if faction == "heroes":
 		heroes.append(unit)
+		unit.apply_equipment_stats(inventory.get_actor_stats(id), equipment_config.get("rules", {}))
 	else:
 		enemies.append(unit)
 	return unit
@@ -177,6 +195,7 @@ func _on_unit_died(unit) -> void:
 	if unit.faction == "enemies":
 		enemies.erase(unit)
 		kills += 1
+		roll_equipment_drop(unit)
 	else:
 		heroes.erase(unit)
 		party_changed.emit(heroes)
@@ -189,6 +208,37 @@ func _on_combat_event(message: String) -> void:
 
 func _on_health_changed(_unit) -> void:
 	party_changed.emit(heroes)
+
+func _on_equipment_changed(actor_id: String) -> void:
+	for hero in heroes:
+		if is_instance_valid(hero) and hero.actor_id == actor_id:
+			hero.apply_equipment_stats(inventory.get_actor_stats(actor_id), equipment_config.get("rules", {}))
+			party_changed.emit(heroes)
+			return
+
+func roll_equipment_drop(defeated_unit) -> void:
+	var table: Dictionary = loot_config.get("grassland_crossing", {})
+	var chance := float(table.get("test_drop_chance" if loot_test_mode else "drop_chance", 0.35))
+	if randf() > chance:
+		return
+	var level := int(table.get("base_level", 1)) + maxi(0, wave - 2) * int(table.get("levels_per_wave", 1))
+	var quality: String = equipment_generator.roll_quality(loot_test_mode)
+	var source := "%s · 第%d波" % [defeated_unit._name(), maxi(1, wave - 1)]
+	var item: Dictionary = equipment_generator.generate(level, source, quality)
+	if inventory.add_item(item):
+		var quality_info: Dictionary = equipment_config.get("qualities", {}).get(quality, {})
+		var important := int(quality_info.get("rank", 0)) >= 2
+		log_message.emit(("★ 获得 " if important else "获得 ") + item.get("name", "装备") + "（自动拾取）")
+		spawn_ring(defeated_unit.position, Color(quality_info.get("color", "FFFFFF")))
+		loot_obtained.emit(item)
+	else:
+		log_message.emit("背包已满，未能拾取装备")
+
+func get_hero(actor_id: String):
+	for hero in heroes:
+		if is_instance_valid(hero) and hero.actor_id == actor_id:
+			return hero
+	return null
 
 func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
 	var line := Line2D.new()

@@ -17,9 +17,22 @@ var hp := 1.0
 var max_hp := 1.0
 var attack := 1.0
 var defense := 0.0
+var base_max_hp := 1.0
+var base_attack := 1.0
+var base_defense := 0.0
+var base_attack_interval := 1.0
 var move_speed := 80.0
 var attack_range := 60.0
 var attack_interval := 1.0
+var crit_chance := 0.05
+var crit_damage := 1.5
+var attack_speed := 0.0
+var cooldown_reduction := 0.0
+var physical_damage := 0.0
+var elemental_damage := 0.0
+var life_regen := 0.0
+var regen_accumulator := 0.0
+var equipment_rules: Dictionary = {}
 var attack_timer := 0.0
 var skill_timer := 0.0
 var target
@@ -38,13 +51,17 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 	skill_data = skill
 	faction = team
 	battle = owner_battle
-	max_hp = float(info.get("max_hp", 100))
+	base_max_hp = float(info.get("max_hp", 100))
+	base_attack = float(info.get("attack", 10))
+	base_defense = float(info.get("defense", 0))
+	base_attack_interval = float(info.get("attack_interval", 1.0))
+	max_hp = base_max_hp
 	hp = max_hp
-	attack = float(info.get("attack", 10))
-	defense = float(info.get("defense", 0))
+	attack = base_attack
+	defense = base_defense
 	move_speed = float(info.get("move_speed", 80))
 	attack_range = float(info.get("attack_range", 60))
-	attack_interval = float(info.get("attack_interval", 1.0))
+	attack_interval = base_attack_interval
 	skill_timer = randf_range(1.5, float(skill.get("cooldown", 6.0)))
 	add_to_group(team)
 	var shape := CollisionShape2D.new()
@@ -62,6 +79,11 @@ func _physics_process(delta: float) -> void:
 	skill_timer = maxf(0.0, skill_timer - delta)
 	repath_timer -= delta
 	hit_flash = maxf(0.0, hit_flash - delta)
+	if life_regen > 0.0 and hp < max_hp:
+		regen_accumulator += delta
+		if regen_accumulator >= 1.0:
+			regen_accumulator -= 1.0
+			heal(life_regen, self, false)
 	if not is_instance_valid(target) or target.dead:
 		target = null
 	if has_rally:
@@ -105,13 +127,16 @@ func move_toward_point(point: Vector2, _delta: float) -> void:
 
 func basic_attack() -> void:
 	attack_timer = attack_interval
-	var amount := maxf(1.0, attack - target.defense * 0.55) * randf_range(0.9, 1.1)
-	target.take_damage(amount, self)
+	var amount := attack * (1.0 + physical_damage) * randf_range(0.9, 1.1)
+	var critical := randf() < crit_chance
+	if critical:
+		amount *= crit_damage
+	target.take_damage(amount, self, critical)
 	battle.spawn_tracer(position, target.position, _accent_color())
 
 func try_use_skill() -> bool:
 	var kind: String = skill_data.get("type", "")
-	var cooldown := float(skill_data.get("cooldown", 6.0))
+	var cooldown := effective_cooldown(float(skill_data.get("cooldown", 6.0)))
 	var power := float(skill_data.get("power", 1.0))
 	match kind:
 		"heal_aura":
@@ -134,27 +159,27 @@ func try_use_skill() -> bool:
 				var victims: Array = battle.enemies_near(target.position, faction, 145.0, 3)
 				for i in range(victims.size()):
 					var victim = victims[i]
-					victim.take_damage(attack * power * (1.0 - i * 0.18), self)
+					victim.take_damage(attack * power * (1.0 + elemental_damage) * (1.0 - i * 0.18), self)
 					battle.spawn_tracer(position if i == 0 else victims[i - 1].position, victim.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】，命中 %d 个目标" % [_name(), _skill_name(), victims.size()])
 				return true
 		"damage":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", attack_range)):
-				target.take_damage(attack * power, self)
+				target.take_damage(attack * power * (1.0 + physical_damage), self)
 				battle.spawn_ring(target.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
 				return true
 	return false
 
-func take_damage(raw_amount: float, source) -> void:
+func take_damage(raw_amount: float, source, critical: bool = false) -> void:
 	if dead:
 		return
-	var amount := maxi(1, roundi(raw_amount))
+	var amount := maxi(1, roundi(maxf(1.0, raw_amount - defense * 0.55)))
 	hp = maxf(0.0, hp - amount)
 	hit_flash = 0.12
-	show_number("-%d" % amount, Color("#FF8278"))
+	show_number(("暴击 -%d" if critical else "-%d") % amount, Color("#FFE26A") if critical else Color("#FF8278"))
 	health_changed.emit(self)
 	queue_redraw()
 	if hp <= 0.0:
@@ -166,12 +191,13 @@ func take_damage(raw_amount: float, source) -> void:
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
 		tween.tween_callback(queue_free)
 
-func heal(raw_amount: float, _source) -> void:
+func heal(raw_amount: float, _source, show_text: bool = true) -> void:
 	var amount := mini(roundi(raw_amount), roundi(max_hp - hp))
 	if amount <= 0:
 		return
 	hp += amount
-	show_number("+%d" % amount, Color("#77F09D"))
+	if show_text:
+		show_number("+%d" % amount, Color("#77F09D"))
 	health_changed.emit(self)
 	queue_redraw()
 
@@ -185,6 +211,42 @@ func set_rally(point: Vector2) -> void:
 	has_rally = true
 	target = null
 	nav_path.clear()
+
+func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
+	var hp_ratio := hp / maxf(1.0, max_hp)
+	equipment_rules = rules
+	max_hp = base_max_hp + float(stats.get("health", 0))
+	attack = base_attack + float(stats.get("attack", 0))
+	defense = base_defense + float(stats.get("defense", 0))
+	crit_chance = clampf(0.05 + float(stats.get("crit_chance", 0)), 0.0, float(rules.get("max_crit_chance", 0.75)))
+	crit_damage = maxf(1.0, 1.5 + float(stats.get("crit_damage", 0)))
+	attack_speed = clampf(float(stats.get("attack_speed", 0)), 0.0, float(rules.get("max_attack_speed", 1.5)))
+	cooldown_reduction = clampf(float(stats.get("cooldown_reduction", 0)), 0.0, float(rules.get("max_cooldown_reduction", 0.5)))
+	physical_damage = maxf(-0.9, float(stats.get("physical_damage", 0)))
+	elemental_damage = maxf(-0.9, float(stats.get("elemental_damage", 0)))
+	life_regen = maxf(0.0, float(stats.get("life_regen", 0)))
+	attack_interval = maxf(float(rules.get("min_attack_interval", 0.25)), base_attack_interval / (1.0 + attack_speed))
+	hp = clampf(max_hp * hp_ratio, 1.0 if not dead else 0.0, max_hp)
+	health_changed.emit(self)
+	queue_redraw()
+
+func effective_cooldown(base_cooldown: float) -> float:
+	return maxf(0.5, base_cooldown * (1.0 - cooldown_reduction))
+
+func combat_snapshot() -> Dictionary:
+	return {
+		"health": max_hp,
+		"attack": attack,
+		"defense": defense,
+		"crit_chance": crit_chance,
+		"crit_damage": crit_damage,
+		"attack_speed": attack_speed,
+		"cooldown_reduction": cooldown_reduction,
+		"physical_damage": physical_damage,
+		"elemental_damage": elemental_damage,
+		"life_regen": life_regen,
+		"attack_interval": attack_interval
+	}
 
 func _draw() -> void:
 	var base := Color(actor_data.get("color", "FFFFFF"))

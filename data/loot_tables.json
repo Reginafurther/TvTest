@@ -1,0 +1,24 @@
+{
+  "grassland_crossing": {
+    "map_name": "青草渡口",
+    "base_level": 1,
+    "levels_per_wave": 1,
+    "drop_chance": 0.38,
+    "test_drop_chance": 1.0,
+    "quality_weights": {
+      "white": 52,
+      "green": 27,
+      "blue": 14,
+      "purple": 6,
+      "orange": 1
+    },
+    "test_quality_weights": {
+      "white": 5,
+      "green": 15,
+      "blue": 30,
+      "purple": 30,
+      "orange": 20
+    }
+  }
+}
+

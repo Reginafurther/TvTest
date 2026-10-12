@@ -1,0 +1,51 @@
+{
+  "slots": {
+    "main_hand": "主手",
+    "off_hand": "副手",
+    "helmet": "头盔",
+    "armor": "衣服",
+    "gloves": "手套",
+    "boots": "鞋子",
+    "necklace": "项链",
+    "ring_1": "戒指1",
+    "ring_2": "戒指2"
+  },
+  "qualities": {
+    "white": {"name": "普通", "rank": 0, "color": "D7DEE3", "affix_min": 0, "affix_max": 1, "value_multiplier": 0.75, "base_multiplier": 0.85, "drop_weight": 52},
+    "green": {"name": "优秀", "rank": 1, "color": "72D889", "affix_min": 1, "affix_max": 2, "value_multiplier": 0.9, "base_multiplier": 0.95, "drop_weight": 27},
+    "blue": {"name": "稀有", "rank": 2, "color": "67B7FF", "affix_min": 2, "affix_max": 3, "value_multiplier": 1.05, "base_multiplier": 1.05, "drop_weight": 14},
+    "purple": {"name": "史诗", "rank": 3, "color": "C184FF", "affix_min": 3, "affix_max": 4, "value_multiplier": 1.22, "base_multiplier": 1.16, "drop_weight": 6},
+    "orange": {"name": "传说", "rank": 4, "color": "FFAA45", "affix_min": 4, "affix_max": 5, "value_multiplier": 1.42, "base_multiplier": 1.28, "drop_weight": 1}
+  },
+  "templates": {
+    "wanderer_blade": {"name": "万界旅者之刃", "slot": "main_hand", "base_pool": ["attack"], "base_min": 7.0, "base_max": 12.0},
+    "warding_orb": {"name": "流光护符", "slot": "off_hand", "base_pool": ["attack", "defense"], "base_min": 4.0, "base_max": 8.0},
+    "cloud_helmet": {"name": "云纹头盔", "slot": "helmet", "base_pool": ["health", "defense"], "base_min": 12.0, "base_max": 22.0},
+    "adventure_coat": {"name": "冒险团战衣", "slot": "armor", "base_pool": ["health", "defense"], "base_min": 18.0, "base_max": 32.0},
+    "swift_gloves": {"name": "迅捷手套", "slot": "gloves", "base_pool": ["attack", "defense"], "base_min": 4.0, "base_max": 8.0},
+    "wind_boots": {"name": "踏风短靴", "slot": "boots", "base_pool": ["health", "defense"], "base_min": 8.0, "base_max": 16.0},
+    "star_necklace": {"name": "星辉项链", "slot": "necklace", "base_pool": ["health", "attack"], "base_min": 6.0, "base_max": 13.0},
+    "echo_ring": {"name": "回响戒指", "slot": "ring_1", "compatible_slots": ["ring_1", "ring_2"], "base_pool": ["attack", "health"], "base_min": 5.0, "base_max": 11.0},
+    "guard_ring": {"name": "守望戒指", "slot": "ring_2", "compatible_slots": ["ring_1", "ring_2"], "base_pool": ["defense", "health"], "base_min": 5.0, "base_max": 11.0}
+  },
+  "affixes": {
+    "health": {"name": "生命", "unit": "flat", "min": 10.0, "max": 24.0, "level_scale": 1.8, "weight": 15},
+    "attack": {"name": "攻击", "unit": "flat", "min": 2.0, "max": 5.0, "level_scale": 0.42, "weight": 14},
+    "defense": {"name": "防御", "unit": "flat", "min": 1.0, "max": 3.5, "level_scale": 0.28, "weight": 14},
+    "crit_chance": {"name": "暴击率", "unit": "percent", "min": 0.012, "max": 0.032, "level_scale": 0.0008, "weight": 10},
+    "crit_damage": {"name": "暴击伤害", "unit": "percent", "min": 0.035, "max": 0.09, "level_scale": 0.0015, "weight": 8},
+    "attack_speed": {"name": "攻击速度", "unit": "percent", "min": 0.018, "max": 0.055, "level_scale": 0.001, "weight": 9},
+    "cooldown_reduction": {"name": "冷却缩减", "unit": "percent", "min": 0.012, "max": 0.04, "level_scale": 0.0007, "weight": 8},
+    "physical_damage": {"name": "物理增伤", "unit": "percent", "min": 0.018, "max": 0.055, "level_scale": 0.001, "weight": 8},
+    "elemental_damage": {"name": "元素增伤", "unit": "percent", "min": 0.018, "max": 0.055, "level_scale": 0.001, "weight": 7},
+    "life_regen": {"name": "生命恢复", "unit": "flat", "min": 0.8, "max": 2.2, "level_scale": 0.08, "weight": 7}
+  },
+  "rules": {
+    "inventory_capacity": 120,
+    "max_crit_chance": 0.75,
+    "max_cooldown_reduction": 0.50,
+    "max_attack_speed": 1.50,
+    "min_attack_interval": 0.25
+  }
+}
+
