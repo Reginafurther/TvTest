@@ -3,6 +3,7 @@ extends Node
 const BattleControllerScript = preload("res://scripts/battle_controller.gd")
 const InventoryUIScript = preload("res://scripts/inventory_ui.gd")
 const InventoryManagerScript = preload("res://scripts/inventory_manager.gd")
+const V03UIScript = preload("res://scripts/v03_ui.gd")
 
 var battle: Node2D
 var stats_label: Label
@@ -12,6 +13,7 @@ var cards: HBoxContainer
 var help_label: Label
 var inventory_ui
 var backpack_button: Button
+var v03_ui
 
 func _ready() -> void:
 	build_background()
@@ -26,9 +28,15 @@ func _ready() -> void:
 	inventory_ui = InventoryUIScript.new()
 	add_child(inventory_ui)
 	inventory_ui.setup(battle)
+	v03_ui = V03UIScript.new()
+	add_child(v03_ui)
+	v03_ui.setup(battle)
 	update_party(battle.heroes)
 	add_log("四人小队已进入青草渡口，自动战斗开始")
-	if "--persistence-write" in OS.get_cmdline_user_args():
+	if "--v03-test" in OS.get_cmdline_user_args():
+		Engine.time_scale = 4.0
+		get_tree().create_timer(20.0).timeout.connect(finish_v03_test)
+	elif "--persistence-write" in OS.get_cmdline_user_args():
 		finish_persistence_write()
 	elif "--persistence-read" in OS.get_cmdline_user_args():
 		finish_persistence_read()
@@ -52,7 +60,7 @@ func build_background() -> void:
 
 func build_ui() -> void:
 	var title := Label.new()
-	title.text = "万界冒险团  ·  青草渡口"
+	title.text = "万界冒险团 V0.3"
 	title.position = Vector2(22, 14)
 	title.add_theme_font_size_override("font_size", 25)
 	title.add_theme_color_override("font_color", Color("#FFF2B5"))
@@ -243,5 +251,87 @@ func finish_persistence_read() -> void:
 	else:
 		push_error("PERSISTENCE_READ_FAIL")
 	get_tree().quit(0 if passed else 1)
+
+func finish_v03_test() -> void:
+	var failures: Array[String] = []
+	if battle.kills <= 0 or battle.stats_snapshot().actors.is_empty():
+		failures.append("真实战斗统计或挂机战斗未产生数据")
+	# Independent world pools and clean target rebuild.
+	if not battle.switch_map("viridian_forest") or battle.current_map_id != "viridian_forest":
+		failures.append("世界切换失败")
+	for enemy in battle.enemies:
+		if enemy.actor_id not in ["zubat", "forest_bug"]: failures.append("常青森林敌人池串线")
+	# Recruitment is unique and party changes retain the old actor's equipment mapping.
+	var p = battle.progression
+	var first_recruit: String = p.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
+	var second_recruit: String = p.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
+	if first_recruit.is_empty() or not second_recruit.is_empty() or p.roster.count(first_recruit) != 1:
+		failures.append("招募令唯一性失败")
+	var old_equipment: Dictionary = battle.inventory.equipped["zhao_yun"].duplicate(true)
+	p.set_party_member(0, first_recruit)
+	battle.rebuild_party()
+	if battle.get_hero(first_recruit) == null or battle.inventory.equipped["zhao_yun"] != old_equipment:
+		failures.append("编队切换或装备归属失败")
+	# Dismantle and reroll are transactional.
+	p.add_material("salvage_dust", 200)
+	var junk: Dictionary = battle.equipment_generator.generate(8, "V0.3测试", "purple", "helmet")
+	battle.inventory.add_item(junk, false)
+	var before_count: int = battle.inventory.items.size()
+	var reward: int = battle.crafting.dismantle(junk.instance_id)
+	if reward <= 0 or battle.inventory.items.size() != before_count - 1:
+		failures.append("分解事务失败")
+	var reroll_item: Dictionary = battle.equipment_generator.generate(8, "V0.3测试", "orange", "main_hand")
+	battle.inventory.add_item(reroll_item, false)
+	var same_id: String = reroll_item.instance_id
+	var dust_before: int = p.materials.salvage_dust
+	var pending: Dictionary = battle.crafting.begin_reroll(same_id, 0)
+	if pending.is_empty() or not battle.crafting.resolve_reroll(true) or reroll_item.instance_id != same_id or p.materials.salvage_dust >= dust_before:
+		failures.append("重铸材料或实例安全失败")
+	# Equip four special mechanisms and fire controlled real combat events.
+	var hero = battle.heroes[0]
+	var slots := ["main_hand", "off_hand", "helmet", "armor"]
+	var effects := ["crit_lightning", "thorn_reflect", "poison_spread", "shield_burst"]
+	for i in range(4):
+		var item: Dictionary = battle.equipment_generator.generate(10, "特效测试", "orange", slots[i])
+		item.special_effects = [effects[i]]
+		battle.inventory.add_item(item, false)
+		battle.inventory.equip_item(hero.actor_id, item.instance_id, slots[i])
+	hero = battle.get_hero(hero.actor_id)
+	var enemy = battle.enemies[0]
+	battle.special_config.effects.crit_lightning.chance = 1.0
+	battle.on_damage(hero, enemy, 10.0, {"kind": "basic", "critical": true, "allow_triggers": true})
+	hero.add_shield(1.0)
+	hero.take_damage(30.0, enemy, false, {"kind": "basic", "allow_triggers": true})
+	var poisoned = battle.enemies[1] if battle.enemies.size() > 1 else enemy
+	poisoned.apply_poison(5.0, 5.0, hero, 0)
+	poisoned.take_damage(99999.0, hero, false, {"kind": "skill", "allow_triggers": true})
+	for effect in effects:
+		if int(battle.trigger_counts[effect]) <= 0: failures.append("特殊词条未触发：" + effect)
+	if int(battle.trigger_counts.thorn_reflect) > 2 or int(battle.trigger_counts.poison_spread) > 1:
+		failures.append("特殊词条出现递归连锁")
+	# Strategy conditions alter the actual skill gate.
+	var preset: Dictionary = p.strategy_presets[p.active_strategy]
+	preset.enemy_count = 99
+	if battle.strategy_allows(hero): failures.append("技能敌人数阈值未生效")
+	preset.enemy_count = 1
+	# Both boss first clears unlock exactly once; repeats pay material instead.
+	for boss_id in ["lu_bu", "mewtwo"]:
+		battle.start_boss(boss_id)
+		var boss = battle.enemies[0]
+		boss.take_damage(999999.0, battle.heroes[0], false, {"kind": "skill", "allow_triggers": false})
+		var actor_id: String = battle.worlds_config.bosses[boss_id].unlock_actor
+		if actor_id not in p.roster or not p.boss_first_clear[boss_id]: failures.append("Boss首胜解锁失败：" + boss_id)
+		var material_id: String = battle.worlds_config.bosses[boss_id].repeat_material
+		var material_before: int = p.materials[material_id]
+		battle.resolve_boss_victory(boss_id)
+		if p.roster.count(actor_id) != 1 or int(p.materials[material_id]) <= material_before: failures.append("Boss重复奖励失败：" + boss_id)
+	if not battle.inventory.all_ids_unique() or not p.save_to_disk() or not battle.inventory.save_to_disk():
+		failures.append("保存或实例唯一性失败")
+	if failures.is_empty():
+		print("V03_TEST_PASS worlds=2 roster=%d party=4 specials=4 bosses=2 stats=true crafting=true save=true" % p.roster.size())
+	else:
+		for failure in failures: push_error("V03_TEST_FAIL: " + failure)
+	Engine.time_scale = 1.0
+	get_tree().quit(0 if failures.is_empty() else 1)
 
 
