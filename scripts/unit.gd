@@ -176,7 +176,7 @@ func try_use_skill() -> bool:
 func take_damage(raw_amount: float, source, critical: bool = false) -> void:
 	if dead:
 		return
-	var amount := maxi(1, roundi(maxf(1.0, raw_amount - defense * 0.55)))
+	var amount := preview_damage(raw_amount)
 	hp = maxf(0.0, hp - amount)
 	hit_flash = 0.12
 	show_number(("暴击 -%d" if critical else "-%d") % amount, Color("#FFE26A") if critical else Color("#FF8278"))
@@ -190,6 +190,9 @@ func take_damage(raw_amount: float, source, critical: bool = false) -> void:
 		var tween := create_tween()
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
 		tween.tween_callback(queue_free)
+
+func preview_damage(raw_amount: float) -> int:
+	return maxi(1, roundi(maxf(1.0, raw_amount - defense * 0.55)))
 
 func heal(raw_amount: float, _source, show_text: bool = true) -> void:
 	var amount := mini(roundi(raw_amount), roundi(max_hp - hp))

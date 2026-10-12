@@ -20,4 +20,8 @@ pause_battle={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":32)]
 }
+toggle_inventory={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":66)]
+}
 

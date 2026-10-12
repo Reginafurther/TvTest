@@ -42,6 +42,8 @@ func _ready() -> void:
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
 	add_child(inventory)
+	if "--equipment-test" in OS.get_cmdline_user_args():
+		inventory.clear_test_save()
 	inventory.load_from_disk()
 	inventory.equipment_changed.connect(_on_equipment_changed)
 	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0)

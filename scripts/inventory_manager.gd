@@ -7,17 +7,25 @@ signal save_completed(path: String)
 
 const SAVE_VERSION := "0.2A"
 const SAVE_PATH := "user://wanjie_v02_save.json"
+const TEST_SAVE_PATH := "user://wanjie_v02_test_save.json"
 const HERO_IDS := ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
 
 var config: Dictionary
 var items: Array = []
 var equipped: Dictionary = {}
 var capacity := 120
+var save_path := SAVE_PATH
 
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
+	if "--equipment-test" in OS.get_cmdline_user_args():
+		save_path = TEST_SAVE_PATH
 	ensure_equipment_layout()
+
+func clear_test_save() -> void:
+	if save_path == TEST_SAVE_PATH and FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 func ensure_equipment_layout() -> void:
 	var slots: Array = config.get("slots", {}).keys()
@@ -119,20 +127,20 @@ func save_to_disk() -> bool:
 		"items": items,
 		"equipped": equipped
 	}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
-		push_error("无法写入存档: " + SAVE_PATH)
+		push_error("无法写入存档: " + save_path)
 		return false
 	file.store_string(JSON.stringify(payload, "  "))
 	file.close()
-	save_completed.emit(SAVE_PATH)
+	save_completed.emit(save_path)
 	return true
 
 func load_from_disk() -> bool:
-	if not FileAccess.file_exists(SAVE_PATH):
+	if not FileAccess.file_exists(save_path):
 		ensure_equipment_layout()
 		return false
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var file := FileAccess.open(save_path, FileAccess.READ)
 	var parsed = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("version"):
 		push_warning("存档格式无效，已忽略")
