@@ -33,7 +33,11 @@ func _ready() -> void:
 	v03_ui.setup(battle)
 	update_party(battle.heroes)
 	add_log("四人小队已进入青草渡口，自动战斗开始")
-	if "--v03-test" in OS.get_cmdline_user_args():
+	if "--v03-persist-write" in OS.get_cmdline_user_args():
+		finish_v03_persist_write()
+	elif "--v03-persist-read" in OS.get_cmdline_user_args():
+		finish_v03_persist_read()
+	elif "--v03-test" in OS.get_cmdline_user_args():
 		Engine.time_scale = 4.0
 		get_tree().create_timer(20.0).timeout.connect(finish_v03_test)
 	elif "--persistence-write" in OS.get_cmdline_user_args():
@@ -301,7 +305,7 @@ func finish_v03_test() -> void:
 	battle.special_config.effects.crit_lightning.chance = 1.0
 	battle.on_damage(hero, enemy, 10.0, {"kind": "basic", "critical": true, "allow_triggers": true})
 	hero.add_shield(1.0)
-	hero.take_damage(30.0, enemy, false, {"kind": "basic", "allow_triggers": true})
+	hero.take_damage(300.0, enemy, false, {"kind": "basic", "allow_triggers": true})
 	var poisoned = battle.enemies[1] if battle.enemies.size() > 1 else enemy
 	poisoned.apply_poison(5.0, 5.0, hero, 0)
 	poisoned.take_damage(99999.0, hero, false, {"kind": "skill", "allow_triggers": true})
@@ -333,5 +337,21 @@ func finish_v03_test() -> void:
 		for failure in failures: push_error("V03_TEST_FAIL: " + failure)
 	Engine.time_scale = 1.0
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v03_persist_write() -> void:
+	var p = battle.progression
+	p.add_material("three_kingdoms_token", 77)
+	if "gengar" not in p.roster: p.roster.append("gengar")
+	p.party[0] = "gengar"
+	p.strategy_presets["稳健"].enemy_count = 3
+	var passed: bool = p.save_to_disk()
+	print("V03_PERSIST_WRITE_PASS roster=%d party0=%s" % [p.roster.size(), p.party[0]]) if passed else push_error("V03_PERSIST_WRITE_FAIL")
+	get_tree().quit(0 if passed else 1)
+
+func finish_v03_persist_read() -> void:
+	var p = battle.progression
+	var passed: bool = int(p.materials.three_kingdoms_token) == 77 and "gengar" in p.roster and p.party[0] == "gengar" and int(p.strategy_presets["稳健"].enemy_count) == 3
+	print("V03_PERSIST_READ_PASS roster=%d party0=%s material=%d" % [p.roster.size(), p.party[0], p.materials.three_kingdoms_token]) if passed else push_error("V03_PERSIST_READ_FAIL")
+	get_tree().quit(0 if passed else 1)
 
 

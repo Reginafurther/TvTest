@@ -74,6 +74,8 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 	attack_range = float(info.get("attack_range", 60))
 	attack_interval = base_attack_interval
 	skill_timer = randf_range(1.5, float(skill.get("cooldown", 6.0)))
+	if info.has("boss_id"):
+		control_resistance = 0.35
 	add_to_group(team)
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
@@ -148,6 +150,8 @@ func basic_attack() -> void:
 	var amount := attack * (1.0 + physical_damage) * randf_range(0.9, 1.1)
 	if actor_data.get("talent", "") == "low_hp_rage" and hp / max_hp < 0.4:
 		amount *= 1.5
+	if actor_data.get("boss_id", "") == "lu_bu" and hp / max_hp < 0.5:
+		amount *= 1.45
 	var critical := randf() < crit_chance
 	if critical:
 		amount *= crit_damage
@@ -303,6 +307,17 @@ func apply_poison(damage_per_second: float, duration: float, source, depth: int)
 	poison_time = maxf(poison_time, duration)
 	poison_source = source
 	poison_depth = depth
+
+func apply_hard_control(duration: float) -> float:
+	# Boss hard-control duration diminishes per application and is capped cumulatively.
+	var cap := 4.0 if actor_data.has("boss_id") else 8.0
+	var applied := minf(duration * (1.0 - control_resistance), maxf(0.0, cap - accumulated_control))
+	accumulated_control += applied
+	if actor_data.has("boss_id"):
+		control_resistance = minf(0.85, control_resistance + 0.15)
+	attack_timer += applied
+	skill_timer += applied
+	return applied
 
 func trigger_shield_burst() -> void:
 	var effect: Dictionary = battle.special_config.effects.shield_burst

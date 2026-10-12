@@ -1,0 +1,21 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+SMOKE_TEST_PASS elapsed=20.0 kills=6 heroes=4 wave=2
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+EQUIPMENT_TEST_PASS elapsed=20.0 kills=5 drops=7 unique_ids=true slots=36 save_reload=true
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+PERSISTENCE_WRITE_PASS id=6acca2cc-1-e37af7 affixes=5
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+PERSISTENCE_READ_PASS id=6acca2cc-1-e37af7 items=1 affixes=5
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+V03_TEST_PASS worlds=2 roster=7 party=4 specials=4 bosses=2 stats=true crafting=true save=true
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+V03_PERSIST_WRITE_PASS roster=5 party0=gengar
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+V03_PERSIST_READ_PASS roster=5 party0=gengar material=77

@@ -13,10 +13,16 @@ $required = @(
     'scripts/equipment_generator.gd',
     'scripts/inventory_manager.gd',
     'scripts/inventory_ui.gd',
+    'scripts/progression_manager.gd',
+    'scripts/crafting_manager.gd',
+    'scripts/combat_stats.gd',
+    'scripts/v03_ui.gd',
     'data/actors.json',
     'data/skills.json',
     'data/equipment.json',
-    'data/loot_tables.json'
+    'data/loot_tables.json',
+    'data/worlds.json',
+    'data/special_effects.json'
 )
 
 foreach ($relative in $required) {
@@ -63,7 +69,13 @@ if ($godotPath -and (Test-Path -LiteralPath $godotPath)) {
     if ($LASTEXITCODE -ne 0) { throw "Persistence write failed with exit code $LASTEXITCODE" }
     & $godotPath --headless --path $root -- --persistence-read
     if ($LASTEXITCODE -ne 0) { throw "Persistence read failed with exit code $LASTEXITCODE" }
-    Write-Host 'PASS: Static checks, battle regression, equipment, drops, unique IDs, and cross-process save reload are valid.' -ForegroundColor Green
+    & $godotPath --headless --path $root -- --v03-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.3 integration validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v03-persist-write
+    if ($LASTEXITCODE -ne 0) { throw "V0.3 persistence write failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v03-persist-read
+    if ($LASTEXITCODE -ne 0) { throw "V0.3 persistence read failed with exit code $LASTEXITCODE" }
+    Write-Host 'PASS: V0.1, V0.2A, V0.3 integration, and both cross-process save suites are valid.' -ForegroundColor Green
 } else {
     Write-Host 'PASS: Files, actor/skill references, 9 slots, and 10 affix definitions are valid.' -ForegroundColor Green
     Write-Warning 'Godot was not found. Set GODOT_BIN to the Godot executable to run both runtime tests.'
