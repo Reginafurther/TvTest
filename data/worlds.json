@@ -1,0 +1,15 @@
+{
+  "maps": {
+    "hulao_pass": {"name": "虎牢关", "world": "三国", "level": 8, "enemy_pool": ["yellow_turban"], "material": "three_kingdoms_token", "material_name": "虎符", "material_drop": [1, 3], "drop_chance": 0.46, "color": "B9B06B"},
+    "viridian_forest": {"name": "常青森林", "world": "宝可梦", "level": 8, "enemy_pool": ["zubat", "forest_bug"], "material": "pokemon_token", "material_name": "精灵结晶", "material_drop": [1, 3], "drop_chance": 0.46, "color": "68B875"}
+  },
+  "bosses": {
+    "lu_bu": {"name": "吕布挑战", "actor": "lu_bu_boss", "world": "三国", "unlock_actor": "lu_bu", "repeat_material": "three_kingdoms_token", "repeat_amount": 25},
+    "mewtwo": {"name": "超梦挑战", "actor": "mewtwo_boss", "world": "宝可梦", "unlock_actor": "mewtwo", "repeat_material": "pokemon_token", "repeat_amount": 25}
+  },
+  "recruitment": {
+    "starter_pool": ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "pikachu", "snorlax", "gengar"],
+    "costs": {"zhang_fei": ["three_kingdoms_token", 40], "dian_wei": ["three_kingdoms_token", 40], "zhao_yun": ["three_kingdoms_token", 40], "zhuge_liang": ["three_kingdoms_token", 50], "liu_bei": ["three_kingdoms_token", 40], "pikachu": ["pokemon_token", 40], "snorlax": ["pokemon_token", 40], "gengar": ["pokemon_token", 50]}
+  }
+}
+

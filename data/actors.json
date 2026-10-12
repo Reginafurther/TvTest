@@ -82,6 +82,42 @@
     "color": "7656B5",
     "accent": "7DD6DD",
     "skill": "enemy_strike"
+  },
+  "zhang_fei": {
+    "name": "张飞", "world": "三国", "role": "嘲讽坦克", "max_hp": 760, "attack": 37, "defense": 31,
+    "move_speed": 78, "attack_range": 62, "attack_interval": 1.2, "color": "5C4538", "accent": "E2C36A", "skill": "roaring_taunt", "talent": "damage_reduction"
+  },
+  "dian_wei": {
+    "name": "典韦", "world": "三国", "role": "狂暴反击", "max_hp": 680, "attack": 43, "defense": 25,
+    "move_speed": 84, "attack_range": 64, "attack_interval": 1.05, "color": "9E4D43", "accent": "E8D0A0", "skill": "blood_rage", "talent": "low_hp_rage"
+  },
+  "zhuge_liang": {
+    "name": "诸葛亮", "world": "三国", "role": "阵法辅助", "max_hp": 440, "attack": 42, "defense": 15,
+    "move_speed": 88, "attack_range": 205, "attack_interval": 1.25, "color": "6C8DB8", "accent": "E9F1F5", "skill": "eight_trigrams", "talent": "team_haste"
+  },
+  "lu_bu": {
+    "name": "吕布", "world": "三国", "role": "范围爆发", "max_hp": 610, "attack": 64, "defense": 22,
+    "move_speed": 98, "attack_range": 78, "attack_interval": 1.0, "color": "A62632", "accent": "F3C453", "skill": "sky_piercer", "talent": "boss_slayer"
+  },
+  "gengar": {
+    "name": "耿鬼", "world": "宝可梦", "role": "诅咒中毒", "max_hp": 420, "attack": 47, "defense": 13,
+    "move_speed": 108, "attack_range": 185, "attack_interval": 1.0, "color": "5E3C8C", "accent": "E48BDE", "skill": "venom_curse", "talent": "poison_master"
+  },
+  "mewtwo": {
+    "name": "超梦", "world": "宝可梦", "role": "超能爆发", "max_hp": 540, "attack": 68, "defense": 18,
+    "move_speed": 102, "attack_range": 230, "attack_interval": 1.1, "color": "D6D0E8", "accent": "9C62C8", "skill": "psycho_burst", "talent": "psychic_focus"
+  },
+  "forest_bug": {
+    "name": "大针蜂", "world": "宝可梦", "role": "森林怪物", "max_hp": 175, "attack": 24, "defense": 6,
+    "move_speed": 105, "attack_range": 58, "attack_interval": 0.88, "color": "D9B43E", "accent": "3B3430", "skill": "enemy_strike"
+  },
+  "lu_bu_boss": {
+    "name": "魔神吕布", "world": "三国", "role": "传奇Boss", "max_hp": 5200, "attack": 58, "defense": 26,
+    "move_speed": 82, "attack_range": 90, "attack_interval": 1.0, "color": "821D2A", "accent": "FFD15C", "skill": "boss_whirlwind", "boss_id": "lu_bu"
+  },
+  "mewtwo_boss": {
+    "name": "暴走超梦", "world": "宝可梦", "role": "传奇Boss", "max_hp": 4700, "attack": 62, "defense": 21,
+    "move_speed": 92, "attack_range": 240, "attack_interval": 1.05, "color": "C5B9DD", "accent": "B65EE0", "skill": "boss_psychic_storm", "boss_id": "mewtwo"
   }
 }
 
