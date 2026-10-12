@@ -44,6 +44,17 @@ var dead := false
 var facing := 1.0
 var rally_target := Vector2.ZERO
 var has_rally := false
+var special_effects: Array = []
+var shield := 0.0
+var poison_damage := 0.0
+var poison_time := 0.0
+var poison_tick := 0.0
+var poison_depth := 0
+var poison_source
+var last_damage_source
+var taunt_timer := 0.0
+var control_resistance := 0.0
+var accumulated_control := 0.0
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
 	actor_id = id
@@ -79,6 +90,13 @@ func _physics_process(delta: float) -> void:
 	skill_timer = maxf(0.0, skill_timer - delta)
 	repath_timer -= delta
 	hit_flash = maxf(0.0, hit_flash - delta)
+	taunt_timer = maxf(0.0, taunt_timer - delta)
+	if poison_time > 0.0:
+		poison_time -= delta
+		poison_tick += delta
+		if poison_tick >= 1.0:
+			poison_tick -= 1.0
+			take_damage(poison_damage, poison_source, false, {"kind": "effect", "allow_triggers": false, "poison": true})
 	if life_regen > 0.0 and hp < max_hp:
 		regen_accumulator += delta
 		if regen_accumulator >= 1.0:
@@ -99,7 +117,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		return
 	var distance := position.distance_to(target.position)
-	if skill_timer <= 0.0 and try_use_skill():
+	if skill_timer <= 0.0 and battle.strategy_allows(self) and try_use_skill():
 		return
 	if distance <= attack_range:
 		velocity = Vector2.ZERO
@@ -128,10 +146,12 @@ func move_toward_point(point: Vector2, _delta: float) -> void:
 func basic_attack() -> void:
 	attack_timer = attack_interval
 	var amount := attack * (1.0 + physical_damage) * randf_range(0.9, 1.1)
+	if actor_data.get("talent", "") == "low_hp_rage" and hp / max_hp < 0.4:
+		amount *= 1.5
 	var critical := randf() < crit_chance
 	if critical:
 		amount *= crit_damage
-	target.take_damage(amount, self, critical)
+	target.take_damage(amount, self, critical, {"kind": "basic", "critical": critical, "allow_triggers": true})
 	battle.spawn_tracer(position, target.position, _accent_color())
 
 func try_use_skill() -> bool:
@@ -143,9 +163,11 @@ func try_use_skill() -> bool:
 			var ally = battle.lowest_health_ally(self)
 			if ally != null and ally.hp < ally.max_hp * 0.88:
 				ally.heal(attack * power, self)
+				ally.add_shield(attack * 1.2)
 				battle.spawn_ring(ally.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】，治疗 %s" % [_name(), _skill_name(), ally._name()])
+				battle.on_skill(self)
 				return true
 		"self_heal":
 			if hp < max_hp * 0.72:
@@ -153,39 +175,89 @@ func try_use_skill() -> bool:
 				battle.spawn_ring(position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】恢复体力" % [_name(), _skill_name()])
+				battle.on_skill(self)
 				return true
 		"chain":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 220)):
 				var victims: Array = battle.enemies_near(target.position, faction, 145.0, 3)
 				for i in range(victims.size()):
 					var victim = victims[i]
-					victim.take_damage(attack * power * (1.0 + elemental_damage) * (1.0 - i * 0.18), self)
+					victim.take_damage(attack * power * (1.0 + elemental_damage) * (1.0 - i * 0.18), self, false, {"kind": "skill", "allow_triggers": true})
 					battle.spawn_tracer(position if i == 0 else victims[i - 1].position, victim.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】，命中 %d 个目标" % [_name(), _skill_name(), victims.size()])
+				battle.on_skill(self)
 				return true
 		"damage":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", attack_range)):
-				target.take_damage(attack * power * (1.0 + physical_damage), self)
+				target.take_damage(attack * power * (1.0 + physical_damage), self, false, {"kind": "skill", "allow_triggers": true})
 				battle.spawn_ring(target.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
+				battle.on_skill(self)
 				return true
+		"poison":
+			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 210)):
+				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "allow_triggers": true})
+				target.apply_poison(attack * power, float(skill_data.get("duration", 6.0)), self, 0)
+				skill_timer = cooldown
+				battle.on_skill(self)
+				combat_event.emit("%s 施放【%s】，目标中毒" % [_name(), _skill_name()])
+				return true
+		"area_damage", "boss_area":
+			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 170)), 12)
+			if not victims.is_empty():
+				for victim in victims:
+					victim.take_damage(attack * power, self, false, {"kind": "skill", "allow_triggers": true})
+				if actor_data.get("boss_id", "") == "mewtwo":
+					add_shield(max_hp * 0.12)
+				skill_timer = cooldown
+				battle.on_skill(self)
+				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
+				return true
+		"taunt":
+			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 230)), 12)
+			for victim in victims:
+				victim.target = self
+				victim.taunt_timer = float(skill_data.get("duration", 3.0))
+			skill_timer = cooldown
+			battle.on_skill(self)
+			return true
+		"team_haste":
+			var allies: Array = battle.heroes if faction == "heroes" else battle.enemies
+			for ally in allies:
+				if is_instance_valid(ally): ally.skill_timer *= 0.65
+			skill_timer = cooldown
+			battle.on_skill(self)
+			return true
 	return false
 
-func take_damage(raw_amount: float, source, critical: bool = false) -> void:
+func take_damage(raw_amount: float, source, critical: bool = false, context: Dictionary = {}) -> void:
 	if dead:
 		return
 	var amount := preview_damage(raw_amount)
+	if actor_data.get("talent", "") == "damage_reduction": amount = roundi(amount * 0.85)
+	if shield > 0.0:
+		var absorbed := minf(shield, amount)
+		shield -= absorbed
+		amount -= roundi(absorbed)
+		if shield <= 0.0 and absorbed > 0.0 and has_special("shield_burst"):
+			trigger_shield_burst()
+	if amount <= 0:
+		return
+	last_damage_source = source
 	hp = maxf(0.0, hp - amount)
 	hit_flash = 0.12
 	show_number(("暴击 -%d" if critical else "-%d") % amount, Color("#FFE26A") if critical else Color("#FF8278"))
 	health_changed.emit(self)
+	battle.on_damage(source, self, amount, context)
 	queue_redraw()
 	if hp <= 0.0:
 		dead = true
 		velocity = Vector2.ZERO
 		combat_event.emit("%s 被 %s 击败" % [_name(), source._name()])
+		if poison_time > 0.0 and is_instance_valid(poison_source) and poison_source.has_special("poison_spread"):
+			battle.propagate_poison(self)
 		died.emit(self)
 		var tween := create_tween()
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
@@ -199,6 +271,7 @@ func heal(raw_amount: float, _source, show_text: bool = true) -> void:
 	if amount <= 0:
 		return
 	hp += amount
+	battle.on_heal(_source, amount)
 	if show_text:
 		show_number("+%d" % amount, Color("#77F09D"))
 	health_changed.emit(self)
@@ -214,6 +287,28 @@ func set_rally(point: Vector2) -> void:
 	has_rally = true
 	target = null
 	nav_path.clear()
+
+func set_special_effects(effects: Array) -> void:
+	special_effects = effects.duplicate()
+
+func has_special(id: String) -> bool:
+	return id in special_effects
+
+func add_shield(amount: float) -> void:
+	shield = maxf(shield, amount)
+	queue_redraw()
+
+func apply_poison(damage_per_second: float, duration: float, source, depth: int) -> void:
+	poison_damage = maxf(poison_damage, damage_per_second)
+	poison_time = maxf(poison_time, duration)
+	poison_source = source
+	poison_depth = depth
+
+func trigger_shield_burst() -> void:
+	var effect: Dictionary = battle.special_config.effects.shield_burst
+	battle.note_effect("shield_burst")
+	for victim in battle.enemies_near(position, faction, float(effect.range), int(effect.max_targets)):
+		victim.take_damage(attack * float(effect.power), self, false, {"kind": "effect", "allow_triggers": false})
 
 func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	var hp_ratio := hp / maxf(1.0, max_hp)

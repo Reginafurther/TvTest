@@ -7,19 +7,29 @@ const BattleUnitScript = preload("res://scripts/unit.gd")
 const EffectRingScript = preload("res://scripts/effect_ring.gd")
 const InventoryManagerScript = preload("res://scripts/inventory_manager.gd")
 const EquipmentGeneratorScript = preload("res://scripts/equipment_generator.gd")
+const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
+const CombatStatsScript = preload("res://scripts/combat_stats.gd")
+const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
 signal log_message(message: String)
 signal battle_state_changed(message: String)
 signal loot_obtained(item: Dictionary)
+signal world_changed(map_id: String)
+signal progression_changed
 
 var actors: Dictionary
 var skills: Dictionary
 var equipment_config: Dictionary
 var loot_config: Dictionary
+var worlds_config: Dictionary
+var special_config: Dictionary
 var inventory
 var equipment_generator
+var progression
+var crafting
+var combat_stats
 var battle_map: Node2D
 var astar := AStarGrid2D.new()
 var heroes: Array = []
@@ -32,21 +42,35 @@ var is_paused := false
 var game_over := false
 var obstacle_cells: Dictionary = {}
 var loot_test_mode := false
+var current_map_id := "hulao_pass"
+var active_boss_id := ""
+var effect_cooldowns: Dictionary = {}
+var trigger_counts := {"crit_lightning": 0, "thorn_reflect": 0, "poison_spread": 0, "shield_burst": 0}
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
 	skills = DataLoaderScript.load_json("res://data/skills.json")
 	equipment_config = DataLoaderScript.load_json("res://data/equipment.json")
 	loot_config = DataLoaderScript.load_json("res://data/loot_tables.json")
-	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args()
+	worlds_config = DataLoaderScript.load_json("res://data/worlds.json")
+	special_config = DataLoaderScript.load_json("res://data/special_effects.json")
+	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args()
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
 	add_child(inventory)
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args():
 		inventory.clear_test_save()
 	inventory.load_from_disk()
 	inventory.equipment_changed.connect(_on_equipment_changed)
-	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0)
+	progression = ProgressionManagerScript.new()
+	progression.setup()
+	add_child(progression)
+	progression.changed.connect(func(): progression_changed.emit())
+	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0, special_config)
+	crafting = CraftingManagerScript.new()
+	crafting.setup(inventory, progression, equipment_config, equipment_generator)
+	combat_stats = CombatStatsScript.new()
+	combat_stats.reset()
 	battle_map = BattleMapScript.new()
 	add_child(battle_map)
 	setup_navigation()
@@ -68,7 +92,7 @@ func setup_navigation() -> void:
 					astar.set_point_solid(cell, true)
 
 func spawn_party() -> void:
-	var ids := ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
+	var ids: Array = progression.party
 	for i in range(ids.size()):
 		var pos := Vector2(120 + (i % 2) * 70, 190 + (i / 2) * 110)
 		spawn_unit(ids[i], "heroes", pos)
@@ -77,16 +101,18 @@ func spawn_party() -> void:
 func spawn_wave() -> void:
 	if game_over:
 		return
+	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
+	var pool: Array = map_data.get("enemy_pool", ["yellow_turban"])
 	var count := mini(3 + wave, 9)
 	for i in range(count):
-		var id := "yellow_turban" if (i + wave) % 2 == 0 else "zubat"
+		var id: String = pool[(i + wave) % pool.size()]
 		var pos := Vector2(900 + randf_range(-50, 70), 70 + i * (380.0 / maxf(1, count - 1)) + randf_range(-18, 18))
 		var enemy = spawn_unit(id, "enemies", pos)
 		# Gentle wave scaling keeps the idle loop meaningful.
 		enemy.max_hp *= 1.0 + (wave - 1) * 0.12
 		enemy.hp = enemy.max_hp
 		enemy.attack *= 1.0 + (wave - 1) * 0.07
-	log_message.emit("第 %d 波敌人进入青草渡口" % wave)
+	log_message.emit("第 %d 波敌人进入%s" % [wave, map_data.get("name", "地图")])
 	wave += 1
 
 func spawn_unit(id: String, faction: String, pos: Vector2):
@@ -102,6 +128,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2):
 	if faction == "heroes":
 		heroes.append(unit)
 		unit.apply_equipment_stats(inventory.get_actor_stats(id), equipment_config.get("rules", {}))
+		unit.set_special_effects(inventory.get_actor_specials(id))
 	else:
 		enemies.append(unit)
 	return unit
@@ -110,6 +137,8 @@ func _process(delta: float) -> void:
 	if is_paused or game_over:
 		return
 	elapsed += delta
+	for key in effect_cooldowns.keys():
+		effect_cooldowns[key] = maxf(0.0, float(effect_cooldowns[key]) - delta)
 	if enemies.is_empty():
 		spawn_timer += delta
 		if spawn_timer >= 2.2:
@@ -197,7 +226,13 @@ func _on_unit_died(unit) -> void:
 	if unit.faction == "enemies":
 		enemies.erase(unit)
 		kills += 1
-		roll_equipment_drop(unit)
+		if is_instance_valid(unit.last_damage_source):
+			combat_stats.record_kill(unit.last_damage_source.actor_id)
+		if not active_boss_id.is_empty() and unit.actor_data.has("boss_id"):
+			resolve_boss_victory(active_boss_id)
+		else:
+			roll_equipment_drop(unit)
+			roll_material_drop()
 	else:
 		heroes.erase(unit)
 		party_changed.emit(heroes)
@@ -215,19 +250,22 @@ func _on_equipment_changed(actor_id: String) -> void:
 	for hero in heroes:
 		if is_instance_valid(hero) and hero.actor_id == actor_id:
 			hero.apply_equipment_stats(inventory.get_actor_stats(actor_id), equipment_config.get("rules", {}))
+			hero.set_special_effects(inventory.get_actor_specials(actor_id))
 			party_changed.emit(heroes)
 			return
 
 func roll_equipment_drop(defeated_unit) -> void:
+	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
 	var table: Dictionary = loot_config.get("grassland_crossing", {})
-	var chance := float(table.get("test_drop_chance" if loot_test_mode else "drop_chance", 0.35))
+	var chance := 1.0 if loot_test_mode else float(map_data.get("drop_chance", 0.4))
 	if randf() > chance:
 		return
-	var level := int(table.get("base_level", 1)) + maxi(0, wave - 2) * int(table.get("levels_per_wave", 1))
+	var level := int(map_data.get("level", 1)) + maxi(0, wave - 2)
 	var quality: String = equipment_generator.roll_quality(loot_test_mode)
 	var source := "%s · 第%d波" % [defeated_unit._name(), maxi(1, wave - 1)]
 	var item: Dictionary = equipment_generator.generate(level, source, quality)
 	if inventory.add_item(item):
+		combat_stats.resources.equipment += 1
 		var quality_info: Dictionary = equipment_config.get("qualities", {}).get(quality, {})
 		var important := int(quality_info.get("rank", 0)) >= 2
 		log_message.emit(("★ 获得 " if important else "获得 ") + item.get("name", "装备") + "（自动拾取）")
@@ -241,6 +279,115 @@ func get_hero(actor_id: String):
 		if is_instance_valid(hero) and hero.actor_id == actor_id:
 			return hero
 	return null
+
+func roll_material_drop() -> void:
+	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
+	var bounds: Array = map_data.get("material_drop", [1, 2])
+	var amount := randi_range(int(bounds[0]), int(bounds[1]))
+	progression.add_material(map_data.get("material", "three_kingdoms_token"), amount)
+	combat_stats.resources.materials += amount
+
+func switch_map(map_id: String) -> bool:
+	if not worlds_config.maps.has(map_id):
+		return false
+	clear_combatants()
+	current_map_id = map_id
+	active_boss_id = ""
+	wave = 1
+	spawn_party()
+	spawn_wave()
+	world_changed.emit(map_id)
+	log_message.emit("前往【%s】" % worlds_config.maps[map_id].name)
+	return true
+
+func start_boss(boss_id: String) -> bool:
+	if not worlds_config.bosses.has(boss_id):
+		return false
+	clear_combatants()
+	active_boss_id = boss_id
+	spawn_party()
+	var boss_data: Dictionary = worlds_config.bosses[boss_id]
+	spawn_unit(boss_data.actor, "enemies", Vector2(875, 260))
+	log_message.emit("传奇挑战开始：【%s】" % boss_data.name)
+	return true
+
+func clear_combatants() -> void:
+	for unit in heroes + enemies:
+		if is_instance_valid(unit):
+			unit.queue_free()
+	heroes.clear()
+	enemies.clear()
+	game_over = false
+	spawn_timer = 0.0
+
+func rebuild_party() -> void:
+	clear_combatants()
+	active_boss_id = ""
+	spawn_party()
+	spawn_wave()
+
+func resolve_boss_victory(boss_id: String) -> void:
+	var data: Dictionary = worlds_config.bosses[boss_id]
+	var first: bool = progression.unlock_boss_actor(boss_id, data.unlock_actor)
+	if first:
+		log_message.emit("★ 首次击败%s，永久解锁%s！" % [data.name, actors[data.unlock_actor].name])
+	else:
+		progression.add_material(data.repeat_material, int(data.repeat_amount))
+		log_message.emit("再次击败%s，获得材料 ×%d" % [data.name, data.repeat_amount])
+	active_boss_id = ""
+
+func strategy_allows(unit) -> bool:
+	var preset: Dictionary = progression.strategy_presets.get(progression.active_strategy, {})
+	var self_ratio: float = unit.hp / maxf(1.0, unit.max_hp)
+	if unit.skill_data.get("type", "") == "self_heal":
+		return self_ratio <= float(preset.get("self_hp", 0.45))
+	if unit.skill_data.get("type", "") == "heal_aura":
+		var ally = lowest_health_ally(unit)
+		return ally != null and ally.hp / ally.max_hp <= float(preset.get("ally_hp", 0.65))
+	return enemies_near(unit.position, unit.faction, float(unit.skill_data.get("range", 180)), 99).size() >= int(preset.get("enemy_count", 1))
+
+func on_damage(source, target, amount: float, context: Dictionary) -> void:
+	var source_id: String = source.actor_id if is_instance_valid(source) else ""
+	combat_stats.record_damage(source_id, target.actor_id, amount, context.get("kind", "skill"))
+	if not context.get("allow_triggers", true):
+		return
+	if context.get("critical", false) and is_instance_valid(source) and source.has_special("crit_lightning"):
+		trigger_lightning(source, target)
+	if is_instance_valid(source) and (target.has_special("thorn_reflect") or target.actor_data.get("talent", "") == "low_hp_rage"):
+		trigger_counts.thorn_reflect += 1
+		source.take_damage(amount * special_config.effects.thorn_reflect.power, target, false, {"kind": "effect", "allow_triggers": false})
+
+func on_heal(source, amount: float) -> void:
+	if is_instance_valid(source):
+		combat_stats.record_heal(source.actor_id, amount)
+
+func on_skill(source) -> void:
+	combat_stats.record_skill(source.actor_id)
+
+func trigger_lightning(source, primary) -> void:
+	var effect: Dictionary = special_config.effects.crit_lightning
+	var key: String = source.actor_id + ":crit_lightning"
+	if float(effect_cooldowns.get(key, 0)) > 0 or randf() > float(effect.chance):
+		return
+	effect_cooldowns[key] = float(effect.cooldown)
+	trigger_counts.crit_lightning += 1
+	primary.take_damage(source.attack * float(effect.power), source, false, {"kind": "effect", "allow_triggers": false})
+	spawn_tracer(source.position, primary.position, Color("#FFE65A"))
+
+func propagate_poison(dead_unit) -> void:
+	if dead_unit.poison_depth >= int(special_config.effects.poison_spread.max_chain_depth):
+		return
+	var source_faction: String = dead_unit.poison_source.faction if is_instance_valid(dead_unit.poison_source) else ("enemies" if dead_unit.faction == "heroes" else "heroes")
+	var victims := enemies_near(dead_unit.position, source_faction, float(special_config.effects.poison_spread.range), int(special_config.effects.poison_spread.max_targets))
+	trigger_counts.poison_spread += 1
+	for victim in victims:
+		victim.apply_poison(dead_unit.poison_damage, 4.0, dead_unit.poison_source, dead_unit.poison_depth + 1)
+
+func stats_snapshot() -> Dictionary:
+	return combat_stats.snapshot(elapsed)
+
+func note_effect(id: String) -> void:
+	trigger_counts[id] = int(trigger_counts.get(id, 0)) + 1
 
 func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
 	var line := Line2D.new()

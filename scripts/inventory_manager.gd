@@ -8,7 +8,7 @@ signal save_completed(path: String)
 const SAVE_VERSION := "0.2A"
 const SAVE_PATH := "user://wanjie_v02_save.json"
 const TEST_SAVE_PATH := "user://wanjie_v02_test_save.json"
-const HERO_IDS := ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
+const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
 
 var config: Dictionary
 var items: Array = []
@@ -19,7 +19,7 @@ var save_path := SAVE_PATH
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args():
 		save_path = TEST_SAVE_PATH
 	ensure_equipment_layout()
 
@@ -101,6 +101,18 @@ func get_actor_stats(actor_id: String, excluding_slot: String = "") -> Dictionar
 		if item != null:
 			merge_stats(totals, item_stats(item))
 	return totals
+
+func get_actor_specials(actor_id: String) -> Array:
+	var result: Array = []
+	if not equipped.has(actor_id):
+		return result
+	for slot in equipped[actor_id]:
+		var item = get_equipped_item(actor_id, slot)
+		if item != null:
+			for effect in item.get("special_effects", []):
+				if effect not in result:
+					result.append(effect)
+	return result
 
 func preview_stats(actor_id: String, item: Dictionary, target_slot: String = "") -> Dictionary:
 	var slot := target_slot if not target_slot.is_empty() else String(item.get("slot", ""))
