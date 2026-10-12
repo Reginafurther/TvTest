@@ -1,0 +1,50 @@
+class_name BattleMap
+extends Node2D
+
+const ARENA_SIZE := Vector2(1060, 520)
+var obstacles: Array[Rect2] = [
+	Rect2(425, 100, 185, 72),
+	Rect2(425, 348, 185, 72),
+	Rect2(748, 220, 92, 84)
+]
+var rally_position := Vector2(-100, -100)
+
+func _ready() -> void:
+	queue_redraw()
+
+func _draw() -> void:
+	draw_rect(Rect2(Vector2.ZERO, ARENA_SIZE), Color("#9ACF79"), true)
+	for x in range(0, int(ARENA_SIZE.x), 64):
+		for y in range(0, int(ARENA_SIZE.y), 64):
+			var checker := int(x / 64) + int(y / 64)
+			var tile_color := Color("#94C774") if checker % 2 == 0 else Color("#9DCE7C")
+			draw_rect(Rect2(x, y, 64, 64), tile_color, true)
+	# River and stepping stones are visual flavor; rocks are actual pathfinding blockers.
+	draw_colored_polygon(PackedVector2Array([Vector2(0, 244), Vector2(310, 218), Vector2(700, 250), Vector2(1060, 226), Vector2(1060, 294), Vector2(700, 316), Vector2(310, 282), Vector2(0, 306)]), Color("#69BBD0"))
+	for x in range(110, 1000, 170):
+		draw_circle(Vector2(x, 268 + sin(float(x)) * 8), 12, Color("#D5D6B2"))
+	for rect in obstacles:
+		draw_style_box(_rock_box(), rect)
+		for i in range(3):
+			draw_circle(rect.position + Vector2(35 + i * 55, 18 + (i % 2) * 24), 20, Color("#667866"))
+	if rally_position.x >= 0:
+		draw_circle(rally_position, 18, Color(1, 1, 1, 0.16), true)
+		draw_arc(rally_position, 18, 0, TAU, 32, Color("#FFF6A2"), 3)
+		draw_line(rally_position - Vector2(8, 0), rally_position + Vector2(8, 0), Color.WHITE, 2)
+		draw_line(rally_position - Vector2(0, 8), rally_position + Vector2(0, 8), Color.WHITE, 2)
+
+func _rock_box() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color("#526754")
+	box.corner_radius_top_left = 22
+	box.corner_radius_top_right = 22
+	box.corner_radius_bottom_left = 22
+	box.corner_radius_bottom_right = 22
+	box.shadow_color = Color(0.08, 0.12, 0.08, 0.25)
+	box.shadow_size = 5
+	return box
+
+func set_rally(point: Vector2) -> void:
+	rally_position = point
+	queue_redraw()
+

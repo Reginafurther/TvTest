@@ -1,0 +1,87 @@
+{
+  "zhao_yun": {
+    "name": "赵云",
+    "world": "三国",
+    "role": "高速输出",
+    "max_hp": 460,
+    "attack": 48,
+    "defense": 16,
+    "move_speed": 112,
+    "attack_range": 70,
+    "attack_interval": 0.72,
+    "color": "73C8FF",
+    "accent": "EAF8FF",
+    "skill": "spear_flurry"
+  },
+  "liu_bei": {
+    "name": "刘备",
+    "world": "三国",
+    "role": "治疗辅助",
+    "max_hp": 520,
+    "attack": 31,
+    "defense": 20,
+    "move_speed": 92,
+    "attack_range": 165,
+    "attack_interval": 1.15,
+    "color": "79D58B",
+    "accent": "F6E59A",
+    "skill": "benevolent_aid"
+  },
+  "pikachu": {
+    "name": "皮卡丘",
+    "world": "宝可梦",
+    "role": "雷电输出",
+    "max_hp": 390,
+    "attack": 44,
+    "defense": 12,
+    "move_speed": 124,
+    "attack_range": 190,
+    "attack_interval": 0.82,
+    "color": "F5D547",
+    "accent": "7B4A22",
+    "skill": "thunder_chain"
+  },
+  "snorlax": {
+    "name": "卡比兽",
+    "world": "宝可梦",
+    "role": "恢复坦克",
+    "max_hp": 850,
+    "attack": 35,
+    "defense": 28,
+    "move_speed": 68,
+    "attack_range": 62,
+    "attack_interval": 1.3,
+    "color": "4F8F91",
+    "accent": "F5E7BB",
+    "skill": "rest"
+  },
+  "yellow_turban": {
+    "name": "黄巾力士",
+    "world": "三国",
+    "role": "近战怪物",
+    "max_hp": 190,
+    "attack": 22,
+    "defense": 7,
+    "move_speed": 72,
+    "attack_range": 56,
+    "attack_interval": 1.25,
+    "color": "D39B42",
+    "accent": "F4D56F",
+    "skill": "enemy_strike"
+  },
+  "zubat": {
+    "name": "超音蝠",
+    "world": "宝可梦",
+    "role": "高速怪物",
+    "max_hp": 145,
+    "attack": 19,
+    "defense": 5,
+    "move_speed": 110,
+    "attack_range": 52,
+    "attack_interval": 0.95,
+    "color": "7656B5",
+    "accent": "7DD6DD",
+    "skill": "enemy_strike"
+  }
+}
+

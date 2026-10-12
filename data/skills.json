@@ -1,0 +1,48 @@
+{
+  "spear_flurry": {
+    "name": "七进七出",
+    "type": "damage",
+    "cooldown": 5.0,
+    "power": 1.75,
+    "range": 78,
+    "color": "7ED8FF",
+    "description": "突进并造成高额物理伤害"
+  },
+  "benevolent_aid": {
+    "name": "仁德之援",
+    "type": "heal_aura",
+    "cooldown": 6.5,
+    "power": 1.35,
+    "range": 240,
+    "color": "78F0A8",
+    "description": "治疗生命比例最低的友军"
+  },
+  "thunder_chain": {
+    "name": "十万伏特",
+    "type": "chain",
+    "cooldown": 4.2,
+    "power": 1.25,
+    "range": 250,
+    "color": "FFE35B",
+    "description": "雷击目标并弹射附近敌人"
+  },
+  "rest": {
+    "name": "睡觉",
+    "type": "self_heal",
+    "cooldown": 8.0,
+    "power": 0.22,
+    "range": 0,
+    "color": "A8E8FF",
+    "description": "恢复自身最大生命值"
+  },
+  "enemy_strike": {
+    "name": "猛击",
+    "type": "damage",
+    "cooldown": 5.5,
+    "power": 1.4,
+    "range": 62,
+    "color": "FF8B7E",
+    "description": "一次凶猛攻击"
+  }
+}
+
