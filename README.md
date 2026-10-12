@@ -55,7 +55,7 @@ godot --path .
 
 ## 验证说明
 
-工程附带 `verify_project.ps1`，用于在没有 Godot 的机器上检查关键文件、JSON 数据以及资源引用完整性。如果机器已安装 `godot` 或 `godot4`，脚本还会自动执行 Godot 的无窗口启动检查。
+工程附带 `verify_project.ps1`，用于在没有 Godot 的机器上检查关键文件、JSON 数据以及资源引用完整性。如果机器已安装 `godot` 或 `godot4`，脚本还会自动执行一轮加速的无窗口战斗冒烟测试，并确认角色存活且确实产生击杀。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\verify_project.ps1

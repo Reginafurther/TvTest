@@ -36,9 +36,9 @@ foreach ($id in $requiredActors) {
 
 $godot = Get-Command godot4, godot -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($godot) {
-    & $godot.Source --headless --path $root --quit-after 3
+    & $godot.Source --headless --path $root -- --smoke-test
     if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
-    Write-Host 'PASS: Files, data references, and Godot headless startup are valid.' -ForegroundColor Green
+    Write-Host 'PASS: Files, data references, and the automated battle smoke test are valid.' -ForegroundColor Green
 } else {
     Write-Host 'PASS: Files and data references are valid.' -ForegroundColor Green
     Write-Warning 'Godot is not installed or not on PATH; runtime startup was not executed.'

@@ -1,6 +1,11 @@
 class_name BattleController
 extends Node2D
 
+const DataLoaderScript = preload("res://scripts/data_loader.gd")
+const BattleMapScript = preload("res://scripts/battle_map.gd")
+const BattleUnitScript = preload("res://scripts/unit.gd")
+const EffectRingScript = preload("res://scripts/effect_ring.gd")
+
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
 signal log_message(message: String)
@@ -8,10 +13,10 @@ signal battle_state_changed(message: String)
 
 var actors: Dictionary
 var skills: Dictionary
-var battle_map: BattleMap
+var battle_map: Node2D
 var astar := AStarGrid2D.new()
-var heroes: Array[BattleUnit] = []
-var enemies: Array[BattleUnit] = []
+var heroes: Array = []
+var enemies: Array = []
 var elapsed := 0.0
 var kills := 0
 var wave := 1
@@ -21,9 +26,9 @@ var game_over := false
 var obstacle_cells: Dictionary = {}
 
 func _ready() -> void:
-	actors = DataLoader.load_json("res://data/actors.json")
-	skills = DataLoader.load_json("res://data/skills.json")
-	battle_map = BattleMap.new()
+	actors = DataLoaderScript.load_json("res://data/actors.json")
+	skills = DataLoaderScript.load_json("res://data/skills.json")
+	battle_map = BattleMapScript.new()
 	add_child(battle_map)
 	setup_navigation()
 	spawn_party()
@@ -57,7 +62,7 @@ func spawn_wave() -> void:
 	for i in range(count):
 		var id := "yellow_turban" if (i + wave) % 2 == 0 else "zubat"
 		var pos := Vector2(900 + randf_range(-50, 70), 70 + i * (380.0 / maxf(1, count - 1)) + randf_range(-18, 18))
-		var enemy := spawn_unit(id, "enemies", pos)
+		var enemy = spawn_unit(id, "enemies", pos)
 		# Gentle wave scaling keeps the idle loop meaningful.
 		enemy.max_hp *= 1.0 + (wave - 1) * 0.12
 		enemy.hp = enemy.max_hp
@@ -65,8 +70,8 @@ func spawn_wave() -> void:
 	log_message.emit("第 %d 波敌人进入青草渡口" % wave)
 	wave += 1
 
-func spawn_unit(id: String, faction: String, pos: Vector2) -> BattleUnit:
-	var unit := BattleUnit.new()
+func spawn_unit(id: String, faction: String, pos: Vector2):
+	var unit = BattleUnitScript.new()
 	var data: Dictionary = actors.get(id, {})
 	var skill: Dictionary = skills.get(data.get("skill", ""), {})
 	unit.setup(id, data, skill, faction, self)
@@ -98,39 +103,39 @@ func _unhandled_input(event: InputEvent) -> void:
 		battle_state_changed.emit("已暂停" if is_paused else "自动战斗中")
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var local := to_local(event.position)
-		if Rect2(Vector2.ZERO, BattleMap.ARENA_SIZE).has_point(local) and not point_blocked(local):
+		if Rect2(Vector2.ZERO, BattleMapScript.ARENA_SIZE).has_point(local) and not point_blocked(local):
 			battle_map.set_rally(local)
 			for i in range(heroes.size()):
 				if is_instance_valid(heroes[i]) and not heroes[i].dead:
 					heroes[i].set_rally(local + Vector2((i % 2) * 38 - 19, (i / 2) * 38 - 19))
 			log_message.emit("队伍移动至新的集结点")
 
-func find_closest_enemy(seeker: BattleUnit) -> BattleUnit:
-	var pool: Array[BattleUnit] = enemies if seeker.faction == "heroes" else heroes
-	var closest: BattleUnit
+func find_closest_enemy(seeker):
+	var pool: Array = enemies if seeker.faction == "heroes" else heroes
+	var closest
 	var best := INF
 	for candidate in pool:
 		if is_instance_valid(candidate) and not candidate.dead:
-			var distance := seeker.position.distance_squared_to(candidate.position)
+			var distance = seeker.position.distance_squared_to(candidate.position)
 			if distance < best:
 				best = distance
 				closest = candidate
 	return closest
 
-func lowest_health_ally(seeker: BattleUnit) -> BattleUnit:
-	var pool: Array[BattleUnit] = heroes if seeker.faction == "heroes" else enemies
-	var result: BattleUnit
+func lowest_health_ally(seeker):
+	var pool: Array = heroes if seeker.faction == "heroes" else enemies
+	var result
 	var ratio := 2.0
 	for ally in pool:
 		if is_instance_valid(ally) and not ally.dead and seeker.position.distance_to(ally.position) <= 260:
-			var current := ally.hp / ally.max_hp
+			var current = ally.hp / ally.max_hp
 			if current < ratio:
 				ratio = current
 				result = ally
 	return result
 
 func enemies_near(center: Vector2, source_faction: String, radius: float, limit: int) -> Array:
-	var pool: Array[BattleUnit] = enemies if source_faction == "heroes" else heroes
+	var pool: Array = enemies if source_faction == "heroes" else heroes
 	var found: Array = []
 	for candidate in pool:
 		if is_instance_valid(candidate) and not candidate.dead and candidate.position.distance_to(center) <= radius:
@@ -168,7 +173,7 @@ func point_blocked(point: Vector2) -> bool:
 			return true
 	return false
 
-func _on_unit_died(unit: BattleUnit) -> void:
+func _on_unit_died(unit) -> void:
 	if unit.faction == "enemies":
 		enemies.erase(unit)
 		kills += 1
@@ -182,7 +187,7 @@ func _on_unit_died(unit: BattleUnit) -> void:
 func _on_combat_event(message: String) -> void:
 	log_message.emit(message)
 
-func _on_health_changed(_unit: BattleUnit) -> void:
+func _on_health_changed(_unit) -> void:
 	party_changed.emit(heroes)
 
 func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
@@ -196,7 +201,7 @@ func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
 	tween.tween_callback(line.queue_free)
 
 func spawn_ring(at: Vector2, color: Color) -> void:
-	var ring := EffectRing.new()
+	var ring = EffectRingScript.new()
 	ring.position = at
 	ring.tint = color
 	add_child(ring)

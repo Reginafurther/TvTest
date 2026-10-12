@@ -1,6 +1,8 @@
 extends Node
 
-var battle: BattleController
+const BattleControllerScript = preload("res://scripts/battle_controller.gd")
+
+var battle: Node2D
 var stats_label: Label
 var state_label: Label
 var log_label: RichTextLabel
@@ -9,7 +11,7 @@ var help_label: Label
 
 func _ready() -> void:
 	build_background()
-	battle = BattleController.new()
+	battle = BattleControllerScript.new()
 	battle.position = Vector2(20, 76)
 	add_child(battle)
 	build_ui()
@@ -19,6 +21,9 @@ func _ready() -> void:
 	battle.battle_state_changed.connect(update_state)
 	update_party(battle.heroes)
 	add_log("四人小队已进入青草渡口，自动战斗开始")
+	if "--smoke-test" in OS.get_cmdline_user_args():
+		Engine.time_scale = 4.0
+		get_tree().create_timer(20.0).timeout.connect(finish_smoke_test)
 
 func _process(_delta: float) -> void:
 	if Input.is_key_pressed(KEY_R) and battle.game_over:
@@ -116,4 +121,13 @@ func add_log(message: String) -> void:
 		log_label.clear()
 	log_label.append_text("[color=#9CB5C2]›[/color] %s\n" % message)
 	log_label.scroll_to_line(999)
+
+func finish_smoke_test() -> void:
+	var passed: bool = battle.elapsed >= 18.0 and battle.heroes.size() > 0 and battle.kills > 0
+	if passed:
+		print("SMOKE_TEST_PASS elapsed=%.1f kills=%d heroes=%d wave=%d" % [battle.elapsed, battle.kills, battle.heroes.size(), battle.wave - 1])
+	else:
+		push_error("SMOKE_TEST_FAIL elapsed=%.1f kills=%d heroes=%d" % [battle.elapsed, battle.kills, battle.heroes.size()])
+	Engine.time_scale = 1.0
+	get_tree().quit(0 if passed else 1)
 

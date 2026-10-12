@@ -1,9 +1,12 @@
 class_name BattleUnit
 extends CharacterBody2D
 
-signal died(unit: BattleUnit)
+const BattleMapScript = preload("res://scripts/battle_map.gd")
+const FloatingTextScript = preload("res://scripts/floating_text.gd")
+
+signal died(unit)
 signal combat_event(message: String)
-signal health_changed(unit: BattleUnit)
+signal health_changed(unit)
 
 var actor_id := ""
 var actor_data: Dictionary = {}
@@ -19,7 +22,7 @@ var attack_range := 60.0
 var attack_interval := 1.0
 var attack_timer := 0.0
 var skill_timer := 0.0
-var target: BattleUnit
+var target
 var nav_path := PackedVector2Array()
 var path_index := 0
 var repath_timer := 0.0
@@ -81,7 +84,7 @@ func _physics_process(delta: float) -> void:
 		if attack_timer <= 0.0:
 			basic_attack()
 	else:
-		move_toward_point(target.global_position, delta)
+		move_toward_point(target.position, delta)
 
 func move_toward_point(point: Vector2, _delta: float) -> void:
 	if repath_timer <= 0.0 or nav_path.is_empty():
@@ -96,8 +99,8 @@ func move_toward_point(point: Vector2, _delta: float) -> void:
 	if absf(direction.x) > 0.05:
 		facing = signf(direction.x)
 	move_and_slide()
-	position.x = clampf(position.x, 18.0, BattleMap.ARENA_SIZE.x - 18.0)
-	position.y = clampf(position.y, 28.0, BattleMap.ARENA_SIZE.y - 18.0)
+	position.x = clampf(position.x, 18.0, BattleMapScript.ARENA_SIZE.x - 18.0)
+	position.y = clampf(position.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
 	queue_redraw()
 
 func basic_attack() -> void:
@@ -112,7 +115,7 @@ func try_use_skill() -> bool:
 	var power := float(skill_data.get("power", 1.0))
 	match kind:
 		"heal_aura":
-			var ally: BattleUnit = battle.lowest_health_ally(self)
+			var ally = battle.lowest_health_ally(self)
 			if ally != null and ally.hp < ally.max_hp * 0.88:
 				ally.heal(attack * power, self)
 				battle.spawn_ring(ally.position, _skill_color())
@@ -130,7 +133,7 @@ func try_use_skill() -> bool:
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 220)):
 				var victims: Array = battle.enemies_near(target.position, faction, 145.0, 3)
 				for i in range(victims.size()):
-					var victim: BattleUnit = victims[i]
+					var victim = victims[i]
 					victim.take_damage(attack * power * (1.0 - i * 0.18), self)
 					battle.spawn_tracer(position if i == 0 else victims[i - 1].position, victim.position, _skill_color())
 				skill_timer = cooldown
@@ -145,7 +148,7 @@ func try_use_skill() -> bool:
 				return true
 	return false
 
-func take_damage(raw_amount: float, source: BattleUnit) -> void:
+func take_damage(raw_amount: float, source) -> void:
 	if dead:
 		return
 	var amount := maxi(1, roundi(raw_amount))
@@ -163,7 +166,7 @@ func take_damage(raw_amount: float, source: BattleUnit) -> void:
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
 		tween.tween_callback(queue_free)
 
-func heal(raw_amount: float, _source: BattleUnit) -> void:
+func heal(raw_amount: float, _source) -> void:
 	var amount := mini(roundi(raw_amount), roundi(max_hp - hp))
 	if amount <= 0:
 		return
@@ -173,7 +176,7 @@ func heal(raw_amount: float, _source: BattleUnit) -> void:
 	queue_redraw()
 
 func show_number(value: String, tint: Color) -> void:
-	var number := FloatingText.new()
+	var number = FloatingTextScript.new()
 	number.setup(value, tint)
 	add_child(number)
 
