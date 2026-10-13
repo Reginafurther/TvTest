@@ -44,8 +44,6 @@ func buy(product_id: String, quantity: int) -> Dictionary:
 		"material":
 			var material_id: String = product.get("material_id", "")
 			progression.materials[material_id] = int(progression.materials.get(material_id, 0)) + int(product.get("amount", 1)) * quantity
-		"recruit_token":
-			progression.recruit_tokens += int(product.get("amount", 1)) * quantity
 		_:
 			last_error = "商品类型无效。"
 			return {}

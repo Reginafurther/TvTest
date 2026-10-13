@@ -27,6 +27,6 @@
   },
   "recruitment": {
     "starter_pool":["zhang_fei","dian_wei","zhao_yun","zhuge_liang","liu_bei","pikachu","snorlax","gengar"],
-    "costs":{"zhang_fei":["three_kingdoms_token",40],"dian_wei":["three_kingdoms_token",40],"zhao_yun":["three_kingdoms_token",40],"zhuge_liang":["three_kingdoms_token",50],"liu_bei":["three_kingdoms_token",40],"pikachu":["pokemon_token",40],"snorlax":["pokemon_token",40],"gengar":["pokemon_token",50]}
+    "costs":{"zhang_fei":["three_kingdoms_token",40],"dian_wei":["three_kingdoms_token",40],"zhao_yun":["three_kingdoms_token",40],"zhuge_liang":["three_kingdoms_token",50],"liu_bei":["three_kingdoms_token",40],"lu_bu":["three_kingdoms_token",120],"pikachu":["pokemon_token",40],"snorlax":["pokemon_token",40],"gengar":["pokemon_token",50],"mewtwo":["pokemon_token",120]}
   }
 }

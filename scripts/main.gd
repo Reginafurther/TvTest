@@ -35,7 +35,7 @@ var character_ui
 var character_button: Button
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.6")
+	DisplayServer.window_set_title("万界冒险团 V0.6.1")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -71,7 +71,7 @@ func _ready() -> void:
 	update_party(battle.heroes)
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui()
-	add_log("四人小队已进入虎牢关，自动战斗开始")
+	add_log("刘备已抵达虎牢关前哨，请先用虎符招募并上阵输出伙伴")
 	if "--v035-preview" in OS.get_cmdline_user_args():
 		get_tree().create_timer(2.0).timeout.connect(_save_v035_preview)
 	elif "--v05-preview-1440" in OS.get_cmdline_user_args():
@@ -100,6 +100,8 @@ func _ready() -> void:
 		call_deferred("finish_v06_progression_test")
 	elif "--v06-character-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v06_character_test")
+	elif "--v061-start-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_start_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -146,7 +148,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.6"
+	title.text = "万界冒险团  V0.6.1"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -1330,6 +1332,80 @@ func finish_v06_character_test() -> void:
 		print("V06_CHARACTER_TEST_PASS roster=10 slots=9 tabs=4 exp_sync=true optimize_max3=true no_steal=true lock=true general_skills=true persistence=true layouts=1440x768,1920x1080")
 	else:
 		for failure in failures: push_error("V06_CHARACTER_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_start_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	if p.roster != ["liu_bei"] or p.party != ["liu_bei", "", "", ""]:
+		failures.append("新档不是仅刘备与三个空上阵位")
+	if p.actor_level("liu_bei") != 1 or int(p.materials.three_kingdoms_token) != 150 or int(p.materials.pokemon_token) != 0:
+		failures.append("刘备等级或初始150虎符配置错误")
+	if not battle.enemies.is_empty() or battle.has_damage_dealer_in_party():
+		failures.append("仅治疗角色时错误启动了第一关")
+	p.save_to_disk()
+	var payload = JSON.parse_string(FileAccess.get_file_as_string(p.save_path))
+	if typeof(payload) != TYPE_DICTIONARY or payload.has("recruit_tokens"):
+		failures.append("V0.6.1存档仍保存招募令")
+	if battle.shop_config.products.has("recruit_token"):
+		failures.append("商店仍配置招募令商品")
+	# 通过真实招募页面依次招募三名三国角色。
+	v03_ui.open_view("recruit")
+	for actor_id in ["zhang_fei", "dian_wei", "zhao_yun"]:
+		var lists: Array[Node] = v03_ui.content.find_children("*", "ItemList", true, false)
+		if lists.is_empty():
+			failures.append("材料招募列表不存在")
+			break
+		var list: ItemList = lists[0]
+		var index := -1
+		for candidate_index in range(list.item_count):
+			if str(list.get_item_metadata(candidate_index)) == actor_id: index = candidate_index; break
+		if index < 0:
+			failures.append("招募列表缺少" + actor_id)
+			continue
+		v03_ui.exchange_actor(index, list)
+	if p.roster.size() != 4 or int(p.materials.three_kingdoms_token) != 30:
+		failures.append("150虎符未正确招募三名三国角色")
+	# 明确选择位置上阵，不能靠直接修改party数组。
+	for index in range(1, 4):
+		v03_ui.selected_party_actor = ["zhang_fei", "dian_wei", "zhao_yun"][index - 1]
+		v03_ui.assign_selected_party(index)
+	if p.party != ["liu_bei", "zhang_fei", "dian_wei", "zhao_yun"] or battle.heroes.size() != 4 or battle.enemies.is_empty():
+		failures.append("材料招募到上阵及战场重建链路失败")
+	var roster_before: Array = p.roster.duplicate()
+	var equipment_before: Dictionary = battle.inventory.equipped.duplicate(true)
+	v03_ui.clear_party_slot(2)
+	if not str(p.party[2]).is_empty() or battle.heroes.size() != 3:
+		failures.append("上阵位置无法清空或战场未立即更新")
+	v03_ui.selected_party_actor = "dian_wei"
+	v03_ui.assign_selected_party(2)
+	if p.roster != roster_before or battle.inventory.equipped != equipment_before or p.party.count("dian_wei") != 1:
+		failures.append("替换上阵导致角色/装备关系丢失或角色重复")
+	p.save_to_disk()
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or reload_progress.party != p.party or reload_progress.roster != p.roster:
+		failures.append("招募与编队未持久化")
+	reload_progress.free()
+	# 旧V0.6文件即使存在，也不能被V0.6.1新命名空间读取。
+	var old_path := "user://v061_old_v06_fixture.json"
+	var fresh_path := "user://v061_fresh_fixture.json"
+	var old_text := JSON.stringify({"version":"0.6","roster":["mewtwo"],"party":["mewtwo","mewtwo","mewtwo","mewtwo"],"materials":{"three_kingdoms_token":9999}})
+	var old_file := FileAccess.open(old_path, FileAccess.WRITE); old_file.store_string(old_text); old_file.close()
+	if FileAccess.file_exists(fresh_path): DirAccess.remove_absolute(ProjectSettings.globalize_path(fresh_path))
+	var fresh = ProgressionManagerScript.new()
+	fresh.save_path = fresh_path
+	if fresh.load_from_disk() or fresh.roster != ["liu_bei"] or fresh.party != ["liu_bei", "", "", ""] or int(fresh.materials.three_kingdoms_token) != 150:
+		failures.append("全新命名空间错误读取旧V0.6进度")
+	if FileAccess.get_file_as_string(old_path) != old_text:
+		failures.append("旧V0.6存档被改写")
+	fresh.free()
+	for path in [old_path, fresh_path]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	if failures.is_empty():
+		print("V061_START_TEST_PASS liu_bei_only=true tokens=150 recruit_token_removed=true recruit3=true empty_slots=true deploy_replace=true persistence=true old_save_ignored=true")
+	else:
+		for failure in failures: push_error("V061_START_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 

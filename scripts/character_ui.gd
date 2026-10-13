@@ -26,6 +26,7 @@ var feedback: Label
 var selected_item_id := ""
 var pending_optimization: Array = []
 var optimize_dialog: ConfirmationDialog
+var party_box: VBoxContainer
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -89,9 +90,11 @@ func build_roster_column(parent: HBoxContainer) -> void:
 	box.add_child(sort_select)
 	actor_list = ItemList.new()
 	actor_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	actor_list.custom_minimum_size = Vector2(230, 560)
+	actor_list.custom_minimum_size = Vector2(230, 330)
 	actor_list.item_selected.connect(_select_actor)
 	box.add_child(actor_list)
+	party_box = VBoxContainer.new()
+	box.add_child(party_box)
 	var hint := Label.new()
 	hint.text = "点击仅切换查看，不会改动编队"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -204,6 +207,7 @@ func refresh_all() -> void:
 	if selected_actor.is_empty() or selected_actor not in battle.progression.roster:
 		selected_actor = str(battle.progression.roster[0]) if not battle.progression.roster.is_empty() else ""
 	refresh_roster()
+	refresh_party_controls()
 	refresh_center()
 	refresh_stats()
 	refresh_skills()
@@ -223,6 +227,31 @@ func refresh_roster() -> void:
 		actor_list.add_item("%s  Lv.%d\n%s  %s" % [data.get("name", actor_id), battle.progression.actor_level(actor_id), data.get("role", ""), "●上阵" if deployed else "○待命"])
 		actor_list.set_item_metadata(actor_list.item_count - 1, actor_id)
 		if actor_id == selected_actor: actor_list.select(actor_list.item_count - 1)
+
+func refresh_party_controls() -> void:
+	for child in party_box.get_children(): child.queue_free()
+	var heading := Label.new()
+	heading.text = "四人上阵位置（允许空位）"
+	V035ThemeScript.label(heading, 15, Color("#493520"))
+	party_box.add_child(heading)
+	for index in range(4):
+		var row := HBoxContainer.new()
+		var current := str(battle.progression.party[index])
+		var label := Label.new()
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.text = "%d. %s" % [index + 1, battle.actors.get(current, {}).get("name", "空位") if not current.is_empty() else "空位"]
+		row.add_child(label)
+		var assign := Button.new()
+		assign.text = "替换"
+		assign.disabled = selected_actor.is_empty()
+		assign.pressed.connect(_assign_selected_actor.bind(index))
+		row.add_child(assign)
+		var clear := Button.new()
+		clear.text = "卸下"
+		clear.disabled = current.is_empty()
+		clear.pressed.connect(_clear_party_slot.bind(index))
+		row.add_child(clear)
+		party_box.add_child(row)
 
 func refresh_center() -> void:
 	if selected_actor.is_empty(): return
@@ -375,6 +404,18 @@ func _select_actor(index: int) -> void:
 	selected_item_id = ""
 	feedback.text = "正在查看%s；编队未改变。" % battle.actors[selected_actor].name
 	refresh_all()
+
+func _assign_selected_actor(index: int) -> void:
+	if battle.progression.set_party_member(index, selected_actor):
+		feedback.text = "%s已上阵到位置%d；战场立即重建。" % [battle.actors[selected_actor].name, index + 1]
+		battle.rebuild_party()
+		refresh_all()
+
+func _clear_party_slot(index: int) -> void:
+	if battle.progression.set_party_member(index, ""):
+		feedback.text = "位置%d已清空，角色培养数据保持不变。" % (index + 1)
+		battle.rebuild_party()
+		refresh_all()
 
 func _slot_pressed(slot: String) -> void:
 	tabs.current_tab = 2

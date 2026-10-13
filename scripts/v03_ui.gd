@@ -31,6 +31,7 @@ var selected_skill_actor := ""
 var skill_feedback := ""
 var rewards_feedback := ""
 var shop_icon_cache: Dictionary = {}
+var selected_party_actor := ""
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -214,7 +215,7 @@ func build_objectives() -> void:
 	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—20关推进；通关三国第10关后永久开放宝可梦世界。" % battle.worlds_config.maps[battle.current_map_id].name
 	if not battle.progression.guide_finished:
 		var step: int = clampi(battle.progression.guide_step, 0, 5)
-		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["使用初始招募令", "观察自动战斗", "等待装备掉落", "穿戴一件装备", "定向招募伙伴", "调整编队"][step]]
+		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["用虎符定向招募", "将输出角色上阵", "观察职业自动战斗", "等待装备掉落", "穿戴一件装备", "补齐四人编队"][step]]
 	info.add_theme_font_size_override("font_size", 19)
 	content.add_child(info)
 
@@ -398,17 +399,11 @@ func build_recruit() -> void:
 	title.text = "角色招募与四人编队" if current_view == "recruit" else "伙伴与四人编队"
 	var p = battle.progression
 	var info := Label.new()
-	info.text = "招募令：%d　虎符：%d　精灵结晶：%d　已招募：%d/10" % [p.recruit_tokens, p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
+	info.text = "虎符：%d　精灵结晶：%d　已招募：%d/10\n新角色统一使用世界材料定向招募。" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
 	content.add_child(info)
-	var recruit := Button.new()
-	recruit.text = "使用招募令随机招募非传奇角色"
-	recruit.disabled = p.recruit_tokens <= 0
-	recruit.tooltip_text = "消耗1枚招募令；已拥有角色不会重复获得"
-	recruit.pressed.connect(use_recruit_token)
-	content.add_child(recruit)
 	var feedback := Label.new()
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	feedback.text = recruit_feedback if not recruit_feedback.is_empty() else p.recruit_token_status(battle.worlds_config.recruitment.starter_pool)
+	feedback.text = recruit_feedback if not recruit_feedback.is_empty() else "单击角色选择上阵对象；双击未获得角色可消耗材料招募。"
 	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
 	content.add_child(feedback)
 	var list := ItemList.new()
@@ -416,25 +411,37 @@ func build_recruit() -> void:
 	for actor_id in battle.worlds_config.recruitment.costs:
 		var cost: Array = battle.worlds_config.recruitment.costs[actor_id]
 		var owned: bool = actor_id in p.roster
-		var idx := list.add_item("%s · %s" % [battle.actors[actor_id].name, "已招募" if owned else "%s ×%d" % [material_name(cost[0]), cost[1]]])
+		var legendary_locked: bool = actor_id in ["lu_bu", "mewtwo"] and not bool(p.boss_first_clear.get("lu_bu" if actor_id == "lu_bu" else "mewtwo", false))
+		var state: String = "已招募" if owned else "需先击败对应Boss" if legendary_locked else "%s ×%d" % [material_name(cost[0]), cost[1]]
+		var idx := list.add_item("%s · %s" % [battle.actors[actor_id].name, state])
 		list.set_item_metadata(idx, actor_id)
+	list.item_selected.connect(func(index): selected_party_actor = str(list.get_item_metadata(index)); recruit_feedback = "已选择%s；可招募或放入下方任一位置。" % battle.actors[selected_party_actor].name; refresh())
 	list.item_activated.connect(exchange_actor.bind(list))
 	content.add_child(list)
 	var hint := Label.new()
-	hint.text = "双击未招募角色可定向兑换。编队变更会立即重建战场。"
+	hint.text = "编队最多4人且允许空位。替换后立即重建战场；等级、装备和技能归属不会改变。"
 	content.add_child(hint)
 	var grid := GridContainer.new()
 	grid.columns = 1
 	content.add_child(grid)
 	for i in range(4):
-		var select := OptionButton.new()
-		select.custom_minimum_size = Vector2(455, 32)
-		for actor_id in p.roster:
-			select.add_item("位置%d · %s" % [i + 1, battle.actors[actor_id].name])
-			select.set_item_metadata(select.item_count - 1, actor_id)
-			if actor_id == p.party[i]: select.select(select.item_count - 1)
-		select.item_selected.connect(change_party.bind(i, select))
-		grid.add_child(select)
+		var row := HBoxContainer.new()
+		var current: String = str(p.party[i])
+		var slot_label := Label.new()
+		slot_label.custom_minimum_size = Vector2(190, 32)
+		slot_label.text = "位置%d：%s" % [i + 1, battle.actors.get(current, {}).get("name", "空位") if not current.is_empty() else "空位"]
+		row.add_child(slot_label)
+		var assign := Button.new()
+		assign.text = "将选中角色上阵/替换"
+		assign.disabled = selected_party_actor.is_empty() or selected_party_actor not in p.roster
+		assign.pressed.connect(assign_selected_party.bind(i))
+		row.add_child(assign)
+		var clear := Button.new()
+		clear.text = "卸下"
+		clear.disabled = current.is_empty()
+		clear.pressed.connect(clear_party_slot.bind(i))
+		row.add_child(clear)
+		grid.add_child(row)
 
 func build_craft() -> void:
 	title.text = "装备分解与词条重铸"
@@ -588,31 +595,30 @@ func build_stats() -> void:
 		text.append_text("[b]%s[/b]　伤害 %.0f　DPS %.1f　普攻 %.0f　技能 %.0f　特效 %.0f　治疗 %.0f　承伤 %.0f　技能%d　击杀%d\n" % [battle.actors.get(actor_id, {"name": actor_id}).name, row.damage, row.dps, row.basic, row.skill, row.effect, row.healing, row.taken, row.skills, row.kills])
 	content.add_child(text)
 
-func use_recruit_token() -> void:
-	var status: String = battle.progression.recruit_token_status(battle.worlds_config.recruitment.starter_pool)
-	if not status.is_empty():
-		recruit_feedback = status
-		refresh()
-		return
-	var id: String = battle.progression.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
-	if not id.is_empty():
-		recruit_feedback = "招募成功：%s，已加入伙伴列表并自动存档。" % battle.actors[id].name
-		battle.log_message.emit("招募成功：%s" % battle.actors[id].name)
-	else:
-		recruit_feedback = "招募失败，招募令未消耗。"
-	refresh()
-
 func exchange_actor(index: int, list: ItemList) -> void:
 	var id: String = list.get_item_metadata(index)
 	var cost: Array = battle.worlds_config.recruitment.costs[id]
 	if id in battle.progression.roster:
 		recruit_feedback = "%s已经加入冒险团。" % battle.actors[id].name
 	elif battle.progression.exchange_actor(id, cost[0], int(cost[1])):
-		recruit_feedback = "材料招募成功：%s。" % battle.actors[id].name
+		selected_party_actor = id
+		recruit_feedback = "材料招募成功：%s。请选择下方位置上阵。" % battle.actors[id].name
 		battle.log_message.emit("定向招募：%s" % battle.actors[id].name)
 	else:
 		recruit_feedback = "%s不足，无法定向招募%s。" % [material_name(cost[0]), battle.actors[id].name]
 	refresh()
+
+func assign_selected_party(index: int) -> void:
+	if battle.progression.set_party_member(index, selected_party_actor):
+		recruit_feedback = "%s已放入位置%d，战场已立即更新。" % [battle.actors[selected_party_actor].name, index + 1]
+		battle.rebuild_party()
+		refresh()
+
+func clear_party_slot(index: int) -> void:
+	if battle.progression.set_party_member(index, ""):
+		recruit_feedback = "位置%d已清空。" % (index + 1)
+		battle.rebuild_party()
+		refresh()
 
 func change_party(index: int, select_index: int, select: OptionButton) -> void:
 	if battle.progression.set_party_member(index, select.get_item_metadata(select_index)):

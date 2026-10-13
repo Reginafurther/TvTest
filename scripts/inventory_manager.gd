@@ -5,11 +5,9 @@ signal inventory_changed
 signal equipment_changed(actor_id: String)
 signal save_completed(path: String)
 
-const SAVE_VERSION := "0.6"
-const SAVE_PATH := "user://wanjie_v06_inventory.json"
-const LEGACY_SAVE_PATH := "user://wanjie_v05_inventory.json"
-const V02_LEGACY_SAVE_PATH := "user://wanjie_v02_save.json"
-const TEST_SAVE_PATH := "user://wanjie_v06_test_inventory.json"
+const SAVE_VERSION := "0.6.1"
+const SAVE_PATH := "user://wanjie_v061_inventory.json"
+const TEST_SAVE_PATH := "user://wanjie_v061_test_inventory.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
 
 var config: Dictionary
@@ -18,14 +16,14 @@ var equipped: Dictionary = {}
 var capacity := 120
 var save_path := SAVE_PATH
 var last_error := ""
-var migrated_from_legacy := false
-var legacy_save_path := LEGACY_SAVE_PATH
 
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args() or "--v05-test" in OS.get_cmdline_user_args() or "--v05-core-test" in OS.get_cmdline_user_args() or "--v05-shop-test" in OS.get_cmdline_user_args() or "--v05-skill-test" in OS.get_cmdline_user_args() or "--v05-system-test" in OS.get_cmdline_user_args() or "--v05-persist-write" in OS.get_cmdline_user_args() or "--v05-persist-read" in OS.get_cmdline_user_args() or "--v06-world-test" in OS.get_cmdline_user_args() or "--v06-progression-test" in OS.get_cmdline_user_args() or "--v06-character-test" in OS.get_cmdline_user_args():
-		save_path = TEST_SAVE_PATH
+	for value in OS.get_cmdline_user_args():
+		if str(value).begins_with("--v061-"):
+			save_path = TEST_SAVE_PATH
+			break
 	ensure_equipment_layout()
 
 func clear_test_save() -> void:
@@ -228,18 +226,12 @@ func save_to_disk() -> bool:
 
 func load_from_disk() -> bool:
 	var source_path := save_path
-	if not FileAccess.file_exists(source_path) and not legacy_save_path.is_empty() and FileAccess.file_exists(legacy_save_path):
-		source_path = legacy_save_path
-		migrated_from_legacy = true
-	if not FileAccess.file_exists(source_path) and FileAccess.file_exists(V02_LEGACY_SAVE_PATH):
-		source_path = V02_LEGACY_SAVE_PATH
-		migrated_from_legacy = true
 	if not FileAccess.file_exists(source_path):
 		ensure_equipment_layout()
 		return false
 	var file := FileAccess.open(source_path, FileAccess.READ)
 	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("version"):
+	if typeof(parsed) != TYPE_DICTIONARY or str(parsed.get("version", "")) != SAVE_VERSION:
 		push_warning("存档格式无效，已忽略")
 		return false
 	items = parsed.get("items", [])
@@ -249,8 +241,6 @@ func load_from_disk() -> bool:
 	remove_broken_references()
 	ensure_equipment_layout()
 	inventory_changed.emit()
-	if migrated_from_legacy:
-		save_to_disk()
 	return true
 
 func remove_broken_references() -> void:

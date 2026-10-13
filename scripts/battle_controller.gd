@@ -69,7 +69,11 @@ func _ready() -> void:
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
 	add_child(inventory)
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args() or "--v05-test" in OS.get_cmdline_user_args() or "--v05-core-test" in OS.get_cmdline_user_args() or "--v05-shop-test" in OS.get_cmdline_user_args() or "--v05-skill-test" in OS.get_cmdline_user_args() or "--v05-system-test" in OS.get_cmdline_user_args():
+	var args := OS.get_cmdline_user_args()
+	var v061_write_test := false
+	for value in args:
+		if str(value).begins_with("--v061-") and str(value) != "--v061-persist-read": v061_write_test = true
+	if "--equipment-test" in args or "--persistence-write" in args or "--v03-test" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or v061_write_test:
 		inventory.clear_test_save()
 	inventory.load_from_disk()
 	inventory.equipment_changed.connect(_on_equipment_changed)
@@ -93,7 +97,11 @@ func _ready() -> void:
 	add_child(battle_map)
 	setup_navigation()
 	spawn_party()
-	spawn_wave()
+	if has_damage_dealer_in_party():
+		spawn_wave()
+	else:
+		battle_state_changed.emit("等待招募并上阵输出角色")
+		log_message.emit("新冒险团只有刘备，请先用虎符招募并上阵至少一名输出角色。")
 
 func setup_navigation() -> void:
 	astar.region = Rect2i(0, 0, 34, 17)
@@ -112,6 +120,8 @@ func setup_navigation() -> void:
 func spawn_party() -> void:
 	var ids: Array = progression.party
 	for i in range(ids.size()):
+		if str(ids[i]).is_empty():
+			continue
 		var pos := Vector2(120 + (i % 2) * 70, 190 + (i / 2) * 110)
 		spawn_unit(ids[i], "heroes", pos)
 	party_changed.emit(heroes)
@@ -172,7 +182,7 @@ func _process(delta: float) -> void:
 	elapsed += delta
 	for key in effect_cooldowns.keys():
 		effect_cooldowns[key] = maxf(0.0, float(effect_cooldowns[key]) - delta)
-	if enemies.is_empty():
+	if enemies.is_empty() and has_damage_dealer_in_party():
 		spawn_timer += delta
 		if spawn_timer >= 2.2:
 			spawn_timer = 0.0
@@ -267,6 +277,8 @@ func _on_unit_died(unit) -> void:
 			combat_stats.record_kill(unit.last_damage_source.actor_id)
 		var leveled_actors: Array[String] = []
 		for actor_id in progression.party:
+			if str(actor_id).is_empty():
+				continue
 			var earned_xp: int = progression.experience_for_kill(unit.monster_level, unit.enemy_type, progression.actor_level(actor_id))
 			if progression.add_actor_experience(actor_id, earned_xp, false, "%s Lv.%d" % [unit.enemy_type, unit.monster_level]):
 				leveled_actors.append(actor_id)
@@ -392,7 +404,19 @@ func rebuild_party() -> void:
 	clear_combatants()
 	active_boss_id = ""
 	spawn_party()
-	spawn_wave()
+	if has_damage_dealer_in_party():
+		spawn_wave()
+		battle_state_changed.emit("自动战斗中")
+	else:
+		battle_state_changed.emit("等待招募并上阵输出角色")
+
+func has_damage_dealer_in_party() -> bool:
+	for actor_id in progression.party:
+		if str(actor_id).is_empty():
+			continue
+		if actors.get(actor_id, {}).get("basic_action", "damage") != "heal":
+			return true
+	return false
 
 func resolve_stage_wave(defeated_unit) -> void:
 	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})

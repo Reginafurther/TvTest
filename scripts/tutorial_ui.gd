@@ -4,12 +4,12 @@ extends CanvasLayer
 const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 
 const STEPS := [
-	["1/6 初始招募", "你有 1 枚招募令。点击“招募”，获得第一位新伙伴。", "招募", "recruit"],
-	["2/6 自动战斗", "战斗自动进行。观察角色索敌、移动与击败怪物；点击地图可设集结点。", "查看地图", ""],
-	["3/6 获得装备", "怪物会随机掉装备，拾取自动完成。等待掉落后打开背包。", "背包", "inventory"],
-	["4/6 穿戴装备", "在背包选装备，比较绿色提升与红色降低，再为伙伴穿戴。", "背包", "inventory"],
-	["5/6 招募伙伴", "继续挂机获得世界材料，在招募界面双击角色定向兑换。", "招募", "recruit"],
-	["6/6 编队与挑战", "在“伙伴”调整四人队伍；“世界”切地图，“Boss”看挑战信息。", "伙伴", "party"]
+	["1/6 材料招募", "你有150枚虎符。点击“招募”，双击一名三国输出角色完成定向招募。", "招募", "recruit"],
+	["2/6 角色上阵", "在招募页选中刚获得的角色，点击任一空位置的“上阵/替换”。", "招募", "recruit"],
+	["3/6 自动战斗", "有输出角色上阵后第一关自动开战。观察职业站位与自动攻击。", "查看地图", ""],
+	["4/6 获得装备", "怪物会随机掉落装备并自动拾取，等待掉落后打开角色页背包。", "背包", "inventory"],
+	["5/6 穿戴装备", "比较真实属性收益，再为任意已获得角色穿戴装备。", "背包", "inventory"],
+	["6/6 组建四人队", "继续用剩余虎符招募并把四个位置补齐，然后挑战主线。", "招募", "recruit"]
 ]
 
 var battle
@@ -100,18 +100,18 @@ func advance_from_state() -> void:
 	if p.guide_replay: return
 	var done := false
 	match p.guide_step:
-		0: done = p.recruit_tokens == 0 and p.roster.size() >= 5
-		1: done = battle.kills > initial_kills
-		2: done = battle.inventory.items.size() > initial_items
-		3:
+		0: done = p.roster.size() >= 2
+		1: done = battle.has_damage_dealer_in_party()
+		2: done = battle.kills > initial_kills
+		3: done = battle.inventory.items.size() > initial_items
+		4:
 			for actor_id in p.roster:
 				for item_id in battle.inventory.equipped.get(actor_id, {}).values():
 					if not str(item_id).is_empty(): done = true
-		4: done = p.roster.size() >= 6
-		5: done = p.party != initial_party or battle.current_map_id != "hulao_pass"
+		5: done = p.active_party().size() == 4
 	if done:
 		p.set_guide_step(p.guide_step + 1)
-		if p.guide_step == 2: initial_items = battle.inventory.items.size()
+		if p.guide_step == 3: initial_items = battle.inventory.items.size()
 		refresh()
 
 func refresh() -> void:
