@@ -131,6 +131,11 @@ func spawn_wave() -> void:
 		var id: String = pool[(i + wave) % pool.size()]
 		var pos := Vector2(900 + randf_range(-50, 70), 70 + i * (380.0 / maxf(1, count - 1)) + randf_range(-18, 18))
 		var enemy = spawn_unit(id, "enemies", pos)
+		enemy.monster_level = int(map_data.get("difficulty_level", map_data.get("level", 1)))
+		if wave >= 2 and i == count - 1:
+			enemy.enemy_type = "elite"
+			enemy.max_hp *= 1.75
+			enemy.attack *= 1.35
 		# Gentle wave scaling keeps the idle loop meaningful.
 		enemy.max_hp *= 1.0 + (wave - 1) * 0.12
 		enemy.hp = enemy.max_hp
@@ -143,6 +148,9 @@ func spawn_unit(id: String, faction: String, pos: Vector2):
 	var data: Dictionary = actors.get(id, {})
 	var skill: Dictionary = skills.get(data.get("skill", ""), {})
 	unit.setup(id, data, skill, faction, self)
+	if faction == "enemies":
+		unit.monster_level = int(worlds_config.maps.get(current_map_id, {}).get("difficulty_level", 1))
+		unit.enemy_type = str(data.get("enemy_type", "normal"))
 	unit.position = pos
 	unit.died.connect(_on_unit_died)
 	unit.combat_event.connect(_on_combat_event)
@@ -194,12 +202,12 @@ func find_closest_enemy(seeker):
 				closest = candidate
 	return closest
 
-func lowest_health_ally(seeker):
+func lowest_health_ally(seeker, max_distance: float = 260.0):
 	var pool: Array = heroes if seeker.faction == "heroes" else enemies
 	var result
 	var ratio := 2.0
 	for ally in pool:
-		if is_instance_valid(ally) and not ally.dead and seeker.position.distance_to(ally.position) <= 260:
+		if is_instance_valid(ally) and not ally.dead and seeker.position.distance_to(ally.position) <= max_distance:
 			var current = ally.hp / ally.max_hp
 			if current < ratio:
 				ratio = current
@@ -247,6 +255,9 @@ func point_blocked(point: Vector2) -> bool:
 
 func _on_unit_died(unit) -> void:
 	if unit.faction == "enemies":
+		if unit.reward_claimed:
+			return
+		unit.reward_claimed = true
 		enemies.erase(unit)
 		kills += 1
 		progression.add_gold(1 + int(worlds_config.maps.get(current_map_id, {}).get("level", 1)))
@@ -254,7 +265,8 @@ func _on_unit_died(unit) -> void:
 			combat_stats.record_kill(unit.last_damage_source.actor_id)
 		var leveled_actors: Array[String] = []
 		for actor_id in progression.party:
-			if progression.add_actor_experience(actor_id, 2, false):
+			var earned_xp: int = progression.experience_for_kill(unit.monster_level, unit.enemy_type, progression.actor_level(actor_id))
+			if progression.add_actor_experience(actor_id, earned_xp, false, "%s Lv.%d" % [unit.enemy_type, unit.monster_level]):
 				leveled_actors.append(actor_id)
 				log_message.emit("★ %s升级至Lv.%d" % [actors.get(actor_id, {}).get("name", actor_id), progression.actor_level(actor_id)])
 		progression.changed.emit()
@@ -359,7 +371,8 @@ func start_boss(boss_id: String) -> bool:
 	clear_combatants()
 	active_boss_id = boss_id
 	spawn_party()
-	spawn_unit(boss_data.actor, "enemies", Vector2(875, 260))
+	var boss = spawn_unit(boss_data.actor, "enemies", Vector2(875, 260))
+	boss.monster_level = int(boss_data.get("required_stage", 20))
 	log_message.emit("传奇挑战开始：【%s】" % boss_data.name)
 	return true
 

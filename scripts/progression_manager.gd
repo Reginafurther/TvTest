@@ -39,6 +39,7 @@ var completed_stages: Array = []
 var pokemon_world_unlocked := false
 var last_stage_id := "hulao_pass"
 var migration_source_version := ""
+var level_history: Dictionary = {}
 
 func setup() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -77,6 +78,8 @@ func ensure_growth_layout() -> void:
 			skill_levels[actor_id] = {}
 		skill_levels[actor_id]["active"] = clampi(int(skill_levels[actor_id].get("active", 1)), 1, 10)
 		skill_levels[actor_id]["passive"] = clampi(int(skill_levels[actor_id].get("passive", 1)), 1, 10)
+		if not level_history.has(actor_id) or typeof(level_history.get(actor_id, [])) != TYPE_ARRAY:
+			level_history[actor_id] = []
 
 func ensure_world_layout() -> void:
 	var sanitized: Array = []
@@ -246,7 +249,7 @@ func set_party_member(index: int, actor_id: String) -> bool:
 	save_to_disk()
 	return true
 
-func add_actor_experience(actor_id: String, amount: int, autosave: bool = true) -> bool:
+func add_actor_experience(actor_id: String, amount: int, autosave: bool = true, source: String = "combat") -> bool:
 	if actor_id not in HERO_IDS or amount <= 0:
 		return false
 	ensure_growth_layout()
@@ -258,6 +261,9 @@ func add_actor_experience(actor_id: String, amount: int, autosave: bool = true) 
 			break
 		actor_experience[actor_id] = int(actor_experience[actor_id]) - needed
 		actor_levels[actor_id] = int(actor_levels[actor_id]) + 1
+		level_history[actor_id].push_front({"level": int(actor_levels[actor_id]), "time": int(Time.get_unix_time_from_system()), "source": source})
+		if level_history[actor_id].size() > 20:
+			level_history[actor_id].resize(20)
 		leveled = true
 	if autosave:
 		changed.emit()
@@ -265,7 +271,19 @@ func add_actor_experience(actor_id: String, amount: int, autosave: bool = true) 
 	return leveled
 
 func experience_to_next(level: int) -> int:
-	return 20 + maxi(0, level - 1) * 12
+	return 35 + level * level * 8
+
+func experience_for_kill(monster_level: int, enemy_type: String, hero_level: int) -> int:
+	var base := 5.0 + maxf(1.0, monster_level) * 2.0
+	var type_multiplier := 1.0
+	match enemy_type:
+		"elite": type_multiplier = 2.5
+		"boss": type_multiplier = 8.0
+	var level_gap := hero_level - monster_level
+	var farm_multiplier := 1.0
+	if level_gap > 3:
+		farm_multiplier = maxf(0.15, 1.0 - (level_gap - 3) * 0.12)
+	return maxi(1, roundi(base * type_multiplier * farm_multiplier))
 
 func actor_level(actor_id: String) -> int:
 	return maxi(1, int(actor_levels.get(actor_id, 1)))
@@ -336,7 +354,7 @@ func claim_offline_rewards() -> Dictionary:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "migrated_from_legacy": migrated_from_legacy, "migration_source_version": migration_source_version, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "migrated_from_legacy": migrated_from_legacy, "migration_source_version": migration_source_version, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -383,6 +401,7 @@ func apply_payload(parsed) -> bool:
 	actor_levels = parsed.get("actor_levels", {})
 	actor_experience = parsed.get("actor_experience", {})
 	skill_levels = parsed.get("skill_levels", {})
+	level_history = parsed.get("level_history", {})
 	transaction_log = parsed.get("transaction_log", [])
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))

@@ -23,7 +23,7 @@ var legacy_save_path := LEGACY_SAVE_PATH
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args() or "--v05-test" in OS.get_cmdline_user_args() or "--v05-core-test" in OS.get_cmdline_user_args() or "--v05-shop-test" in OS.get_cmdline_user_args() or "--v05-skill-test" in OS.get_cmdline_user_args() or "--v05-system-test" in OS.get_cmdline_user_args() or "--v05-persist-write" in OS.get_cmdline_user_args() or "--v05-persist-read" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args() or "--v05-test" in OS.get_cmdline_user_args() or "--v05-core-test" in OS.get_cmdline_user_args() or "--v05-shop-test" in OS.get_cmdline_user_args() or "--v05-skill-test" in OS.get_cmdline_user_args() or "--v05-system-test" in OS.get_cmdline_user_args() or "--v05-persist-write" in OS.get_cmdline_user_args() or "--v05-persist-read" in OS.get_cmdline_user_args() or "--v06-world-test" in OS.get_cmdline_user_args() or "--v06-progression-test" in OS.get_cmdline_user_args() or "--v06-character-test" in OS.get_cmdline_user_args():
 		save_path = TEST_SAVE_PATH
 	ensure_equipment_layout()
 

@@ -62,6 +62,9 @@ var passive_skill_level := 1
 var passive_skill_id := ""
 var passive_data: Dictionary = {}
 var basic_attack_count := 0
+var monster_level := 1
+var enemy_type := "normal"
+var reward_claimed := false
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
 	actor_id = id
@@ -126,6 +129,9 @@ func _physics_process(delta: float) -> void:
 		else:
 			move_toward_point(rally_target, delta)
 			return
+	if faction == "heroes" and actor_data.get("basic_action", "damage") == "heal":
+		process_healer(delta)
+		return
 	if target == null:
 		target = battle.find_closest_enemy(self)
 	if target == null:
@@ -134,6 +140,11 @@ func _physics_process(delta: float) -> void:
 	var distance := position.distance_to(target.position)
 	if skill_timer <= 0.0 and battle.strategy_allows(self) and try_use_skill():
 		return
+	if faction == "heroes" and actor_data.get("combat_style", "melee") == "ranged":
+		var preferred := float(actor_data.get("preferred_range", attack_range * 0.8))
+		if distance < preferred * 0.58:
+			move_away_from_point(target.position)
+			return
 	if distance <= attack_range:
 		velocity = Vector2.ZERO
 		if attack_timer <= 0.0:
@@ -158,8 +169,46 @@ func move_toward_point(point: Vector2, _delta: float) -> void:
 	position.y = clampf(position.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
 	queue_redraw()
 
+func move_away_from_point(point: Vector2) -> void:
+	var direction := point.direction_to(position)
+	if direction.length_squared() < 0.01:
+		direction = Vector2.LEFT if facing > 0 else Vector2.RIGHT
+	velocity = direction.normalized() * move_speed
+	facing = signf(velocity.x) if absf(velocity.x) > 0.05 else facing
+	move_and_slide()
+	position.x = clampf(position.x, 18.0, BattleMapScript.ARENA_SIZE.x - 18.0)
+	position.y = clampf(position.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
+	queue_redraw()
+
+func process_healer(delta: float) -> void:
+	var danger = battle.find_closest_enemy(self)
+	var preferred := float(actor_data.get("preferred_range", 155.0))
+	if is_instance_valid(danger) and position.distance_to(danger.position) < preferred * 0.62:
+		move_away_from_point(danger.position)
+		return
+	var ally = battle.lowest_health_ally(self, 9999.0)
+	if ally == null:
+		velocity = Vector2.ZERO
+		return
+	target = ally
+	if skill_timer <= 0.0 and battle.strategy_allows(self) and try_use_skill():
+		return
+	if position.distance_to(ally.position) > attack_range:
+		move_toward_point(ally.position, delta)
+	elif attack_timer <= 0.0:
+		basic_attack()
+	else:
+		velocity = Vector2.ZERO
+
 func basic_attack() -> void:
 	attack_timer = attack_interval
+	if actor_data.get("basic_action", "damage") == "heal" and is_instance_valid(target) and target.faction == faction:
+		var healing_bonus := passive_value() if passive_data.get("effect", "") == "healing" else 0.0
+		target.heal(attack * 0.72 * (1.0 + healing_bonus), self)
+		if healing_bonus > 0.0:
+			battle.note_passive(actor_id, passive_skill_id)
+		battle.spawn_tracer(position, target.position, Color("#78F0A8"))
+		return
 	var amount := attack * (1.0 + physical_damage) * randf_range(0.9, 1.1)
 	if passive_data.get("effect", "") == "low_hp_rage" and hp / max_hp < 0.4:
 		amount *= 1.0 + passive_value()

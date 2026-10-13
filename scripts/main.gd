@@ -84,6 +84,8 @@ func _ready() -> void:
 		call_deferred("finish_v05_system_test")
 	elif "--v06-world-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v06_world_test")
+	elif "--v06-progression-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v06_progression_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -1081,6 +1083,87 @@ func finish_v06_world_test() -> void:
 		print("V06_WORLD_TEST_PASS stages=20 sequential=true pokemon_lock=true bosses_gated=true persistence=true v05_migration=conservative")
 	else:
 		for failure in failures: push_error("V06_WORLD_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v06_progression_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	for actor_id in p.party:
+		p.actor_levels[actor_id] = 1
+		p.actor_experience[actor_id] = 0
+		p.level_history[actor_id] = []
+	var normal_xp: int = p.experience_for_kill(5, "normal", 5)
+	var elite_xp: int = p.experience_for_kill(5, "elite", 5)
+	var boss_xp: int = p.experience_for_kill(5, "boss", 5)
+	var farm_xp: int = p.experience_for_kill(1, "normal", 20)
+	if not (boss_xp > elite_xp and elite_xp > normal_xp and normal_xp > farm_xp):
+		failures.append("普通/精英/Boss经验倍率或低级关衰减无效")
+	battle.clear_combatants()
+	battle.stage_cleared = false
+	battle.wave = 1
+	var killer = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 200))
+	var victim = battle.spawn_unit("yellow_turban", "enemies", Vector2(230, 200))
+	victim.monster_level = 5
+	victim.enemy_type = "elite"
+	victim.last_damage_source = killer
+	var before_party_xp: Dictionary = {}
+	for actor_id in p.party: before_party_xp[actor_id] = int(p.actor_experience[actor_id])
+	battle._on_unit_died(victim)
+	for actor_id in p.party:
+		if int(p.actor_experience[actor_id]) <= int(before_party_xp[actor_id]):
+			failures.append("上阵角色未共享击杀经验：" + actor_id)
+	var once_xp := int(p.actor_experience[p.party[0]])
+	battle._on_unit_died(victim)
+	if int(p.actor_experience[p.party[0]]) != once_xp:
+		failures.append("同一击杀经验被重复结算")
+	var hero = battle.get_hero("zhao_yun")
+	var attack_before := float(hero.attack)
+	p.actor_experience["zhao_yun"] = 0
+	p.actor_levels["zhao_yun"] = 1
+	if not p.add_actor_experience("zhao_yun", p.experience_to_next(1), false, "升级自动测试"):
+		failures.append("经验达到阈值未自动升级")
+	hero.refresh_progression_stats()
+	if p.actor_level("zhao_yun") != 2 or hero.attack <= attack_before or p.level_history.zhao_yun.is_empty():
+		failures.append("升级未改变实际属性或未记录历程")
+	var xp_before_offline := int(p.actor_experience.zhao_yun)
+	p.pending_offline = {"seconds": 3600, "gold": 10, "three_kingdoms_token": 1, "pokemon_token": 1}
+	p.claim_offline_rewards()
+	if int(p.actor_experience.zhao_yun) != xp_before_offline:
+		failures.append("离线收益错误重复发放经验")
+	# 治疗职业普攻治疗；卡比兽仍然造成伤害。
+	battle.clear_combatants()
+	var liu = battle.spawn_unit("liu_bei", "heroes", Vector2(200, 200))
+	var ally = battle.spawn_unit("zhao_yun", "heroes", Vector2(230, 200))
+	var enemy = battle.spawn_unit("yellow_turban", "enemies", Vector2(250, 200))
+	ally.hp = ally.max_hp * 0.4
+	liu.target = ally
+	var ally_hp: float = ally.hp
+	var enemy_hp: float = enemy.hp
+	liu.basic_attack()
+	if ally.hp <= ally_hp or enemy.hp != enemy_hp:
+		failures.append("刘备普攻未按治疗职业规则治疗队友")
+	var snorlax = battle.spawn_unit("snorlax", "heroes", Vector2(215, 200))
+	snorlax.target = enemy
+	enemy_hp = enemy.hp
+	snorlax.basic_attack()
+	if enemy.hp >= enemy_hp:
+		failures.append("卡比兽被错误改成治疗普攻")
+	var pikachu = battle.spawn_unit("pikachu", "heroes", Vector2(240, 200))
+	pikachu.target = enemy
+	var distance_before: float = pikachu.position.distance_to(enemy.position)
+	pikachu._physics_process(0.1)
+	if pikachu.position.distance_to(enemy.position) <= distance_before:
+		failures.append("远程职业在敌人贴近时未后撤")
+	p.save_to_disk()
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or reload_progress.actor_level("zhao_yun") != 2 or reload_progress.level_history.zhao_yun.is_empty():
+		failures.append("等级、经验或升级历程未正确存档")
+	reload_progress.free()
+	if failures.is_empty():
+		print("V06_PROGRESSION_TEST_PASS scaled_xp=true elite_boss_bonus=true shared_once=true level_stats=true healer_ai=true ranged_ai=true persistence=true")
+	else:
+		for failure in failures: push_error("V06_PROGRESSION_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
