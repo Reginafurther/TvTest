@@ -3,10 +3,11 @@ extends Node
 
 signal changed
 
-const VERSION := "0.5"
-const NORMAL_PATH := "user://wanjie_v05_progress.json"
-const LEGACY_PATH := "user://wanjie_v03_progress.json"
-const TEST_PATH := "user://wanjie_v05_test_progress.json"
+const VERSION := "0.6"
+const NORMAL_PATH := "user://wanjie_v06_progress.json"
+const LEGACY_PATH := "user://wanjie_v05_progress.json"
+const V03_LEGACY_PATH := "user://wanjie_v03_progress.json"
+const TEST_PATH := "user://wanjie_v06_test_progress.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
 
 var save_path := NORMAL_PATH
@@ -33,21 +34,30 @@ var pending_offline := {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pok
 var last_seen_unix := 0
 var migrated_from_legacy := false
 var legacy_path := LEGACY_PATH
+var v03_legacy_path := V03_LEGACY_PATH
+var completed_stages: Array = []
+var pokemon_world_unlocked := false
+var last_stage_id := "hulao_pass"
+var migration_source_version := ""
 
 func setup() -> void:
 	var args := OS.get_cmdline_user_args()
-	var test_mode := "--v03-test" in args or "--v03-persist-write" in args or "--v03-persist-read" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or "--v05-persist-write" in args or "--v05-persist-read" in args
+	var test_mode := "--v03-test" in args or "--v03-persist-write" in args or "--v03-persist-read" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or "--v05-persist-write" in args or "--v05-persist-read" in args or "--v06-world-test" in args or "--v06-progression-test" in args or "--v06-character-test" in args
 	if test_mode:
 		save_path = TEST_PATH
-	if "--v03-test" in args or "--v03-persist-write" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or "--v05-persist-write" in args:
+	if "--v03-test" in args or "--v03-persist-write" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or "--v05-persist-write" in args or "--v06-world-test" in args or "--v06-progression-test" in args or "--v06-character-test" in args:
 		clear_test_save()
 	var loaded := load_from_disk()
 	if not loaded and save_path == NORMAL_PATH and FileAccess.file_exists(legacy_path):
+		loaded = load_legacy_save()
+	if not loaded and save_path == NORMAL_PATH and FileAccess.file_exists(v03_legacy_path):
+		legacy_path = v03_legacy_path
 		loaded = load_legacy_save()
 	if not loaded and save_path == NORMAL_PATH and FileAccess.file_exists("user://wanjie_v02_save.json"):
 		guide_step = 6
 		guide_finished = true
 	ensure_growth_layout()
+	ensure_world_layout()
 	var now := int(Time.get_unix_time_from_system())
 	if loaded and last_seen_unix > 0:
 		calculate_offline_rewards(now)
@@ -67,6 +77,60 @@ func ensure_growth_layout() -> void:
 			skill_levels[actor_id] = {}
 		skill_levels[actor_id]["active"] = clampi(int(skill_levels[actor_id].get("active", 1)), 1, 10)
 		skill_levels[actor_id]["passive"] = clampi(int(skill_levels[actor_id].get("passive", 1)), 1, 10)
+
+func ensure_world_layout() -> void:
+	var sanitized: Array = []
+	for value in completed_stages:
+		var stage := int(value)
+		if stage >= 1 and stage <= 20 and stage not in sanitized:
+			sanitized.append(stage)
+	sanitized.sort()
+	# A stage is valid only when every earlier main stage was completed. This
+	# prevents hand-edited/old entry points from skipping the campaign lock.
+	var contiguous: Array = []
+	for stage in range(1, 21):
+		if stage in sanitized:
+			contiguous.append(stage)
+		else:
+			break
+	completed_stages = contiguous
+	pokemon_world_unlocked = 10 in completed_stages
+	if last_stage_id.is_empty():
+		last_stage_id = "hulao_pass"
+
+func highest_unlocked_stage() -> int:
+	ensure_world_layout()
+	return mini(20, completed_stages.size() + 1)
+
+func is_stage_complete(stage: int) -> bool:
+	return stage in completed_stages
+
+func can_enter_stage(stage: int) -> bool:
+	ensure_world_layout()
+	if stage < 1 or stage > 20:
+		return false
+	if stage >= 11 and not pokemon_world_unlocked:
+		return false
+	return stage <= highest_unlocked_stage()
+
+func complete_stage(stage: int) -> bool:
+	ensure_world_layout()
+	if stage != highest_unlocked_stage() or not can_enter_stage(stage):
+		return false
+	completed_stages.append(stage)
+	ensure_world_layout()
+	record_transaction("主线通关", "全局第%d关" % stage, 0)
+	changed.emit()
+	save_to_disk()
+	return true
+
+func set_last_stage(map_id: String, stage: int) -> bool:
+	if not can_enter_stage(stage):
+		return false
+	last_stage_id = map_id
+	changed.emit()
+	save_to_disk()
+	return true
 
 func add_material(id: String, amount: int) -> void:
 	materials[id] = maxi(0, int(materials.get(id, 0)) + amount)
@@ -272,7 +336,7 @@ func claim_offline_rewards() -> Dictionary:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "migrated_from_legacy": migrated_from_legacy}
+	var payload := {"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "migrated_from_legacy": migrated_from_legacy, "migration_source_version": migration_source_version, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -291,12 +355,19 @@ func load_legacy_save() -> bool:
 	if not apply_payload(parsed):
 		return false
 	migrated_from_legacy = true
+	migration_source_version = str(parsed.get("version", "unknown")) if typeof(parsed) == TYPE_DICTIONARY else "unknown"
+	# V0.5 only had six level-gated maps and no clear record. Never infer that
+	# the new Three Kingdoms finale was completed from old map/Boss access.
+	completed_stages = []
+	pokemon_world_unlocked = false
+	last_stage_id = "hulao_pass"
 	last_seen_unix = int(Time.get_unix_time_from_system())
 	return true
 
 func apply_payload(parsed) -> bool:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
+	var payload_version := str(parsed.get("version", ""))
 	materials.merge(parsed.get("materials", {}), true)
 	recruit_tokens = maxi(0, int(parsed.get("recruit_tokens", recruit_tokens)))
 	gold = maxi(0, int(parsed.get("gold", 0)))
@@ -316,6 +387,15 @@ func apply_payload(parsed) -> bool:
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))
 	migrated_from_legacy = bool(parsed.get("migrated_from_legacy", false))
+	migration_source_version = str(parsed.get("migration_source_version", ""))
+	if payload_version == VERSION:
+		completed_stages = parsed.get("completed_stages", [])
+		pokemon_world_unlocked = bool(parsed.get("pokemon_world_unlocked", false))
+		last_stage_id = str(parsed.get("last_stage_id", "hulao_pass"))
+	else:
+		completed_stages = []
+		pokemon_world_unlocked = false
+		last_stage_id = "hulao_pass"
 	if roster.is_empty():
 		roster = ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
 	while party.size() < 4:
@@ -323,4 +403,5 @@ func apply_payload(parsed) -> bool:
 	if party.size() > 4:
 		party.resize(4)
 	ensure_growth_layout()
+	ensure_world_layout()
 	return true

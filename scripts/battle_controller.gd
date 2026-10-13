@@ -51,6 +51,8 @@ var active_boss_id := ""
 var effect_cooldowns: Dictionary = {}
 var trigger_counts := {"crit_lightning": 0, "thorn_reflect": 0, "poison_spread": 0, "shield_burst": 0}
 var passive_trigger_counts: Dictionary = {}
+var stage_cleared := false
+var stage_boss_active := false
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -73,6 +75,10 @@ func _ready() -> void:
 	progression.setup()
 	add_child(progression)
 	progression.changed.connect(func(): progression_changed.emit())
+	if worlds_config.maps.has(progression.last_stage_id):
+		var saved_stage := int(worlds_config.maps[progression.last_stage_id].get("global_stage", 1))
+		if progression.can_enter_stage(saved_stage):
+			current_map_id = progression.last_stage_id
 	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0, special_config)
 	crafting = CraftingManagerScript.new()
 	crafting.setup(inventory, progression, equipment_config, equipment_generator)
@@ -109,9 +115,16 @@ func spawn_party() -> void:
 	party_changed.emit(heroes)
 
 func spawn_wave() -> void:
-	if game_over:
+	if game_over or stage_cleared:
 		return
 	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
+	var target_wave := int(map_data.get("waves_to_clear", 3))
+	if not str(map_data.get("main_boss", "")).is_empty() and wave == target_wave:
+		stage_boss_active = true
+		spawn_unit(str(map_data.main_boss), "enemies", Vector2(875, 260))
+		log_message.emit("主线第 %d 关关底Boss登场：【%s】" % [int(map_data.get("global_stage", 1)), actors.get(map_data.main_boss, {}).get("name", "Boss")])
+		wave += 1
+		return
 	var pool: Array = map_data.get("enemy_pool", ["yellow_turban"])
 	var count := mini(3 + wave, 9)
 	for i in range(count):
@@ -255,6 +268,8 @@ func _on_unit_died(unit) -> void:
 		else:
 			roll_equipment_drop(unit)
 			roll_material_drop()
+			if enemies.is_empty():
+				resolve_stage_wave(unit)
 	else:
 		heroes.erase(unit)
 		party_changed.emit(heroes)
@@ -312,15 +327,22 @@ func roll_material_drop() -> void:
 func switch_map(map_id: String) -> bool:
 	if not worlds_config.maps.has(map_id):
 		return false
-	if progression.party_average_level() < float(worlds_config.maps[map_id].get("required_level", 1)):
-		log_message.emit("队伍平均等级不足，尚不能进入%s" % worlds_config.maps[map_id].name)
+	var stage := int(worlds_config.maps[map_id].get("global_stage", 1))
+	if not progression.can_enter_stage(stage):
+		if stage >= 11 and not progression.pokemon_world_unlocked:
+			log_message.emit("宝可梦世界尚未开放：请先通关三国第10关。")
+		else:
+			log_message.emit("该关卡尚未解锁：请按主线顺序通关前一关。")
 		return false
 	clear_combatants()
 	current_map_id = map_id
+	progression.set_last_stage(map_id, stage)
 	battle_map.map_id = map_id
 	battle_map.queue_redraw()
 	active_boss_id = ""
 	wave = 1
+	stage_cleared = false
+	stage_boss_active = false
 	spawn_party()
 	spawn_wave()
 	world_changed.emit(map_id)
@@ -330,10 +352,13 @@ func switch_map(map_id: String) -> bool:
 func start_boss(boss_id: String) -> bool:
 	if not worlds_config.bosses.has(boss_id):
 		return false
+	var boss_data: Dictionary = worlds_config.bosses[boss_id]
+	if not progression.is_stage_complete(int(boss_data.get("required_stage", 20))):
+		log_message.emit("传奇挑战尚未开放：请先完成对应世界主线。")
+		return false
 	clear_combatants()
 	active_boss_id = boss_id
 	spawn_party()
-	var boss_data: Dictionary = worlds_config.bosses[boss_id]
 	spawn_unit(boss_data.actor, "enemies", Vector2(875, 260))
 	log_message.emit("传奇挑战开始：【%s】" % boss_data.name)
 	return true
@@ -346,12 +371,43 @@ func clear_combatants() -> void:
 	enemies.clear()
 	game_over = false
 	spawn_timer = 0.0
+	stage_boss_active = false
 
 func rebuild_party() -> void:
 	clear_combatants()
 	active_boss_id = ""
 	spawn_party()
 	spawn_wave()
+
+func resolve_stage_wave(defeated_unit) -> void:
+	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
+	var active_wave := wave - 1
+	var target_wave := int(map_data.get("waves_to_clear", 3))
+	if active_wave < target_wave:
+		return
+	if not str(map_data.get("main_boss", "")).is_empty() and not defeated_unit.actor_data.has("boss_id"):
+		return
+	var stage := int(map_data.get("global_stage", 1))
+	if progression.complete_stage(stage):
+		stage_cleared = true
+		stage_boss_active = false
+		if map_data.has("boss_id"):
+			var boss_id := str(map_data.boss_id)
+			var boss_data: Dictionary = worlds_config.bosses.get(boss_id, {})
+			progression.unlock_boss_actor(boss_id, str(boss_data.get("unlock_actor", "")))
+		if stage == 10:
+			log_message.emit("★ 三国第10关通关！宝可梦世界已永久开放。")
+		elif stage == 20:
+			log_message.emit("★ 全20关主线通关！可继续挑战世界Boss与刷宝。")
+		else:
+			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
+		battle_state_changed.emit("主线第%d关已通关" % stage)
+
+func stage_id_for_number(stage: int) -> String:
+	for map_id in worlds_config.maps:
+		if int(worlds_config.maps[map_id].get("global_stage", 0)) == stage:
+			return map_id
+	return ""
 
 func resolve_boss_victory(boss_id: String) -> void:
 	var data: Dictionary = worlds_config.bosses[boss_id]

@@ -340,18 +340,26 @@ func _sell_selected_shop_item() -> void:
 	refresh()
 
 func build_world() -> void:
-	title.text = "双世界冒险"
+	title.text = "20关主线 · 双世界冒险"
 	var info := Label.new()
-	info.text = "当前：%s　队伍与装备会随地图保留" % battle.worlds_config.maps[battle.current_map_id].name
+	info.text = "当前：%s　%s" % [battle.worlds_config.maps[battle.current_map_id].name, "宝可梦世界已开放" if battle.progression.pokemon_world_unlocked else "宝可梦世界可预览，通关三国第10关后开放"]
 	content.add_child(info)
 	for map_id in battle.worlds_config.maps:
 		var data: Dictionary = battle.worlds_config.maps[map_id]
+		var stage := int(data.get("global_stage", 1))
+		var complete: bool = battle.progression.is_stage_complete(stage)
+		var available: bool = battle.progression.can_enter_stage(stage)
 		var button := Button.new()
-		button.text = "%s 第%d关 · %s（怪物Lv.%d / 队伍Lv.%d） · 掉落%s" % [data.world, int(data.get("chapter", 1)), data.name, data.level, int(data.get("required_level", 1)), data.material_name]
-		button.disabled = (map_id == battle.current_map_id and battle.active_boss_id.is_empty()) or battle.progression.party_average_level() < float(data.get("required_level", 1))
-		button.tooltip_text = "队伍平均等级达到Lv.%d后开放" % int(data.get("required_level", 1))
-		button.pressed.connect(func(): battle.switch_map(map_id); close_panel())
+		var state := "已通关" if complete else "可挑战" if available else "世界锁定" if stage >= 11 and not battle.progression.pokemon_world_unlocked else "前置未通关"
+		button.text = "%s · 全局第%d关 · %s（难度Lv.%d） · %s" % [data.world, stage, data.name, int(data.get("difficulty_level", stage)), state]
+		button.disabled = (map_id == battle.current_map_id and battle.active_boss_id.is_empty() and not battle.stage_cleared) or not available
+		button.tooltip_text = "按全局1—20关顺序推进；角色等级上限仍为60级。"
+		button.pressed.connect(_enter_stage.bind(map_id))
 		content.add_child(button)
+
+func _enter_stage(map_id: String) -> void:
+	if battle.switch_map(map_id):
+		close_panel()
 
 func build_boss() -> void:
 	title.text = "传奇 Boss 挑战"
@@ -361,7 +369,9 @@ func build_boss() -> void:
 	for boss_id in battle.worlds_config.bosses:
 		var data: Dictionary = battle.worlds_config.bosses[boss_id]
 		var button := Button.new()
-		button.text = "%s　%s" % [data.name, "已首胜，可重复挑战" if battle.progression.boss_first_clear[boss_id] else "首胜解锁角色"]
+		var available: bool = battle.progression.is_stage_complete(int(data.get("required_stage", 20)))
+		button.text = "%s　%s" % [data.name, ("已首胜，可重复挑战" if battle.progression.boss_first_clear[boss_id] else "主线首胜已解锁角色") if available else "通关全局第%d关后开放" % int(data.get("required_stage", 20))]
+		button.disabled = not available
 		button.pressed.connect(_preview_boss.bind(boss_id))
 		content.add_child(button)
 

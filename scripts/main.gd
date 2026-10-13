@@ -32,7 +32,7 @@ var objective_button: Button
 var backdrop: ColorRect
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.5")
+	DisplayServer.window_set_title("万界冒险团 V0.6")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -82,6 +82,8 @@ func _ready() -> void:
 		call_deferred("finish_v05_skill_test")
 	elif "--v05-system-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v05_system_test")
+	elif "--v06-world-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v06_world_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -128,7 +130,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.5"
+	title.text = "万界冒险团  V0.6"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -1012,6 +1014,73 @@ func finish_v05_system_test() -> void:
 	else:
 		for failure in failures:
 			push_error("V05_SYSTEM_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v06_world_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	if battle.worlds_config.get("maps", {}).size() != 20:
+		failures.append("主线关卡数量不是20")
+	for stage in range(1, 21):
+		if battle.stage_id_for_number(stage).is_empty():
+			failures.append("缺少全局第%d关" % stage)
+	if p.pokemon_world_unlocked or p.can_enter_stage(11) or battle.switch_map("viridian_forest"):
+		failures.append("新档可绕过锁定进入宝可梦世界")
+	if p.can_enter_stage(2) or battle.switch_map("xuchang_gate"):
+		failures.append("新档可绕过前置关卡")
+	if battle.start_boss("lu_bu"):
+		failures.append("未通关第10关即可从旧Boss入口绕过")
+	for stage in range(1, 10):
+		if not p.complete_stage(stage):
+			failures.append("第%d关无法顺序完成" % stage)
+			break
+		if not p.can_enter_stage(stage + 1):
+			failures.append("第%d关完成后未解锁下一关" % stage)
+	if p.pokemon_world_unlocked or p.can_enter_stage(11):
+		failures.append("第9关完成时过早开放第二世界")
+	if not p.complete_stage(10) or not p.pokemon_world_unlocked or not p.can_enter_stage(11):
+		failures.append("三国第10关未永久开放宝可梦世界")
+	if not battle.switch_map("viridian_forest") or battle.switch_map("cerulean_cave"):
+		failures.append("宝可梦首关不可进入或末关可跳关")
+	for stage in range(11, 21):
+		if not p.complete_stage(stage):
+			failures.append("宝可梦全局第%d关无法顺序完成" % stage)
+			break
+	if p.completed_stages.size() != 20 or not p.is_stage_complete(20):
+		failures.append("20关完成状态不完整")
+	p.save_to_disk()
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or reload_progress.completed_stages.size() != 20 or not reload_progress.pokemon_world_unlocked:
+		failures.append("世界开放与20关状态未正确重载")
+	reload_progress.free()
+	# A V0.5 Boss clear did not mean the new ten-stage campaign was cleared.
+	var old_path := "user://v05_world_migration_fixture.json"
+	var new_path := "user://v06_world_migration_fixture.json"
+	for path in [old_path, new_path]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var old_text := JSON.stringify({"version":"0.5","gold":456,"roster":["zhao_yun","liu_bei","pikachu","snorlax","lu_bu"],"party":["zhao_yun","liu_bei","pikachu","snorlax"],"boss_first_clear":{"lu_bu":true,"mewtwo":false},"actor_levels":{"zhao_yun":12},"actor_experience":{"zhao_yun":17}})
+	var old_file := FileAccess.open(old_path, FileAccess.WRITE)
+	old_file.store_string(old_text)
+	old_file.close()
+	var migrated = ProgressionManagerScript.new()
+	migrated.save_path = new_path
+	migrated.legacy_path = old_path
+	if not migrated.load_legacy_save() or not migrated.save_to_disk():
+		failures.append("V0.5进度迁移失败")
+	elif migrated.gold != 456 or migrated.actor_level("zhao_yun") != 12 or int(migrated.actor_experience.zhao_yun) != 17:
+		failures.append("迁移丢失角色、等级或经验")
+	elif not migrated.completed_stages.is_empty() or migrated.pokemon_world_unlocked or migrated.can_enter_stage(11):
+		failures.append("旧Boss记录被错误映射为新第10关通关")
+	if FileAccess.get_file_as_string(old_path) != old_text:
+		failures.append("迁移覆盖了V0.5原始存档")
+	migrated.free()
+	for path in [old_path, new_path]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	if failures.is_empty():
+		print("V06_WORLD_TEST_PASS stages=20 sequential=true pokemon_lock=true bosses_gated=true persistence=true v05_migration=conservative")
+	else:
+		for failure in failures: push_error("V06_WORLD_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
