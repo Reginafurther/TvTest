@@ -24,6 +24,9 @@ func buy(product_id: String, quantity: int) -> Dictionary:
 		last_error = "购买数量必须在1到%d之间。" % maximum
 		return {}
 	var product: Dictionary = products[product_id]
+	if int(product.get("required_stage", 0)) > 0 and not progression.is_stage_complete(int(product.required_stage)):
+		last_error = "商品尚未解锁：需要先通关主线第%d关。" % int(product.required_stage)
+		return {}
 	var total := int(product.get("price", 0)) * quantity
 	if progression.gold < total:
 		last_error = "金币不足：需要%d，当前%d。" % [total, progression.gold]
@@ -44,6 +47,10 @@ func buy(product_id: String, quantity: int) -> Dictionary:
 		"material":
 			var material_id: String = product.get("material_id", "")
 			progression.materials[material_id] = int(progression.materials.get(material_id, 0)) + int(product.get("amount", 1)) * quantity
+		"skill_book":
+			var skill_id: String = product.get("skill_id", "")
+			progression.skill_books[skill_id] = progression.skill_book_count(skill_id) + int(product.get("amount", 1)) * quantity
+			granted.append(skill_id)
 		_:
 			last_error = "商品类型无效。"
 			return {}

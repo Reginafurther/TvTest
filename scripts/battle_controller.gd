@@ -338,6 +338,7 @@ func _on_unit_died(unit) -> void:
 		kills += 1
 		progression.add_gold(1 + int(worlds_config.maps.get(current_map_id, {}).get("level", 1)))
 		if is_instance_valid(unit.last_damage_source):
+			unit.last_damage_source.on_kill_trigger()
 			combat_stats.record_kill(unit.last_damage_source.actor_id)
 		var leveled_actors: Array[String] = []
 		for actor_id in progression.party:
@@ -353,6 +354,7 @@ func _on_unit_died(unit) -> void:
 			var leveled_hero = get_hero(actor_id)
 			if leveled_hero != null:
 				leveled_hero.refresh_progression_stats()
+		roll_skill_book_drop(unit)
 		if not active_boss_id.is_empty() and unit.actor_data.has("boss_id"):
 			resolve_boss_victory(active_boss_id)
 		else:
@@ -413,6 +415,21 @@ func roll_material_drop() -> void:
 	var amount := randi_range(int(bounds[0]), int(bounds[1]))
 	progression.add_material(map_data.get("material", "three_kingdoms_token"), amount)
 	combat_stats.resources.materials += amount
+
+func roll_skill_book_drop(defeated_unit) -> void:
+	var chance := 0.025
+	if defeated_unit.enemy_type == "elite": chance = 0.14
+	if defeated_unit.enemy_type == "boss" or defeated_unit.actor_data.has("boss_id"): chance = 1.0
+	if randf() > chance: return
+	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
+	var world_name := "三国" if int(map_data.get("global_stage", 1)) <= 10 else "宝可梦"
+	var candidates: Array[String] = []
+	for skill_id in general_skills_config:
+		if str(general_skills_config[skill_id].get("world", "")) == world_name: candidates.append(str(skill_id))
+	if candidates.is_empty(): return
+	var skill_id: String = candidates[randi() % candidates.size()]
+	progression.grant_skill_book(skill_id, 1, defeated_unit._name())
+	log_message.emit("★ 获得技能书【%s】" % general_skills_config[skill_id].get("name", skill_id))
 
 func switch_map(map_id: String) -> bool:
 	if not worlds_config.maps.has(map_id):

@@ -327,7 +327,19 @@ func refresh_skills() -> void:
 	add_skill_heading("专属被动 · %s Lv.%d" % [battle.passives_config[actor.passive_skill].name, p.skill_level(selected_actor, "passive")], battle.passives_config[actor.passive_skill].description)
 	add_skill_upgrade_button("升级专属被动", "passive")
 	var equipped: Dictionary = p.equipped_general_skills[selected_actor]
-	add_skill_heading("通用技能槽", "主动：%s　被动：%s\n释放优先级：%s" % [skill_name(equipped.active), skill_name(equipped.passive), " → ".join(p.skill_priorities[selected_actor])])
+	add_skill_heading("通用技能配置", "3个主动槽按从左到右顺序自动释放；4个被动槽同时生效。\n释放优先级：%s" % " → ".join(p.skill_priorities[selected_actor]))
+	for category in ["active", "passive"]:
+		var slots: Array = equipped[category]
+		var row := HBoxContainer.new()
+		var title := Label.new(); title.text = ("主动槽 " if category == "active" else "被动槽 "); row.add_child(title)
+		for slot_index in range(slots.size()):
+			var slot := Button.new()
+			slot.text = "%d. %s" % [slot_index + 1, skill_name(str(slots[slot_index]))]
+			slot.tooltip_text = "点击卸下此槽技能" if not str(slots[slot_index]).is_empty() else "空技能槽"
+			slot.disabled = str(slots[slot_index]).is_empty()
+			slot.pressed.connect(_unequip_general.bind(category, slot_index))
+			row.add_child(slot)
+		skills_box.add_child(row)
 	var priority := Button.new()
 	priority.text = "切换专属 / 通用释放优先级"
 	priority.pressed.connect(func(): p.toggle_skill_priority(selected_actor); battle.rebuild_party(); refresh_skills())
@@ -342,7 +354,9 @@ func refresh_skills() -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
 		var action := Button.new()
-		action.text = "装备" if learned else "学习 120金/8尘"
+		var equipped_now: bool = skill_id in equipped[str(skill.category)]
+		action.text = ("已装备" if equipped_now else "装备") if learned else "学习（技能书×1，持有%d）" % p.skill_book_count(skill_id)
+		action.disabled = equipped_now
 		action.pressed.connect(_general_skill_action.bind(skill_id, str(skill.category), learned))
 		row.add_child(action)
 		if learned:
@@ -485,8 +499,14 @@ func _general_skill_action(skill_id: String, category: String, learned: bool) ->
 		if battle.progression.learn_general_skill(selected_actor, skill_id):
 			battle.progression.equip_general_skill(selected_actor, skill_id, category)
 			feedback.text = "通用技能学习并装备成功。"
-		else: feedback.text = "学习失败：需要120金币与8重铸材料。"
+		else: feedback.text = "学习失败：需要对应技能书×1。技能书来自怪物、Boss与商店。"
 	battle.rebuild_party()
+	refresh_all()
+
+func _unequip_general(category: String, slot_index: int) -> void:
+	if battle.progression.unequip_general_skill(selected_actor, category, slot_index):
+		feedback.text = "已卸下通用技能，学习记录不会丢失。"
+		battle.rebuild_party()
 	refresh_all()
 
 func _upgrade_general(skill_id: String) -> void:

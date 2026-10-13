@@ -37,6 +37,7 @@ var learned_general_skills: Dictionary = {}
 var equipped_general_skills: Dictionary = {}
 var general_skill_levels: Dictionary = {}
 var skill_priorities: Dictionary = {}
+var skill_books: Dictionary = {}
 
 func setup() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -76,9 +77,16 @@ func ensure_growth_layout() -> void:
 		if not learned_general_skills.has(actor_id) or typeof(learned_general_skills.get(actor_id, [])) != TYPE_ARRAY:
 			learned_general_skills[actor_id] = []
 		if not equipped_general_skills.has(actor_id) or typeof(equipped_general_skills.get(actor_id, {})) != TYPE_DICTIONARY:
-			equipped_general_skills[actor_id] = {"active": "", "passive": ""}
+			equipped_general_skills[actor_id] = {"active": [], "passive": []}
 		for category in ["active", "passive"]:
-			if not equipped_general_skills[actor_id].has(category): equipped_general_skills[actor_id][category] = ""
+			var slots = equipped_general_skills[actor_id].get(category, [])
+			if typeof(slots) == TYPE_STRING:
+				slots = [slots] if not str(slots).is_empty() else []
+			if typeof(slots) != TYPE_ARRAY: slots = []
+			var limit := 3 if category == "active" else 4
+			while slots.size() < limit: slots.append("")
+			if slots.size() > limit: slots.resize(limit)
+			equipped_general_skills[actor_id][category] = slots
 		if not general_skill_levels.has(actor_id) or typeof(general_skill_levels.get(actor_id, {})) != TYPE_DICTIONARY:
 			general_skill_levels[actor_id] = {}
 		if not skill_priorities.has(actor_id) or typeof(skill_priorities.get(actor_id, [])) != TYPE_ARRAY:
@@ -306,31 +314,61 @@ func upgrade_skill(actor_id: String, kind: String) -> bool:
 	save_to_disk()
 	return true
 
-func learn_general_skill(actor_id: String, skill_id: String) -> bool:
-	if actor_id not in roster or skill_id.is_empty() or skill_id in learned_general_skills.get(actor_id, []):
+func grant_skill_book(skill_id: String, amount: int = 1, source: String = "drop") -> bool:
+	if skill_id.is_empty() or amount <= 0:
 		return false
-	var cost_gold := 120
-	var cost_dust := 8
-	if gold < cost_gold or int(materials.get("salvage_dust", 0)) < cost_dust:
-		return false
-	gold -= cost_gold
-	materials["salvage_dust"] = int(materials.get("salvage_dust", 0)) - cost_dust
-	learned_general_skills[actor_id].append(skill_id)
-	general_skill_levels[actor_id][skill_id] = 1
-	record_transaction("学习通用技能", "%s:%s" % [actor_id, skill_id], -cost_gold)
+	skill_books[skill_id] = int(skill_books.get(skill_id, 0)) + amount
+	record_transaction("获得技能书", "%s ×%d（%s）" % [skill_id, amount, source], 0)
 	changed.emit()
 	save_to_disk()
 	return true
 
-func equip_general_skill(actor_id: String, skill_id: String, category: String) -> bool:
+func skill_book_count(skill_id: String) -> int:
+	return maxi(0, int(skill_books.get(skill_id, 0)))
+
+func learn_general_skill(actor_id: String, skill_id: String) -> bool:
+	if actor_id not in roster or skill_id.is_empty() or skill_id in learned_general_skills.get(actor_id, []):
+		return false
+	if skill_book_count(skill_id) < 1:
+		return false
+	skill_books[skill_id] = skill_book_count(skill_id) - 1
+	learned_general_skills[actor_id].append(skill_id)
+	general_skill_levels[actor_id][skill_id] = 1
+	record_transaction("学习通用技能", "%s:%s（消耗技能书）" % [actor_id, skill_id], 0)
+	changed.emit()
+	save_to_disk()
+	return true
+
+func equip_general_skill(actor_id: String, skill_id: String, category: String, slot_index: int = -1) -> bool:
 	if actor_id not in roster or category not in ["active", "passive"]:
 		return false
 	if not skill_id.is_empty() and skill_id not in learned_general_skills.get(actor_id, []):
 		return false
-	equipped_general_skills[actor_id][category] = skill_id
+	var slots: Array = equipped_general_skills[actor_id][category]
+	var limit := 3 if category == "active" else 4
+	if slot_index < 0:
+		slot_index = slots.find(skill_id)
+		if slot_index < 0: slot_index = slots.find("")
+		if slot_index < 0: slot_index = 0
+	if slot_index < 0 or slot_index >= limit:
+		return false
+	var existing := slots.find(skill_id)
+	if existing >= 0 and existing != slot_index: slots[existing] = ""
+	slots[slot_index] = skill_id
+	equipped_general_skills[actor_id][category] = slots
 	changed.emit()
 	save_to_disk()
 	return true
+
+func unequip_general_skill(actor_id: String, category: String, slot_index: int) -> bool:
+	return equip_general_skill(actor_id, "", category, slot_index)
+
+func equipped_skill_ids(actor_id: String, category: String) -> Array:
+	ensure_growth_layout()
+	var result: Array = []
+	for skill_id in equipped_general_skills[actor_id].get(category, []):
+		if not str(skill_id).is_empty(): result.append(str(skill_id))
+	return result
 
 func general_skill_level(actor_id: String, skill_id: String) -> int:
 	return maxi(1, int(general_skill_levels.get(actor_id, {}).get(skill_id, 1)))
@@ -342,13 +380,12 @@ func upgrade_general_skill(actor_id: String, skill_id: String) -> bool:
 	if level >= 10:
 		return false
 	var cost_gold := 35 + level * 30
-	var cost_dust := 3 + level * 2
-	if gold < cost_gold or int(materials.get("salvage_dust", 0)) < cost_dust:
+	if gold < cost_gold or skill_book_count(skill_id) < 1:
 		return false
 	gold -= cost_gold
-	materials["salvage_dust"] = int(materials.get("salvage_dust", 0)) - cost_dust
+	skill_books[skill_id] = skill_book_count(skill_id) - 1
 	general_skill_levels[actor_id][skill_id] = level + 1
-	record_transaction("通用技能升级", "%s:%s Lv.%d" % [actor_id, skill_id, level + 1], -cost_gold)
+	record_transaction("通用技能升级", "%s:%s Lv.%d（技能书×1）" % [actor_id, skill_id, level + 1], -cost_gold)
 	changed.emit()
 	save_to_disk()
 	return true
@@ -394,7 +431,7 @@ func claim_offline_rewards() -> Dictionary:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -433,6 +470,7 @@ func apply_payload(parsed) -> bool:
 	equipped_general_skills = parsed.get("equipped_general_skills", {})
 	general_skill_levels = parsed.get("general_skill_levels", {})
 	skill_priorities = parsed.get("skill_priorities", {})
+	skill_books = parsed.get("skill_books", {})
 	transaction_log = parsed.get("transaction_log", [])
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))

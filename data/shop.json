@@ -5,7 +5,11 @@
     "swift_boots": {"name": "行商踏风短靴", "type": "equipment", "template_id": "wind_boots", "slot": "boots", "quality": "blue", "level": 6, "price": 150, "icon": "wind_boots", "description": "限于中期品质，极品仍需挑战掉落。"},
     "salvage_pack": {"name": "重铸材料包", "type": "material", "material_id": "salvage_dust", "amount": 8, "price": 45, "icon": "salvage_dust", "description": "用于技能升级与装备重铸。"},
     "three_kingdoms_pack": {"name": "虎符小包", "type": "material", "material_id": "three_kingdoms_token", "amount": 5, "price": 55, "icon": "three_kingdoms_token", "description": "三国角色材料招募资源。"},
-    "pokemon_pack": {"name": "精灵结晶小包", "type": "material", "material_id": "pokemon_token", "amount": 5, "price": 55, "icon": "pokemon_token", "description": "宝可梦角色材料招募资源。"}
+    "pokemon_pack": {"name": "精灵结晶小包", "type": "material", "material_id": "pokemon_token", "amount": 5, "price": 55, "icon": "pokemon_token", "description": "宝可梦角色材料招募资源。"},
+    "book_triple_slash": {"name":"技能书·三连斩","type":"skill_book","skill_id":"tk_triple_slash","amount":1,"price":180,"icon":"skill_book","description":"学习或升级三国主动技能【三连斩】。"},
+    "book_iron_will": {"name":"技能书·钢铁意志","type":"skill_book","skill_id":"tk_iron_will","amount":1,"price":160,"icon":"skill_book","description":"学习或升级三国被动技能【钢铁意志】。"},
+    "book_thunder_chain": {"name":"技能书·十万伏特链","type":"skill_book","skill_id":"pk_thunder_chain","amount":1,"price":240,"required_stage":10,"icon":"skill_book","description":"宝可梦世界开放后可购买的主动技能书。"},
+    "book_regenerator": {"name":"技能书·再生力","type":"skill_book","skill_id":"pk_regenerator","amount":1,"price":220,"required_stage":10,"icon":"skill_book","description":"宝可梦世界开放后可购买的被动技能书。"}
   },
   "rules": {"max_quantity": 20, "sell_ratio_hint": "装备售价由等级与品质计算；穿戴中的装备不可出售。"}
 }

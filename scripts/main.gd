@@ -104,6 +104,8 @@ func _ready() -> void:
 		call_deferred("finish_v061_start_test")
 	elif "--v061-ai-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v061_ai_test")
+	elif "--v061-skill-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_skill_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -1276,9 +1278,11 @@ func finish_v06_character_test() -> void:
 	if battle.crafting.dismantle(lock_item.instance_id) != 0 or not battle.crafting.begin_reroll(lock_item.instance_id, 0).is_empty():
 		failures.append("锁定装备仍可分解或重铸")
 	# 通用技能沿用同一角色成长存档并真实进入战斗。
-	if not p.learn_general_skill("zhao_yun", "power_strike") or not p.equip_general_skill("zhao_yun", "power_strike", "active"):
+	p.grant_skill_book("tk_triple_slash", 1, "test")
+	if not p.learn_general_skill("zhao_yun", "tk_triple_slash") or not p.equip_general_skill("zhao_yun", "tk_triple_slash", "active"):
 		failures.append("通用主动技能无法学习或装备")
-	if not p.learn_general_skill("zhao_yun", "battle_focus") or not p.equip_general_skill("zhao_yun", "battle_focus", "passive"):
+	p.grant_skill_book("tk_battle_focus", 1, "test")
+	if not p.learn_general_skill("zhao_yun", "tk_battle_focus") or not p.equip_general_skill("zhao_yun", "tk_battle_focus", "passive"):
 		failures.append("通用被动技能无法学习或装备")
 	battle.clear_combatants()
 	var hero = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 200))
@@ -1287,9 +1291,9 @@ func finish_v06_character_test() -> void:
 	if hero.attack <= expected_base:
 		failures.append("通用被动技能未提高实际战斗属性")
 	hero.target = enemy
-	hero.general_skill_timer = 0.0
+	hero.general_active_timers["tk_triple_slash"] = 0.0
 	var hp_before: float = enemy.hp
-	if not hero.try_use_general_skill() or enemy.hp >= hp_before:
+	if not hero.try_use_general_skill("tk_triple_slash") or enemy.hp >= hp_before:
 		failures.append("通用主动技能未造成实际战斗效果")
 	# 1440/1920布局均不得超出视口。
 	for resolution in [Vector2i(1440, 768), Vector2i(1920, 1080)]:
@@ -1304,7 +1308,7 @@ func finish_v06_character_test() -> void:
 	reload_progress.save_path = p.save_path
 	var reload_inventory = InventoryManagerScript.new()
 	reload_inventory.setup(battle.equipment_config)
-	if not reload_progress.load_from_disk() or reload_progress.equipped_general_skills.zhao_yun.active != "power_strike":
+	if not reload_progress.load_from_disk() or "tk_triple_slash" not in reload_progress.equipped_general_skills.zhao_yun.active:
 		failures.append("通用技能配置未持久化")
 	if not reload_inventory.load_from_disk() or not bool(reload_inventory.find_item(lock_item.instance_id).get("locked", false)):
 		failures.append("装备锁定或穿戴关系未持久化")
@@ -1487,6 +1491,122 @@ func finish_v061_ai_test() -> void:
 		print("V061_AI_TEST_PASS waves=3 tank_intercept=true melee_advance=true ranged_spacing=true healer_basic=heal snorlax_basic=damage trace_rows=%d" % battle.ai_trace.size())
 	else:
 		for failure in failures: push_error("V061_AI_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_skill_test() -> void:
+	var failures: Array[String] = []
+	var config: Dictionary = battle.general_skills_config
+	var active_ids: Array[String] = []
+	var passive_ids: Array[String] = []
+	var world_counts := {"三国_active":0, "三国_passive":0, "宝可梦_active":0, "宝可梦_passive":0}
+	var signatures: Dictionary = {}
+	for skill_id in config:
+		var data: Dictionary = config[skill_id]
+		var category := str(data.get("category", ""))
+		var key := "%s_%s" % [data.get("world", ""), category]
+		world_counts[key] = int(world_counts.get(key, 0)) + 1
+		if category == "active": active_ids.append(str(skill_id))
+		elif category == "passive": passive_ids.append(str(skill_id))
+		var mechanics := data.duplicate(true)
+		for cosmetic_key in ["name", "description", "world"]: mechanics.erase(cosmetic_key)
+		var signature := JSON.stringify(mechanics)
+		if signatures.has(signature): failures.append("技能仅换名称而机制数值完全重复：%s / %s" % [signatures[signature], skill_id])
+		signatures[signature] = skill_id
+	if config.size() != 52 or active_ids.size() != 32 or passive_ids.size() != 20:
+		failures.append("技能总表不是52个（32主动/20被动）")
+	for world in ["三国", "宝可梦"]:
+		if int(world_counts[world + "_active"]) != 16 or int(world_counts[world + "_passive"]) != 10:
+			failures.append(world + "技能数量不是16主动+10被动")
+	var p = battle.progression
+	p.roster = ["zhao_yun", "liu_bei"]
+	p.party = ["zhao_yun", "liu_bei", "", ""]
+	p.ensure_growth_layout()
+	p.learned_general_skills.zhao_yun = []
+	p.equipped_general_skills.zhao_yun = {"active":["", "", ""], "passive":["", "", "", ""]}
+	p.general_skill_levels.zhao_yun = {}
+	p.skill_books.clear()
+	p.gold = 5000
+	# 技能书是学习与升级的唯一入口；重复书用于升级，不生成第二份技能。
+	for skill_id in active_ids.slice(0, 4) + passive_ids.slice(0, 5): p.grant_skill_book(skill_id, 1, "test")
+	for index in range(4):
+		var skill_id: String = active_ids[index]
+		if not p.learn_general_skill("zhao_yun", skill_id) or not p.equip_general_skill("zhao_yun", skill_id, "active", mini(index, 2)):
+			failures.append("主动技能书学习/装备链路失败：" + skill_id)
+	for index in range(5):
+		var skill_id: String = passive_ids[index]
+		if not p.learn_general_skill("zhao_yun", skill_id) or not p.equip_general_skill("zhao_yun", skill_id, "passive", mini(index, 3)):
+			failures.append("被动技能书学习/装备链路失败：" + skill_id)
+	if p.equipped_skill_ids("zhao_yun", "active").size() != 3 or p.equipped_skill_ids("zhao_yun", "passive").size() != 4:
+		failures.append("通用技能槽上限不是3主动+4被动")
+	var upgrade_id: String = active_ids[0]
+	p.grant_skill_book(upgrade_id, 1, "duplicate_test")
+	if not p.upgrade_general_skill("zhao_yun", upgrade_id) or p.general_skill_level("zhao_yun", upgrade_id) != 2 or p.skill_book_count(upgrade_id) != 0:
+		failures.append("重复技能书未正确用于技能升级")
+	# 商店技能书与战利品技能书进入同一个库存。
+	var books_before: int = p.skill_book_count("tk_triple_slash")
+	if battle.shop.buy("book_triple_slash", 1).is_empty() or p.skill_book_count("tk_triple_slash") != books_before + 1:
+		failures.append("商店技能书未进入统一库存")
+	var total_books_before := 0
+	for value in p.skill_books.values(): total_books_before += int(value)
+	var boss = battle.spawn_unit("lu_bu", "enemies", Vector2(300, 200))
+	boss.enemy_type = "boss"
+	battle.roll_skill_book_drop(boss)
+	var total_books_after := 0
+	for value in p.skill_books.values(): total_books_after += int(value)
+	if total_books_after != total_books_before + 1: failures.append("Boss未必定掉落技能书")
+	# 逐个调用32个主动技能，治疗/净化/分担等条件均由真实战斗单位提供。
+	var executed_actives := 0
+	for skill_id in active_ids:
+		battle.clear_combatants()
+		var caster = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 220))
+		var ally = battle.spawn_unit("liu_bei", "heroes", Vector2(215, 250))
+		var enemy = battle.spawn_unit("yellow_turban", "enemies", Vector2(270, 220))
+		enemy.max_hp = 100000.0; enemy.hp = enemy.max_hp
+		ally.hp = ally.max_hp * 0.42
+		ally.apply_poison(2.0, 8.0, enemy, 0)
+		caster.skill_timer = 10.0; ally.skill_timer = 10.0
+		if caster.try_use_general_skill(skill_id): executed_actives += 1
+		else: failures.append("主动技能未在满足条件时生效：" + skill_id)
+	# 逐个装入单一被动槽，确认每一种被动都接入属性或触发管线。
+	var validated_passives := 0
+	for skill_id in passive_ids:
+		p.equipped_general_skills.zhao_yun.passive = [skill_id, "", "", ""]
+		p.learned_general_skills.zhao_yun = [skill_id]
+		p.general_skill_levels.zhao_yun[skill_id] = 1
+		battle.clear_combatants()
+		var hero = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 200))
+		var enemy = battle.spawn_unit("yellow_turban", "enemies", Vector2(250, 200))
+		var effect := str(config[skill_id].effect)
+		var valid := false
+		match effect:
+			"stat_attack": valid = hero.attack > hero.base_attack
+			"stat_guard": valid = hero.max_hp > hero.base_max_hp and hero.defense > hero.base_defense
+			"attack_speed": valid = hero.attack_speed > 0.0
+			"cooldown_reduction": valid = hero.cooldown_reduction > 0.0
+			"critical": valid = hero.crit_chance > 0.05
+			"regeneration": valid = hero.life_regen > 0.0
+			"move_speed": valid = hero.move_speed > float(battle.actors.zhao_yun.move_speed)
+			"status_mastery": valid = hero.passive_status_mastery(str(config[skill_id].status)) > 0.0
+			"on_kill_haste": hero.on_kill_trigger(); valid = hero.haste_time > 0.0
+			"on_hit_status":
+				for _attempt in range(200):
+					hero.trigger_general_on_hit(enemy)
+					if enemy.has_negative_status(): break
+				valid = enemy.has_negative_status()
+			_:
+				valid = hero.passive_effect_total(effect) > 0.0
+		if valid: validated_passives += 1
+		else: failures.append("被动技能未接入真实计算：" + skill_id)
+	p.save_to_disk()
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or reload_progress.equipped_skill_ids("zhao_yun", "passive").size() != 1 or reload_progress.general_skill_level("zhao_yun", upgrade_id) != 2:
+		failures.append("技能学习、槽位或等级未持久化")
+	reload_progress.free()
+	if failures.is_empty():
+		print("V061_SKILL_TEST_PASS total=52 tk=16+10 pokemon=16+10 active_runtime=%d passive_runtime=%d slots=3+4 books=drop+shop+upgrade persistence=true" % [executed_actives, validated_passives])
+	else:
+		for failure in failures: push_error("V061_SKILL_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
