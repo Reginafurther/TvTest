@@ -24,7 +24,7 @@ $required = @(
     'data/equipment.json',
     'data/loot_tables.json',
     'data/worlds.json',
-    'data/special_effects.json'
+    'data/special_effects.json',
     'data/art_resources.json'
 )
 
