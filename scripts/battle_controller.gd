@@ -10,6 +10,7 @@ const EquipmentGeneratorScript = preload("res://scripts/equipment_generator.gd")
 const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 const CombatStatsScript = preload("res://scripts/combat_stats.gd")
 const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
+const ShopManagerScript = preload("res://scripts/shop_manager.gd")
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
@@ -25,10 +26,13 @@ var equipment_config: Dictionary
 var loot_config: Dictionary
 var worlds_config: Dictionary
 var special_config: Dictionary
+var shop_config: Dictionary
+var passives_config: Dictionary
 var inventory
 var equipment_generator
 var progression
 var crafting
+var shop
 var combat_stats
 var battle_map: Node2D
 var astar := AStarGrid2D.new()
@@ -46,6 +50,7 @@ var current_map_id := "hulao_pass"
 var active_boss_id := ""
 var effect_cooldowns: Dictionary = {}
 var trigger_counts := {"crit_lightning": 0, "thorn_reflect": 0, "poison_spread": 0, "shield_burst": 0}
+var passive_trigger_counts: Dictionary = {}
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -54,11 +59,13 @@ func _ready() -> void:
 	loot_config = DataLoaderScript.load_json("res://data/loot_tables.json")
 	worlds_config = DataLoaderScript.load_json("res://data/worlds.json")
 	special_config = DataLoaderScript.load_json("res://data/special_effects.json")
+	shop_config = DataLoaderScript.load_json("res://data/shop.json")
+	passives_config = DataLoaderScript.load_json("res://data/passives.json")
 	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args()
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
 	add_child(inventory)
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args() or "--v05-test" in OS.get_cmdline_user_args() or "--v05-core-test" in OS.get_cmdline_user_args() or "--v05-shop-test" in OS.get_cmdline_user_args() or "--v05-skill-test" in OS.get_cmdline_user_args() or "--v05-system-test" in OS.get_cmdline_user_args():
 		inventory.clear_test_save()
 	inventory.load_from_disk()
 	inventory.equipment_changed.connect(_on_equipment_changed)
@@ -69,6 +76,8 @@ func _ready() -> void:
 	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0, special_config)
 	crafting = CraftingManagerScript.new()
 	crafting.setup(inventory, progression, equipment_config, equipment_generator)
+	shop = ShopManagerScript.new()
+	shop.setup(inventory, progression, equipment_generator, shop_config)
 	combat_stats = CombatStatsScript.new()
 	combat_stats.reset()
 	battle_map = BattleMapScript.new()
@@ -230,6 +239,17 @@ func _on_unit_died(unit) -> void:
 		progression.add_gold(1 + int(worlds_config.maps.get(current_map_id, {}).get("level", 1)))
 		if is_instance_valid(unit.last_damage_source):
 			combat_stats.record_kill(unit.last_damage_source.actor_id)
+		var leveled_actors: Array[String] = []
+		for actor_id in progression.party:
+			if progression.add_actor_experience(actor_id, 2, false):
+				leveled_actors.append(actor_id)
+				log_message.emit("★ %s升级至Lv.%d" % [actors.get(actor_id, {}).get("name", actor_id), progression.actor_level(actor_id)])
+		progression.changed.emit()
+		progression.save_to_disk()
+		for actor_id in leveled_actors:
+			var leveled_hero = get_hero(actor_id)
+			if leveled_hero != null:
+				leveled_hero.refresh_progression_stats()
 		if not active_boss_id.is_empty() and unit.actor_data.has("boss_id"):
 			resolve_boss_victory(active_boss_id)
 		else:
@@ -291,6 +311,9 @@ func roll_material_drop() -> void:
 
 func switch_map(map_id: String) -> bool:
 	if not worlds_config.maps.has(map_id):
+		return false
+	if progression.party_average_level() < float(worlds_config.maps[map_id].get("required_level", 1)):
+		log_message.emit("队伍平均等级不足，尚不能进入%s" % worlds_config.maps[map_id].name)
 		return false
 	clear_combatants()
 	current_map_id = map_id
@@ -357,9 +380,11 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		return
 	if context.get("critical", false) and is_instance_valid(source) and source.has_special("crit_lightning"):
 		trigger_lightning(source, target)
-	if is_instance_valid(source) and (target.has_special("thorn_reflect") or target.actor_data.get("talent", "") == "low_hp_rage"):
+	if is_instance_valid(source) and (target.has_special("thorn_reflect") or (target.passive_data.get("effect", "") == "low_hp_rage" and target.hp / target.max_hp < 0.5)):
 		trigger_counts.thorn_reflect += 1
-		source.take_damage(amount * special_config.effects.thorn_reflect.power, target, false, {"kind": "effect", "allow_triggers": false})
+		var reflect_power: float = target.passive_value() if target.passive_data.get("effect", "") == "low_hp_rage" else float(special_config.effects.thorn_reflect.power)
+		if target.passive_data.get("effect", "") == "low_hp_rage": target.battle.note_passive(target.actor_id, target.passive_skill_id)
+		source.take_damage(amount * reflect_power, target, false, {"kind": "effect", "allow_triggers": false})
 
 func on_heal(source, amount: float) -> void:
 	if is_instance_valid(source):
@@ -392,6 +417,17 @@ func stats_snapshot() -> Dictionary:
 
 func note_effect(id: String) -> void:
 	trigger_counts[id] = int(trigger_counts.get(id, 0)) + 1
+
+func note_passive(actor_id: String, passive_id: String) -> void:
+	var key := actor_id + ":" + passive_id
+	passive_trigger_counts[key] = int(passive_trigger_counts.get(key, 0)) + 1
+
+func party_passive_value(effect: String) -> float:
+	var total := 0.0
+	for hero in heroes:
+		if is_instance_valid(hero) and not hero.dead and hero.passive_data.get("effect", "") == effect:
+			total += hero.passive_value()
+	return total
 
 func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
 	var line := Line2D.new()

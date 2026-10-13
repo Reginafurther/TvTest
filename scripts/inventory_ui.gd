@@ -17,6 +17,7 @@ var comparison: RichTextLabel
 var capacity_label: Label
 var equip_button: Button
 var unequip_button: Button
+var status_label: Label
 var selected_item_id := ""
 var selected_equipment_slot := ""
 var actor_ids: Array = []
@@ -25,6 +26,7 @@ var feature_ui
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
+	layer = 30
 	inventory = battle.inventory
 	config = battle.equipment_config
 	build_ui()
@@ -113,6 +115,8 @@ func build_inventory_column(parent: HBoxContainer) -> void:
 	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_list.select_mode = ItemList.SELECT_SINGLE
 	item_list.item_selected.connect(_on_inventory_selected)
+	item_list.item_activated.connect(_on_inventory_activated)
+	item_list.tooltip_text = "单击查看，双击可直接为当前角色穿戴"
 	column.add_child(item_list)
 
 func build_equipment_column(parent: HBoxContainer) -> void:
@@ -155,8 +159,13 @@ func build_detail_column(parent: HBoxContainer) -> void:
 	comparison.bbcode_enabled = true
 	comparison.custom_minimum_size = Vector2(0, 150)
 	column.add_child(comparison)
+	status_label = Label.new()
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status_label.custom_minimum_size = Vector2(0, 34)
+	status_label.add_theme_color_override("font_color", Color("#FFD27A"))
+	column.add_child(status_label)
 	equip_button = Button.new()
-	equip_button.text = "为当前角色穿戴"
+	equip_button.text = "为当前角色穿戴（也可双击装备）"
 	equip_button.disabled = true
 	equip_button.pressed.connect(_on_equip_pressed)
 	column.add_child(equip_button)
@@ -174,6 +183,7 @@ func toggle() -> void:
 		battle.is_paused = true
 		battle.battle_state_changed.emit("背包整理中")
 		refresh_all()
+		set_status("先选择角色，再单击装备查看属性；双击装备可直接穿戴。")
 	else:
 		battle.is_paused = false
 		battle.battle_state_changed.emit("自动战斗中")
@@ -183,6 +193,8 @@ func refresh_all() -> void:
 	refresh_inventory()
 	refresh_equipment()
 	capacity_label.text = "容量  %d / %d" % [inventory.items.size(), inventory.capacity]
+	var selected = inventory.find_item(selected_item_id)
+	equip_button.disabled = selected == null or actor_select.item_count <= 0
 
 func refresh_inventory() -> void:
 	item_list.clear()
@@ -274,6 +286,12 @@ func _on_inventory_selected(index: int) -> void:
 	if item != null:
 		show_item(item)
 		equip_button.disabled = false
+		var slot := preferred_slot_for_item(item)
+		set_status("将为%s穿戴到%s；点击按钮确认，或双击装备。" % [actor_names[actor_select.selected], slot_name(slot)])
+
+func _on_inventory_activated(index: int) -> void:
+	_on_inventory_selected(index)
+	_on_equip_pressed()
 
 func _on_equipment_selected(index: int) -> void:
 	selected_equipment_slot = equipment_list.get_item_metadata(index)
@@ -286,14 +304,16 @@ func _on_equipment_selected(index: int) -> void:
 func _on_equip_pressed() -> void:
 	var item = inventory.find_item(selected_item_id)
 	if item == null:
+		set_status("请先从左侧选择一件装备。", true)
 		return
-	var target_slot := String(item.slot)
-	if not selected_equipment_slot.is_empty() and selected_equipment_slot in item.get("compatible_slots", []):
-		target_slot = selected_equipment_slot
+	var target_slot := preferred_slot_for_item(item)
 	if inventory.equip_item(current_actor_id(), selected_item_id, target_slot):
 		battle.log_message.emit("%s 装备了 %s" % [actor_names[actor_select.selected], item.name])
 		refresh_all()
 		show_item(item)
+		set_status("穿戴成功：%s → %s的%s，战斗属性已实时刷新。" % [item.name, actor_names[actor_select.selected], slot_name(target_slot)])
+	else:
+		set_status(inventory.last_error if not inventory.last_error.is_empty() else "穿戴失败，请检查角色和装备部位。", true)
 
 func _on_unequip_pressed() -> void:
 	if selected_equipment_slot.is_empty():
@@ -302,6 +322,9 @@ func _on_unequip_pressed() -> void:
 		battle.log_message.emit("%s 卸下了%s装备" % [actor_names[actor_select.selected], slot_name(selected_equipment_slot)])
 		refresh_all()
 		unequip_button.disabled = true
+		set_status("卸下成功，装备仍保留在背包中。")
+	else:
+		set_status(inventory.last_error, true)
 
 func _on_actor_changed(_index: int) -> void:
 	selected_equipment_slot = ""
@@ -309,6 +332,7 @@ func _on_actor_changed(_index: int) -> void:
 	var item = inventory.find_item(selected_item_id)
 	if item != null:
 		show_item(item)
+		set_status("当前角色：%s；所选装备将穿戴给该角色。" % actor_names[actor_select.selected])
 
 func _on_filter_changed(_index: int) -> void:
 	refresh_inventory()
@@ -320,7 +344,25 @@ func _on_loot_obtained(_item: Dictionary) -> void:
 	refresh_inventory()
 
 func current_actor_id() -> String:
+	if actor_select == null or actor_select.item_count <= 0 or actor_select.selected < 0:
+		return ""
 	return actor_select.get_item_metadata(actor_select.selected)
+
+func preferred_slot_for_item(item: Dictionary) -> String:
+	var compatible: Array = item.get("compatible_slots", [item.get("slot", "")])
+	if not selected_equipment_slot.is_empty() and selected_equipment_slot in compatible:
+		return selected_equipment_slot
+	var actor_id := current_actor_id()
+	for slot in compatible:
+		if inventory.get_equipped_item(actor_id, slot) == null:
+			return slot
+	return String(item.get("slot", compatible[0] if not compatible.is_empty() else ""))
+
+func set_status(message: String, is_error: bool = false) -> void:
+	if status_label == null:
+		return
+	status_label.text = message
+	status_label.add_theme_color_override("font_color", Color("#FF8C82") if is_error else Color("#FFD27A"))
 
 func refresh_actor_choices() -> void:
 	if actor_select == null or battle == null: return

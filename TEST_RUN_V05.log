@@ -1,0 +1,13 @@
+SMOKE_TEST_PASS elapsed=20.0 kills=4 heroes=4 wave=2
+EQUIPMENT_TEST_PASS elapsed=20.0 kills=4 drops=6 unique_ids=true slots=36 save_reload=true
+PERSISTENCE_WRITE_PASS affixes=4
+PERSISTENCE_READ_PASS items=1 affixes=4
+V03_TEST_PASS worlds=2 roster=7 party=4 specials=4 bosses=2 stats=true crafting=true save=true
+V03_PERSIST_WRITE_PASS roster=5 party0=gengar
+V03_PERSIST_READ_PASS roster=5 party0=gengar material=77
+V031_TEST_PASS guide=6 skip_replay=true menus=8 old_save=true art_fallback=true inventory=true
+V035_TEST_PASS map=visible cards=4 menus=13 pause=true art=true log=event_driven
+V05_CORE_TEST_PASS ui_equip=true combat_stats=true recruit_token=true persistence=true
+V05_SHOP_TEST_PASS buy_quantity=2 insufficient_gold=true full_inventory=true equipped_guard=true sell=true persistence=true
+V05_SKILL_TEST_PASS active=10 passive=10 upgrade=true ui=true persistence=true
+V05_SYSTEM_TEST_PASS stages=6 level_growth=true offline_once=true legacy_migration=true bosses=2 layouts=1440x768,1920x1080

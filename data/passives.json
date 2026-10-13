@@ -1,0 +1,12 @@
+{
+  "combo_mastery": {"name": "龙胆连击", "effect": "combo", "value": 0.55, "per_level": 0.05, "description": "每3次普通攻击追加一次连击伤害。"},
+  "benevolent_guard": {"name": "仁德之心", "effect": "healing", "value": 0.18, "per_level": 0.025, "description": "提高治疗量与仁德护盾。"},
+  "damage_reduction": {"name": "燕人铁壁", "effect": "damage_reduction", "value": 0.15, "per_level": 0.015, "description": "持续降低受到的伤害。"},
+  "low_hp_rage": {"name": "恶来反击", "effect": "low_hp_rage", "value": 0.35, "per_level": 0.04, "description": "低生命时强化攻击，并反击部分伤害。"},
+  "team_haste": {"name": "卧龙谋略", "effect": "team_haste", "value": 0.08, "per_level": 0.012, "description": "在队时降低全队主动技能冷却。"},
+  "boss_slayer": {"name": "无双破军", "effect": "boss_slayer", "value": 0.22, "per_level": 0.03, "description": "对Boss造成额外伤害。"},
+  "static_charge": {"name": "静电加速", "effect": "attack_speed", "value": 0.16, "per_level": 0.02, "description": "持续提高攻击速度与雷电节奏。"},
+  "thick_fat": {"name": "厚脂守护", "effect": "health_regen", "value": 0.18, "regen": 2.0, "per_level": 0.02, "description": "提高最大生命并持续恢复。"},
+  "poison_master": {"name": "剧毒蔓延", "effect": "poison_master", "value": 0.25, "per_level": 0.035, "description": "提高中毒伤害与持续时间。"},
+  "psychic_focus": {"name": "精神专注", "effect": "elemental_damage", "value": 0.20, "per_level": 0.03, "description": "持续提高技能与元素伤害。"}
+}

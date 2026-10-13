@@ -16,11 +16,13 @@ func _init(equipment_config: Dictionary, loot_tables: Dictionary, seed_value: in
 	else:
 		rng.seed = seed_value
 
-func generate(level: int, source: String, forced_quality: String = "", forced_slot: String = "") -> Dictionary:
+func generate(level: int, source: String, forced_quality: String = "", forced_slot: String = "", forced_template: String = "") -> Dictionary:
 	var templates: Dictionary = config.get("templates", {})
 	var candidates: Array = []
 	for template_id in templates:
 		var template: Dictionary = templates[template_id]
+		if not forced_template.is_empty() and template_id != forced_template:
+			continue
 		if forced_slot.is_empty() or template.get("slot", "") == forced_slot or forced_slot in template.get("compatible_slots", []):
 			candidates.append(template_id)
 	if candidates.is_empty():

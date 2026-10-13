@@ -20,6 +20,16 @@ var inventory_ui
 var toolbar_root: GridContainer
 var aux_root: VBoxContainer
 var log_lines: Array[String] = []
+var recruit_feedback := ""
+var refresh_pending := false
+var selected_shop_product := ""
+var selected_shop_item := ""
+var shop_quantity := 1
+var shop_feedback := ""
+var selected_skill_actor := ""
+var skill_feedback := ""
+var rewards_feedback := ""
+var shop_icon_cache: Dictionary = {}
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -54,12 +64,12 @@ func build_toolbar() -> void:
 	aux_root = VBoxContainer.new()
 	aux_root.add_theme_constant_override("separation", 2)
 	add_child(aux_root)
-	for spec in [["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["统计", "stats"]]:
+	for spec in [["商店", "shop"], ["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["统计", "stats"]]:
 		var button := Button.new()
 		button.text = spec[0]
-		button.custom_minimum_size = Vector2(115, 30)
-		V035ThemeScript.button(button, "blue")
-		button.add_theme_font_size_override("font_size", 14)
+		button.custom_minimum_size = Vector2(115, 27)
+		V035ThemeScript.button(button, "gold" if spec[1] == "shop" else "blue")
+		button.add_theme_font_size_override("font_size", 13)
 		button.pressed.connect(open_view.bind(spec[1]))
 		aux_root.add_child(button)
 		toolbar_buttons[spec[1]] = button
@@ -134,9 +144,16 @@ func close_panel() -> void:
 
 func clear_content() -> void:
 	for child in content.get_children():
+		content.remove_child(child)
 		child.queue_free()
 
 func refresh_if_open() -> void:
+	if panel.visible and not refresh_pending:
+		refresh_pending = true
+		call_deferred("_perform_deferred_refresh")
+
+func _perform_deferred_refresh() -> void:
+	refresh_pending = false
 	if panel.visible:
 		refresh()
 
@@ -152,20 +169,40 @@ func refresh() -> void:
 		"rewards": build_rewards()
 		"objectives": build_objectives()
 		"logs": build_logs()
+		"shop": build_shop()
 
 func build_rewards() -> void:
 	title.text = "挂机收益"
 	var snap: Dictionary = battle.stats_snapshot()
 	var info := Label.new()
-	info.text = "本场自动战斗 %.0f 秒\n\n获得装备：%d 件\n获得招募材料：%d 个\n累计金币：%d\n资源收益估算：%.1f / 分钟" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, snap.resources_per_minute]
+	var pending: Dictionary = battle.progression.pending_offline
+	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募材料：%d 个　累计金币：%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0))]
 	info.add_theme_font_size_override("font_size", 20)
 	content.add_child(info)
+	var claim := Button.new()
+	claim.text = "领取离线收益"
+	claim.disabled = int(pending.get("seconds", 0)) <= 0
+	claim.pressed.connect(_claim_offline_rewards)
+	content.add_child(claim)
+	var feedback := Label.new()
+	feedback.text = rewards_feedback if not rewards_feedback.is_empty() else "离线收益领取后立即清零并存档，不能重复领取。"
+	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
+	content.add_child(feedback)
+
+func _claim_offline_rewards() -> void:
+	var result: Dictionary = battle.progression.claim_offline_rewards()
+	if result.is_empty():
+		rewards_feedback = "当前没有可领取的离线收益。"
+	else:
+		rewards_feedback = "领取成功：金币%d、虎符%d、精灵结晶%d。" % [int(result.gold), int(result.three_kingdoms_token), int(result.pokemon_token)]
+		battle.log_message.emit(rewards_feedback)
+	refresh()
 
 func build_objectives() -> void:
 	title.text = "关卡目标"
 	var info := Label.new()
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备与世界材料。\n在背包比较属性，为四人换装。\n用材料定向招募伙伴，调整四人队伍。\n准备好后前往传奇 Boss 挑战。" % battle.worlds_config.maps[battle.current_map_id].name
+	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在背包换装，在商店形成买卖循环，在技能页升级主动/被动能力。\n招募并调整四人队伍，提升平均等级后挑战六关与传奇 Boss。" % battle.worlds_config.maps[battle.current_map_id].name
 	if not battle.progression.guide_finished:
 		var step: int = clampi(battle.progression.guide_step, 0, 5)
 		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["使用初始招募令", "观察自动战斗", "等待装备掉落", "穿戴一件装备", "定向招募伙伴", "调整编队"][step]]
@@ -179,6 +216,129 @@ func build_logs() -> void:
 	text_view.text = "\n".join(log_lines)
 	content.add_child(text_view)
 
+func build_shop() -> void:
+	title.text = "万界行商 · 买入与出售"
+	var summary := Label.new()
+	summary.text = "金币：%d　背包：%d/%d　%s" % [battle.progression.gold, battle.inventory.items.size(), battle.inventory.capacity, battle.shop_config.get("rules", {}).get("sell_ratio_hint", "")]
+	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(summary)
+	var products := ItemList.new()
+	products.custom_minimum_size = Vector2(0, 145)
+	for product_id in battle.shop_config.get("products", {}):
+		var product: Dictionary = battle.shop_config.products[product_id]
+		var quality_name := ""
+		if product.get("type", "") == "equipment":
+			quality_name = " · %s" % battle.equipment_config.qualities.get(product.get("quality", "white"), {}).get("name", "")
+		var index := products.add_item("%s%s　%d金币" % [product.get("name", product_id), quality_name, int(product.get("price", 0))], shop_product_icon(product))
+		products.set_item_metadata(index, product_id)
+		if product_id == selected_shop_product:
+			products.select(index)
+	products.item_selected.connect(_select_shop_product.bind(products))
+	content.add_child(products)
+	var buy_row := HBoxContainer.new()
+	content.add_child(buy_row)
+	var quantity := SpinBox.new()
+	quantity.min_value = 1
+	quantity.max_value = int(battle.shop_config.get("rules", {}).get("max_quantity", 20))
+	quantity.value = shop_quantity
+	quantity.value_changed.connect(func(value): shop_quantity = int(value))
+	buy_row.add_child(quantity)
+	var buy := Button.new()
+	buy.text = "购买所选商品"
+	buy.disabled = selected_shop_product.is_empty()
+	buy.pressed.connect(_buy_shop_product)
+	buy_row.add_child(buy)
+	if not selected_shop_product.is_empty():
+		var selected: Dictionary = battle.shop_config.products.get(selected_shop_product, {})
+		var detail := Label.new()
+		detail.text = selected.get("description", "")
+		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(detail)
+	var separator := HSeparator.new()
+	content.add_child(separator)
+	var sell_title := Label.new()
+	sell_title.text = "出售背包装备（穿戴中的装备会标记且不可出售）"
+	content.add_child(sell_title)
+	var sell_list := ItemList.new()
+	sell_list.custom_minimum_size = Vector2(0, 105)
+	for item in battle.inventory.items:
+		var equipped: bool = battle.shop.is_equipped(item.instance_id)
+		var index := sell_list.add_item("%s%s　售价%d" % ["[穿戴] " if equipped else "", item.name, battle.shop.sell_price(item)])
+		sell_list.set_item_metadata(index, item.instance_id)
+		if item.instance_id == selected_shop_item:
+			sell_list.select(index)
+	sell_list.item_selected.connect(_select_shop_item.bind(sell_list))
+	sell_list.item_activated.connect(_sell_shop_item.bind(sell_list))
+	content.add_child(sell_list)
+	var sell := Button.new()
+	sell.text = "出售所选装备"
+	sell.disabled = selected_shop_item.is_empty()
+	sell.pressed.connect(_sell_selected_shop_item)
+	content.add_child(sell)
+	var feedback := Label.new()
+	feedback.text = shop_feedback if not shop_feedback.is_empty() else "商店仅售过渡装备；高品质装备仍以刷怪和Boss掉落为主。"
+	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
+	content.add_child(feedback)
+	if not battle.progression.transaction_log.is_empty():
+		var history := Label.new()
+		var lines: Array[String] = ["最近交易："]
+		for index in range(mini(3, battle.progression.transaction_log.size())):
+			var record: Dictionary = battle.progression.transaction_log[index]
+			lines.append("%s · %s · 金币%+d" % [record.get("action", "交易"), record.get("detail", ""), int(record.get("gold", 0))])
+		history.text = "\n".join(lines)
+		history.add_theme_font_size_override("font_size", 12)
+		content.add_child(history)
+
+func _select_shop_product(index: int, list: ItemList) -> void:
+	selected_shop_product = list.get_item_metadata(index)
+	shop_feedback = ""
+	refresh()
+
+func shop_product_icon(product: Dictionary) -> Texture2D:
+	var key: String = product.get("type", "material") + ":" + product.get("quality", "")
+	if shop_icon_cache.has(key):
+		return shop_icon_cache[key]
+	var color := Color("#67B7FF")
+	if product.get("type", "") == "equipment":
+		color = Color(battle.equipment_config.qualities.get(product.get("quality", "white"), {}).get("color", "D7DEE3"))
+	elif product.get("type", "") == "recruit_token":
+		color = Color("#FFD166")
+	var image := Image.create(24, 24, false, Image.FORMAT_RGBA8)
+	image.fill(color)
+	var texture := ImageTexture.create_from_image(image)
+	shop_icon_cache[key] = texture
+	return texture
+
+func _buy_shop_product() -> void:
+	var result: Dictionary = battle.shop.buy(selected_shop_product, shop_quantity)
+	if result.is_empty():
+		shop_feedback = battle.shop.last_error
+	else:
+		var product: Dictionary = battle.shop_config.products[selected_shop_product]
+		shop_feedback = "购买成功：%s ×%d，已自动存档。" % [product.name, shop_quantity]
+		battle.log_message.emit(shop_feedback)
+	refresh()
+
+func _select_shop_item(index: int, list: ItemList) -> void:
+	selected_shop_item = list.get_item_metadata(index)
+	shop_feedback = ""
+	refresh()
+
+func _sell_shop_item(index: int, list: ItemList) -> void:
+	selected_shop_item = list.get_item_metadata(index)
+	_sell_selected_shop_item()
+
+func _sell_selected_shop_item() -> void:
+	var result: Dictionary = battle.shop.sell(selected_shop_item)
+	if result.is_empty():
+		shop_feedback = battle.shop.last_error
+	else:
+		shop_feedback = "出售成功，获得%d金币，交易已自动存档。" % int(result.gold)
+		battle.log_message.emit(shop_feedback)
+		selected_shop_item = ""
+	refresh()
+
 func build_world() -> void:
 	title.text = "双世界冒险"
 	var info := Label.new()
@@ -187,8 +347,9 @@ func build_world() -> void:
 	for map_id in battle.worlds_config.maps:
 		var data: Dictionary = battle.worlds_config.maps[map_id]
 		var button := Button.new()
-		button.text = "前往 %s（Lv.%d） · 掉落%s" % [data.name, data.level, data.material_name]
-		button.disabled = map_id == battle.current_map_id and battle.active_boss_id.is_empty()
+		button.text = "%s 第%d关 · %s（怪物Lv.%d / 队伍Lv.%d） · 掉落%s" % [data.world, int(data.get("chapter", 1)), data.name, data.level, int(data.get("required_level", 1)), data.material_name]
+		button.disabled = (map_id == battle.current_map_id and battle.active_boss_id.is_empty()) or battle.progression.party_average_level() < float(data.get("required_level", 1))
+		button.tooltip_text = "队伍平均等级达到Lv.%d后开放" % int(data.get("required_level", 1))
 		button.pressed.connect(func(): battle.switch_map(map_id); close_panel())
 		content.add_child(button)
 
@@ -223,8 +384,14 @@ func build_recruit() -> void:
 	var recruit := Button.new()
 	recruit.text = "使用招募令随机招募非传奇角色"
 	recruit.disabled = p.recruit_tokens <= 0
+	recruit.tooltip_text = "消耗1枚招募令；已拥有角色不会重复获得"
 	recruit.pressed.connect(use_recruit_token)
 	content.add_child(recruit)
+	var feedback := Label.new()
+	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	feedback.text = recruit_feedback if not recruit_feedback.is_empty() else p.recruit_token_status(battle.worlds_config.recruitment.starter_pool)
+	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
+	content.add_child(feedback)
 	var list := ItemList.new()
 	list.custom_minimum_size = Vector2(0, 160)
 	for actor_id in battle.worlds_config.recruitment.costs:
@@ -325,8 +492,51 @@ func resolve_reroll(accept: bool) -> void:
 	refresh()
 
 func build_strategy() -> void:
-	title.text = "自动战斗策略"
+	title.text = "主动 / 被动技能与自动策略"
 	var p = battle.progression
+	if selected_skill_actor.is_empty() or selected_skill_actor not in p.roster:
+		selected_skill_actor = p.roster[0]
+	var actor_select := OptionButton.new()
+	for actor_id in p.roster:
+		actor_select.add_item("Lv.%d　%s" % [p.actor_level(actor_id), battle.actors[actor_id].name])
+		actor_select.set_item_metadata(actor_select.item_count - 1, actor_id)
+		if actor_id == selected_skill_actor: actor_select.select(actor_select.item_count - 1)
+	actor_select.item_selected.connect(func(index): selected_skill_actor = actor_select.get_item_metadata(index); skill_feedback = ""; refresh())
+	content.add_child(actor_select)
+	var actor: Dictionary = battle.actors[selected_skill_actor]
+	var active: Dictionary = battle.skills.get(actor.get("skill", ""), {})
+	var passive: Dictionary = battle.passives_config.get(actor.get("passive_skill", actor.get("talent", "")), {})
+	var active_level: int = p.skill_level(selected_skill_actor, "active")
+	var passive_level: int = p.skill_level(selected_skill_actor, "passive")
+	var active_power: float = float(active.get("power", 1.0)) * (1.0 + float(active.get("power_per_level", 0.0)) * (active_level - 1))
+	var next_power: float = float(active.get("power", 1.0)) * (1.0 + float(active.get("power_per_level", 0.0)) * active_level)
+	var cooldown: float = float(active.get("cooldown", 0.0)) * (1.0 - float(active.get("cooldown_per_level", 0.0)) * (active_level - 1))
+	var next_cooldown: float = float(active.get("cooldown", 0.0)) * (1.0 - float(active.get("cooldown_per_level", 0.0)) * active_level)
+	var passive_value: float = float(passive.get("value", 0.0)) + float(passive.get("per_level", 0.0)) * (passive_level - 1)
+	var next_passive: float = passive_value + float(passive.get("per_level", 0.0))
+	var detail := RichTextLabel.new()
+	detail.bbcode_enabled = true
+	detail.custom_minimum_size = Vector2(0, 150)
+	detail.text = "[b][color=#72D8FF]主动 · %s　Lv.%d[/color][/b]\n%s\n威力 %.2f → %.2f　冷却 %.2fs → %.2fs\n\n[b][color=#FFD06A]被动 · %s　Lv.%d[/color][/b]\n%s\n效果 %.1f%% → %.1f%%" % [active.get("name", "未配置"), active_level, active.get("description", ""), active_power, next_power, cooldown, next_cooldown, passive.get("name", "未配置"), passive_level, passive.get("description", ""), passive_value * 100.0, next_passive * 100.0]
+	content.add_child(detail)
+	var upgrades := HBoxContainer.new()
+	content.add_child(upgrades)
+	for kind in ["active", "passive"]:
+		var cost: Dictionary = p.skill_upgrade_cost(selected_skill_actor, kind)
+		var button := Button.new()
+		button.text = "升级%s（%d金币+%d材料）" % ["主动" if kind == "active" else "被动", int(cost.gold), int(cost.salvage_dust)]
+		button.disabled = p.skill_level(selected_skill_actor, kind) >= 10
+		button.pressed.connect(_upgrade_selected_skill.bind(kind))
+		upgrades.add_child(button)
+	var feedback := Label.new()
+	feedback.text = skill_feedback if not skill_feedback.is_empty() else "技能升级会立即进入实际战斗计算并自动存档。"
+	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
+	content.add_child(feedback)
+	content.add_child(HSeparator.new())
+	var strategy_label := Label.new()
+	strategy_label.text = "自动施放策略"
+	strategy_label.add_theme_font_size_override("font_size", 17)
+	content.add_child(strategy_label)
 	var preset := OptionButton.new()
 	for name in p.strategy_presets:
 		preset.add_item(name)
@@ -337,9 +547,17 @@ func build_strategy() -> void:
 	var data: Dictionary = p.strategy_presets[p.active_strategy]
 	for spec in [["自身生命阈值", "self_hp"], ["队友生命阈值", "ally_hp"], ["周围敌人数阈值", "enemy_count"]]:
 		var row := HBoxContainer.new(); content.add_child(row)
-		var label := Label.new(); label.text = spec[0]; label.custom_minimum_size = Vector2(220, 30); row.add_child(label)
+		var label := Label.new(); label.text = spec[0]; label.custom_minimum_size = Vector2(180, 24); row.add_child(label)
 		var spin := SpinBox.new(); spin.min_value = 1 if spec[1] == "enemy_count" else 0.05; spin.max_value = 8 if spec[1] == "enemy_count" else 1.0; spin.step = 1 if spec[1] == "enemy_count" else 0.05; spin.value = data[spec[1]]; spin.value_changed.connect(update_strategy.bind(spec[1])); row.add_child(spin)
-	var help := Label.new(); help.text = "条件不满足时跳过技能并普通攻击。两套预设会自动保存。"; content.add_child(help)
+
+func _upgrade_selected_skill(kind: String) -> void:
+	if battle.progression.upgrade_skill(selected_skill_actor, kind):
+		skill_feedback = "%s的%s技能升级成功，战斗单位已刷新。" % [battle.actors[selected_skill_actor].name, "主动" if kind == "active" else "被动"]
+		battle.rebuild_party()
+		battle.log_message.emit(skill_feedback)
+	else:
+		skill_feedback = "升级失败：请检查金币、重铸材料或技能是否已满级。"
+	refresh()
 
 func build_stats() -> void:
 	title.text = "实时战斗统计"
@@ -352,14 +570,29 @@ func build_stats() -> void:
 	content.add_child(text)
 
 func use_recruit_token() -> void:
+	var status: String = battle.progression.recruit_token_status(battle.worlds_config.recruitment.starter_pool)
+	if not status.is_empty():
+		recruit_feedback = status
+		refresh()
+		return
 	var id: String = battle.progression.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
-	if not id.is_empty(): battle.log_message.emit("招募成功：%s" % battle.actors[id].name)
+	if not id.is_empty():
+		recruit_feedback = "招募成功：%s，已加入伙伴列表并自动存档。" % battle.actors[id].name
+		battle.log_message.emit("招募成功：%s" % battle.actors[id].name)
+	else:
+		recruit_feedback = "招募失败，招募令未消耗。"
 	refresh()
 
 func exchange_actor(index: int, list: ItemList) -> void:
 	var id: String = list.get_item_metadata(index)
 	var cost: Array = battle.worlds_config.recruitment.costs[id]
-	if battle.progression.exchange_actor(id, cost[0], int(cost[1])): battle.log_message.emit("定向招募：%s" % battle.actors[id].name)
+	if id in battle.progression.roster:
+		recruit_feedback = "%s已经加入冒险团。" % battle.actors[id].name
+	elif battle.progression.exchange_actor(id, cost[0], int(cost[1])):
+		recruit_feedback = "材料招募成功：%s。" % battle.actors[id].name
+		battle.log_message.emit("定向招募：%s" % battle.actors[id].name)
+	else:
+		recruit_feedback = "%s不足，无法定向招募%s。" % [material_name(cost[0]), battle.actors[id].name]
 	refresh()
 
 func change_party(index: int, select_index: int, select: OptionButton) -> void:

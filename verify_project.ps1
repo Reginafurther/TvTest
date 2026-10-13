@@ -20,6 +20,7 @@ $required = @(
     'scripts/tutorial_ui.gd',
     'scripts/art_catalog.gd',
     'scripts/v035_theme.gd',
+    'scripts/shop_manager.gd',
     'assets/maps/ground/hulao_pass_v035.png',
     'assets/maps/decor/boulder_cluster_v035.png',
     'data/actors.json',
@@ -28,7 +29,9 @@ $required = @(
     'data/loot_tables.json',
     'data/worlds.json',
     'data/special_effects.json',
-    'data/art_resources.json'
+    'data/art_resources.json',
+    'data/passives.json',
+    'data/shop.json'
 )
 
 foreach ($relative in $required) {
@@ -40,6 +43,7 @@ foreach ($relative in $required) {
 
 $actors = Get-Content -Raw -LiteralPath (Join-Path $root 'data/actors.json') | ConvertFrom-Json
 $skills = Get-Content -Raw -LiteralPath (Join-Path $root 'data/skills.json') | ConvertFrom-Json
+$passives = Get-Content -Raw -LiteralPath (Join-Path $root 'data/passives.json') | ConvertFrom-Json
 $requiredActors = @('zhao_yun', 'liu_bei', 'pikachu', 'snorlax', 'yellow_turban', 'zubat')
 foreach ($id in $requiredActors) {
     if (-not $actors.PSObject.Properties.Name.Contains($id)) {
@@ -50,6 +54,20 @@ foreach ($id in $requiredActors) {
         throw "Actor $id references missing skill: $skillId"
     }
 }
+
+$heroActors = @('zhang_fei', 'dian_wei', 'zhao_yun', 'zhuge_liang', 'liu_bei', 'lu_bu', 'pikachu', 'snorlax', 'gengar', 'mewtwo')
+foreach ($id in $heroActors) {
+    if (-not $actors.PSObject.Properties.Name.Contains($id)) { throw "Missing V0.5 hero: $id" }
+    $skillId = $actors.$id.skill
+    $passiveId = $actors.$id.passive_skill
+    if (-not $skills.PSObject.Properties.Name.Contains($skillId)) { throw "Hero $id references missing active skill: $skillId" }
+    if (-not $passives.PSObject.Properties.Name.Contains($passiveId)) { throw "Hero $id references missing passive skill: $passiveId" }
+}
+
+$worlds = Get-Content -Raw -LiteralPath (Join-Path $root 'data/worlds.json') | ConvertFrom-Json
+if ($worlds.maps.PSObject.Properties.Count -ne 6) { throw 'V0.5 requires exactly six configured stages.' }
+$shop = Get-Content -Raw -LiteralPath (Join-Path $root 'data/shop.json') | ConvertFrom-Json
+if ($shop.products.PSObject.Properties.Count -lt 7) { throw 'V0.5 shop catalog is incomplete.' }
 
 $equipment = Get-Content -Raw -LiteralPath (Join-Path $root 'data/equipment.json') | ConvertFrom-Json
 $requiredSlots = @('main_hand', 'off_hand', 'helmet', 'armor', 'gloves', 'boots', 'necklace', 'ring_1', 'ring_2')
@@ -85,7 +103,15 @@ if ($godotPath -and (Test-Path -LiteralPath $godotPath)) {
     if ($LASTEXITCODE -ne 0) { throw "Godot art import failed with exit code $LASTEXITCODE" }
     & $godotPath --headless --path $root -- --v031-test
     if ($LASTEXITCODE -ne 0) { throw "V0.31 UI and onboarding validation failed with exit code $LASTEXITCODE" }
-    Write-Host 'PASS: V0.1, V0.2A, V0.3, V0.31 and V0.35 integration suites are valid.' -ForegroundColor Green
+    & $godotPath --headless --path $root -- --v05-core-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.5 equipment/recruitment validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v05-shop-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.5 shop validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v05-skill-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.5 skill validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v05-system-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.5 progression/migration validation failed with exit code $LASTEXITCODE" }
+    Write-Host 'PASS: V0.1 through V0.5 runtime and persistence suites are valid.' -ForegroundColor Green
 } else {
     Write-Host 'PASS: Files, actor/skill references, 9 slots, and 10 affix definitions are valid.' -ForegroundColor Green
     Write-Warning 'Godot was not found. Set GODOT_BIN to the Godot executable to run both runtime tests.'

@@ -56,6 +56,12 @@ var last_damage_source
 var taunt_timer := 0.0
 var control_resistance := 0.0
 var accumulated_control := 0.0
+var actor_level := 1
+var active_skill_level := 1
+var passive_skill_level := 1
+var passive_skill_id := ""
+var passive_data: Dictionary = {}
+var basic_attack_count := 0
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
 	actor_id = id
@@ -63,9 +69,15 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 	skill_data = skill
 	faction = team
 	battle = owner_battle
-	base_max_hp = float(info.get("max_hp", 100))
-	base_attack = float(info.get("attack", 10))
-	base_defense = float(info.get("defense", 0))
+	if team == "heroes" and battle.progression != null:
+		actor_level = battle.progression.actor_level(id)
+		active_skill_level = battle.progression.skill_level(id, "active")
+		passive_skill_level = battle.progression.skill_level(id, "passive")
+	passive_skill_id = info.get("passive_skill", info.get("talent", ""))
+	passive_data = battle.passives_config.get(passive_skill_id, {})
+	base_max_hp = float(info.get("max_hp", 100)) * (1.0 + (actor_level - 1) * 0.08)
+	base_attack = float(info.get("attack", 10)) * (1.0 + (actor_level - 1) * 0.06)
+	base_defense = float(info.get("defense", 0)) * (1.0 + (actor_level - 1) * 0.05)
 	base_attack_interval = float(info.get("attack_interval", 1.0))
 	max_hp = base_max_hp
 	hp = max_hp
@@ -149,26 +161,36 @@ func move_toward_point(point: Vector2, _delta: float) -> void:
 func basic_attack() -> void:
 	attack_timer = attack_interval
 	var amount := attack * (1.0 + physical_damage) * randf_range(0.9, 1.1)
-	if actor_data.get("talent", "") == "low_hp_rage" and hp / max_hp < 0.4:
-		amount *= 1.5
+	if passive_data.get("effect", "") == "low_hp_rage" and hp / max_hp < 0.4:
+		amount *= 1.0 + passive_value()
+		battle.note_passive(actor_id, passive_skill_id)
+	if passive_data.get("effect", "") == "boss_slayer" and target.actor_data.has("boss_id"):
+		amount *= 1.0 + passive_value()
+		battle.note_passive(actor_id, passive_skill_id)
 	if actor_data.get("boss_id", "") == "lu_bu" and hp / max_hp < 0.5:
 		amount *= 1.45
 	var critical := randf() < crit_chance
 	if critical:
 		amount *= crit_damage
 	target.take_damage(amount, self, critical, {"kind": "basic", "critical": critical, "allow_triggers": true})
+	basic_attack_count += 1
+	if passive_data.get("effect", "") == "combo" and basic_attack_count % 3 == 0 and is_instance_valid(target) and not target.dead:
+		target.take_damage(attack * passive_value(), self, false, {"kind": "passive", "allow_triggers": true})
+		battle.note_passive(actor_id, passive_skill_id)
 	battle.spawn_tracer(position, target.position, _accent_color())
 
 func try_use_skill() -> bool:
 	var kind: String = skill_data.get("type", "")
 	var cooldown := effective_cooldown(float(skill_data.get("cooldown", 6.0)))
-	var power := float(skill_data.get("power", 1.0))
+	var power := active_skill_power()
 	match kind:
 		"heal_aura":
 			var ally = battle.lowest_health_ally(self)
 			if ally != null and ally.hp < ally.max_hp * 0.88:
-				ally.heal(attack * power, self)
-				ally.add_shield(attack * 1.2)
+				var healing_bonus := passive_value() if passive_data.get("effect", "") == "healing" else 0.0
+				ally.heal(attack * power * (1.0 + healing_bonus), self)
+				ally.add_shield(attack * (1.0 + healing_bonus))
+				if healing_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
 				battle.spawn_ring(ally.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】，治疗 %s" % [_name(), _skill_name(), ally._name()])
@@ -204,7 +226,9 @@ func try_use_skill() -> bool:
 		"poison":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 210)):
 				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "allow_triggers": true})
-				target.apply_poison(attack * power, float(skill_data.get("duration", 6.0)), self, 0)
+				var poison_bonus := passive_value() if passive_data.get("effect", "") == "poison_master" else 0.0
+				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, 0)
+				if poison_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
 				skill_timer = cooldown
 				battle.on_skill(self)
 				combat_event.emit("%s 施放【%s】，目标中毒" % [_name(), _skill_name()])
@@ -213,7 +237,11 @@ func try_use_skill() -> bool:
 			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 170)), 12)
 			if not victims.is_empty():
 				for victim in victims:
-					victim.take_damage(attack * power, self, false, {"kind": "skill", "allow_triggers": true})
+					var damage := attack * power * (1.0 + elemental_damage)
+					if passive_data.get("effect", "") == "boss_slayer" and victim.actor_data.has("boss_id"):
+						damage *= 1.0 + passive_value()
+						battle.note_passive(actor_id, passive_skill_id)
+					victim.take_damage(damage, self, false, {"kind": "skill", "allow_triggers": true})
 				if actor_data.get("boss_id", "") == "mewtwo":
 					add_shield(max_hp * 0.12)
 				skill_timer = cooldown
@@ -225,13 +253,14 @@ func try_use_skill() -> bool:
 			for victim in victims:
 				victim.target = self
 				victim.taunt_timer = float(skill_data.get("duration", 3.0))
+			add_shield(max_hp * power)
 			skill_timer = cooldown
 			battle.on_skill(self)
 			return true
 		"team_haste":
 			var allies: Array = battle.heroes if faction == "heroes" else battle.enemies
 			for ally in allies:
-				if is_instance_valid(ally): ally.skill_timer *= 0.65
+				if is_instance_valid(ally): ally.skill_timer *= maxf(0.35, 1.0 - power)
 			skill_timer = cooldown
 			battle.on_skill(self)
 			return true
@@ -241,7 +270,9 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	if dead:
 		return
 	var amount := preview_damage(raw_amount)
-	if actor_data.get("talent", "") == "damage_reduction": amount = roundi(amount * 0.85)
+	if passive_data.get("effect", "") == "damage_reduction":
+		amount = roundi(amount * (1.0 - passive_value()))
+		battle.note_passive(actor_id, passive_skill_id)
 	if shield > 0.0:
 		var absorbed := minf(shield, amount)
 		shield -= absorbed
@@ -342,13 +373,40 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	physical_damage = maxf(-0.9, float(stats.get("physical_damage", 0)))
 	elemental_damage = maxf(-0.9, float(stats.get("elemental_damage", 0)))
 	life_regen = maxf(0.0, float(stats.get("life_regen", 0)))
+	match passive_data.get("effect", ""):
+		"health_regen":
+			max_hp *= 1.0 + passive_value()
+			life_regen += float(passive_data.get("regen", 0.0)) * (1.0 + (passive_skill_level - 1) * 0.12)
+		"attack_speed":
+			attack_speed = clampf(attack_speed + passive_value(), 0.0, float(rules.get("max_attack_speed", 1.5)))
+		"elemental_damage":
+			elemental_damage += passive_value()
 	attack_interval = maxf(float(rules.get("min_attack_interval", 0.25)), base_attack_interval / (1.0 + attack_speed))
 	hp = clampf(max_hp * hp_ratio, 1.0 if not dead else 0.0, max_hp)
 	health_changed.emit(self)
 	queue_redraw()
 
+func refresh_progression_stats() -> void:
+	if faction != "heroes" or battle.progression == null:
+		return
+	actor_level = battle.progression.actor_level(actor_id)
+	active_skill_level = battle.progression.skill_level(actor_id, "active")
+	passive_skill_level = battle.progression.skill_level(actor_id, "passive")
+	base_max_hp = float(actor_data.get("max_hp", 100)) * (1.0 + (actor_level - 1) * 0.08)
+	base_attack = float(actor_data.get("attack", 10)) * (1.0 + (actor_level - 1) * 0.06)
+	base_defense = float(actor_data.get("defense", 0)) * (1.0 + (actor_level - 1) * 0.05)
+	apply_equipment_stats(battle.inventory.get_actor_stats(actor_id), battle.equipment_config.get("rules", {}))
+
 func effective_cooldown(base_cooldown: float) -> float:
-	return maxf(0.5, base_cooldown * (1.0 - cooldown_reduction))
+	var level_reduction := float(skill_data.get("cooldown_per_level", 0.0)) * (active_skill_level - 1)
+	var team_haste: float = battle.party_passive_value("team_haste") if faction == "heroes" else 0.0
+	return maxf(0.5, base_cooldown * (1.0 - cooldown_reduction) * (1.0 - level_reduction) * (1.0 - minf(0.35, team_haste)))
+
+func active_skill_power() -> float:
+	return float(skill_data.get("power", 1.0)) * (1.0 + float(skill_data.get("power_per_level", 0.0)) * (active_skill_level - 1))
+
+func passive_value() -> float:
+	return float(passive_data.get("value", 0.0)) + float(passive_data.get("per_level", 0.0)) * (passive_skill_level - 1)
 
 func combat_snapshot() -> Dictionary:
 	return {
@@ -362,7 +420,10 @@ func combat_snapshot() -> Dictionary:
 		"physical_damage": physical_damage,
 		"elemental_damage": elemental_damage,
 		"life_regen": life_regen,
-		"attack_interval": attack_interval
+		"attack_interval": attack_interval,
+		"actor_level": actor_level,
+		"active_skill_level": active_skill_level,
+		"passive_skill_level": passive_skill_level
 	}
 
 func _draw() -> void:

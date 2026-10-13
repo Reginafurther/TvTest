@@ -5,9 +5,10 @@ signal inventory_changed
 signal equipment_changed(actor_id: String)
 signal save_completed(path: String)
 
-const SAVE_VERSION := "0.2A"
-const SAVE_PATH := "user://wanjie_v02_save.json"
-const TEST_SAVE_PATH := "user://wanjie_v02_test_save.json"
+const SAVE_VERSION := "0.5"
+const SAVE_PATH := "user://wanjie_v05_inventory.json"
+const LEGACY_SAVE_PATH := "user://wanjie_v02_save.json"
+const TEST_SAVE_PATH := "user://wanjie_v05_test_inventory.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
 
 var config: Dictionary
@@ -15,11 +16,14 @@ var items: Array = []
 var equipped: Dictionary = {}
 var capacity := 120
 var save_path := SAVE_PATH
+var last_error := ""
+var migrated_from_legacy := false
+var legacy_save_path := LEGACY_SAVE_PATH
 
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args() or "--v05-test" in OS.get_cmdline_user_args() or "--v05-core-test" in OS.get_cmdline_user_args() or "--v05-shop-test" in OS.get_cmdline_user_args() or "--v05-skill-test" in OS.get_cmdline_user_args() or "--v05-system-test" in OS.get_cmdline_user_args() or "--v05-persist-write" in OS.get_cmdline_user_args() or "--v05-persist-read" in OS.get_cmdline_user_args():
 		save_path = TEST_SAVE_PATH
 	ensure_equipment_layout()
 
@@ -54,13 +58,20 @@ func find_item(instance_id: String):
 	return null
 
 func equip_item(actor_id: String, instance_id: String, target_slot: String = "") -> bool:
+	last_error = ""
 	if not equipped.has(actor_id):
+		last_error = "角色不存在或尚未初始化装备栏。"
 		return false
 	var item = find_item(instance_id)
 	if item == null:
+		last_error = "背包中找不到这件装备。"
 		return false
 	var slot := target_slot if not target_slot.is_empty() else String(item.get("slot", ""))
+	if not equipped[actor_id].has(slot):
+		last_error = "目标装备栏无效。"
+		return false
 	if slot not in item.get("compatible_slots", [item.get("slot", "")]):
+		last_error = "%s不能穿戴到%s。" % [item.get("name", "该装备"), config.get("slots", {}).get(slot, slot)]
 		return false
 	# One unique instance may be equipped by only one actor and one slot.
 	for owner_id in equipped:
@@ -75,9 +86,12 @@ func equip_item(actor_id: String, instance_id: String, target_slot: String = "")
 	return true
 
 func unequip_slot(actor_id: String, slot: String) -> bool:
+	last_error = ""
 	if not equipped.has(actor_id) or not equipped[actor_id].has(slot):
+		last_error = "角色或装备栏不存在。"
 		return false
 	if String(equipped[actor_id][slot]).is_empty():
+		last_error = "该装备栏当前为空。"
 		return false
 	equipped[actor_id][slot] = ""
 	equipment_changed.emit(actor_id)
@@ -149,10 +163,14 @@ func save_to_disk() -> bool:
 	return true
 
 func load_from_disk() -> bool:
-	if not FileAccess.file_exists(save_path):
+	var source_path := save_path
+	if not FileAccess.file_exists(source_path) and not legacy_save_path.is_empty() and FileAccess.file_exists(legacy_save_path):
+		source_path = legacy_save_path
+		migrated_from_legacy = true
+	if not FileAccess.file_exists(source_path):
 		ensure_equipment_layout()
 		return false
-	var file := FileAccess.open(save_path, FileAccess.READ)
+	var file := FileAccess.open(source_path, FileAccess.READ)
 	var parsed = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("version"):
 		push_warning("存档格式无效，已忽略")
@@ -162,6 +180,8 @@ func load_from_disk() -> bool:
 	remove_broken_references()
 	ensure_equipment_layout()
 	inventory_changed.emit()
+	if migrated_from_legacy:
+		save_to_disk()
 	return true
 
 func remove_broken_references() -> void:

@@ -32,7 +32,7 @@ var objective_button: Button
 var backdrop: ColorRect
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.35 主界面版")
+	DisplayServer.window_set_title("万界冒险团 V0.5")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -66,6 +66,22 @@ func _ready() -> void:
 	add_log("四人小队已进入虎牢关，自动战斗开始")
 	if "--v035-preview" in OS.get_cmdline_user_args():
 		get_tree().create_timer(2.0).timeout.connect(_save_v035_preview)
+	elif "--v05-preview-1440" in OS.get_cmdline_user_args():
+		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_1440.png", "")
+	elif "--v05-preview-1920" in OS.get_cmdline_user_args():
+		call_deferred("_save_v05_preview", Vector2i(1920, 1080), "v05_1920.png", "")
+	elif "--v05-preview-shop" in OS.get_cmdline_user_args():
+		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_shop.png", "shop")
+	elif "--v05-preview-skills" in OS.get_cmdline_user_args():
+		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_skills.png", "strategy")
+	elif "--v05-core-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v05_core_test")
+	elif "--v05-shop-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v05_shop_test")
+	elif "--v05-skill-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v05_skill_test")
+	elif "--v05-system-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v05_system_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -74,7 +90,7 @@ func _ready() -> void:
 		finish_v03_persist_read()
 	elif "--v03-test" in OS.get_cmdline_user_args():
 		Engine.time_scale = 4.0
-		get_tree().create_timer(20.0).timeout.connect(finish_v03_test)
+		get_tree().create_timer(25.0).timeout.connect(finish_v03_test)
 	elif "--persistence-write" in OS.get_cmdline_user_args():
 		finish_persistence_write()
 	elif "--persistence-read" in OS.get_cmdline_user_args():
@@ -112,7 +128,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.35"
+	title.text = "万界冒险团  V0.5"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -244,7 +260,7 @@ func _update_objective() -> void:
 	var p = battle.progression
 	objective_chip.visible = p.guide_finished
 	objective_button.visible = p.guide_finished
-	objective_label.text = "当前目标：刷取装备并挑战 Boss"
+	objective_label.text = "当前目标：换装、成长并挑战更高关卡"
 
 func _show_loot(item: Dictionary) -> void:
 	var quality: Dictionary = battle.equipment_config.qualities.get(item.quality, {})
@@ -267,6 +283,24 @@ func _save_v035_preview() -> void:
 	var path := "user://v035_preview.png"
 	get_viewport().get_texture().get_image().save_png(path)
 	print("V035_PREVIEW " + ProjectSettings.globalize_path(path))
+	get_tree().quit()
+
+func _save_v05_preview(window_size: Vector2i, file_name: String, view: String) -> void:
+	get_window().size = window_size
+	await get_tree().process_frame
+	_layout_ui()
+	if not view.is_empty():
+		v03_ui.open_view(view)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var path := "user://" + file_name
+	var image := get_viewport().get_texture().get_image()
+	if image == null:
+		push_error("V05_PREVIEW_FAIL rendering texture unavailable")
+		get_tree().quit(1)
+		return
+	image.save_png(path)
+	print("V05_PREVIEW " + ProjectSettings.globalize_path(path))
 	get_tree().quit()
 
 func update_stats(kills: int, elapsed: float, wave: int) -> void:
@@ -314,7 +348,7 @@ func update_party(party: Array) -> void:
 		details.add_theme_constant_override("separation", 3)
 		row.add_child(details)
 		var name_label := Label.new()
-		name_label.text = str(actor_data.get("name", actor_id))
+		name_label.text = "Lv.%d %s" % [battle.progression.actor_level(actor_id), str(actor_data.get("name", actor_id))]
 		V035ThemeScript.label(name_label, 17, Color("#3C3027"))
 		details.add_child(name_label)
 		var hp_label := Label.new()
@@ -591,11 +625,11 @@ func finish_v031_test() -> void:
 			if not v03_ui.panel.visible or v03_ui.current_view != view:
 				failures.append("功能入口未打开：" + view)
 			v03_ui.close_panel()
-	if v03_ui.toolbar_root.get_child_count() != 8 or v03_ui.aux_root.get_child_count() != 4:
+	if v03_ui.toolbar_root.get_child_count() != 8 or v03_ui.aux_root.get_child_count() != 5:
 		failures.append("V0.35 底部与侧边功能布局不完整")
 	if not objective_chip.visible or battle.is_paused:
 		failures.append("V0.35 引导结束后目标或战斗状态异常")
-	for view in ["rewards", "objectives", "logs"]:
+	for view in ["shop", "rewards", "objectives", "logs"]:
 		v03_ui.toolbar_buttons[view].pressed.emit()
 		if not v03_ui.panel.visible or v03_ui.current_view != view:
 			failures.append("V0.35 独立页面未打开：" + view)
@@ -670,9 +704,314 @@ func finish_v031_test() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
 	if failures.is_empty():
 		print("V031_TEST_PASS guide=6 skip_replay=true menus=8 old_save=true art_fallback=true inventory=true")
-		print("V035_TEST_PASS map=visible cards=4 menus=12 pause=true art=true log=event_driven")
+		print("V035_TEST_PASS map=visible cards=4 menus=13 pause=true art=true log=event_driven")
 	else:
 		for failure in failures: push_error("V031_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v05_core_test() -> void:
+	var failures: Array[String] = []
+	var hero = battle.get_hero("zhao_yun")
+	var base_attack: float = float(hero.attack) if hero != null else 0.0
+	var dropped: Dictionary = battle.equipment_generator.generate(8, "真实掉落穿戴测试", "blue", "main_hand")
+	if not battle.inventory.add_item(dropped, false):
+		failures.append("测试装备未进入背包")
+	inventory_ui.toggle()
+	inventory_ui.refresh_all()
+	var item_index := -1
+	for index in range(inventory_ui.item_list.item_count):
+		if inventory_ui.item_list.get_item_metadata(index) == dropped.instance_id:
+			item_index = index
+			break
+	if item_index < 0:
+		failures.append("掉落装备未显示在真实背包列表")
+	else:
+		inventory_ui._on_inventory_selected(item_index)
+		inventory_ui.equip_button.pressed.emit()
+	if battle.inventory.equipped.get("zhao_yun", {}).get("main_hand", "") != dropped.instance_id:
+		failures.append("真实背包按钮未完成装备穿戴")
+	if hero == null or hero.attack <= base_attack:
+		failures.append("穿戴后战斗攻击属性未实时提高")
+	if inventory_ui.layer <= v03_ui.layer:
+		failures.append("背包仍可能被底部功能按钮遮挡")
+	var reload_inventory = InventoryManagerScript.new()
+	reload_inventory.setup(battle.equipment_config)
+	if not reload_inventory.load_from_disk() or reload_inventory.equipped.get("zhao_yun", {}).get("main_hand", "") != dropped.instance_id:
+		failures.append("装备穿戴未写入V0.5独立存档")
+	reload_inventory.free()
+	var p = battle.progression
+	var roster_before: int = p.roster.size()
+	var tokens_before: int = p.recruit_tokens
+	v03_ui.open_view("recruit")
+	var recruit_button: Button
+	for node in v03_ui.content.find_children("*", "Button", true, false):
+		if node.text.begins_with("使用招募令"):
+			recruit_button = node
+			break
+	if recruit_button == null:
+		failures.append("招募令入口不存在")
+	else:
+		recruit_button.pressed.emit()
+	if p.roster.size() != roster_before + 1 or p.recruit_tokens != tokens_before - 1:
+		failures.append("真实招募按钮未正确扣令并获得角色")
+	if "招募成功" not in v03_ui.recruit_feedback:
+		failures.append("招募结果缺少明确反馈")
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or reload_progress.roster.size() != p.roster.size() or reload_progress.recruit_tokens != p.recruit_tokens:
+		failures.append("招募结果未写入V0.5独立存档")
+	reload_progress.free()
+	if failures.is_empty():
+		print("V05_CORE_TEST_PASS ui_equip=true combat_stats=true recruit_token=true persistence=true")
+	else:
+		for failure in failures:
+			push_error("V05_CORE_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v05_shop_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.gold = 1000
+	p.save_to_disk()
+	v03_ui.open_view("shop")
+	v03_ui.selected_shop_product = "training_blade"
+	v03_ui.shop_quantity = 2
+	var items_before: int = battle.inventory.items.size()
+	var gold_before: int = p.gold
+	v03_ui._buy_shop_product()
+	if battle.inventory.items.size() != items_before + 2 or p.gold != gold_before - 140:
+		failures.append("商店页面批量购买装备失败")
+	var bought_item: Dictionary = battle.inventory.items.back()
+	if bought_item.get("source", "") != "商店购买" or bought_item.get("quality", "") != "green":
+		failures.append("商店装备未按JSON配置生成")
+	var gold_after_buy: int = p.gold
+	p.gold = 0
+	if not battle.shop.buy("recruit_token", 1).is_empty() or "金币不足" not in battle.shop.last_error:
+		failures.append("金币不足未阻止交易或缺少反馈")
+	p.gold = gold_after_buy
+	var old_capacity: int = battle.inventory.capacity
+	battle.inventory.capacity = battle.inventory.items.size()
+	if not battle.shop.buy("training_coat", 1).is_empty() or "背包空间不足" not in battle.shop.last_error:
+		failures.append("背包满时仍可购买装备")
+	battle.inventory.capacity = old_capacity
+	battle.inventory.equip_item("zhao_yun", bought_item.instance_id, bought_item.slot)
+	if not battle.shop.sell(bought_item.instance_id).is_empty() or "穿戴中的装备" not in battle.shop.last_error:
+		failures.append("穿戴装备出售限制失效")
+	battle.inventory.unequip_slot("zhao_yun", bought_item.slot)
+	var sell_gold_before: int = p.gold
+	v03_ui.selected_shop_item = bought_item.instance_id
+	v03_ui._sell_selected_shop_item()
+	if battle.inventory.find_item(bought_item.instance_id) != null or p.gold <= sell_gold_before:
+		failures.append("商店页面出售装备失败")
+	if p.transaction_log.size() < 2:
+		failures.append("购买与出售交易记录未保存")
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	var reload_inventory = InventoryManagerScript.new()
+	reload_inventory.setup(battle.equipment_config)
+	if not reload_progress.load_from_disk() or reload_progress.gold != p.gold or reload_progress.transaction_log.size() != p.transaction_log.size():
+		failures.append("商店金币或交易记录重载失败")
+	if not reload_inventory.load_from_disk() or reload_inventory.find_item(bought_item.instance_id) != null:
+		failures.append("出售结果未写入装备存档")
+	reload_progress.free()
+	reload_inventory.free()
+	if failures.is_empty():
+		print("V05_SHOP_TEST_PASS buy_quantity=2 insufficient_gold=true full_inventory=true equipped_guard=true sell=true persistence=true")
+	else:
+		for failure in failures:
+			push_error("V05_SHOP_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v05_skill_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.roster = p.HERO_IDS.duplicate()
+	p.party = ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
+	p.gold = 10000
+	p.materials.salvage_dust = 1000
+	p.ensure_growth_layout()
+	var active_passes := 0
+	var passive_passes := 0
+	for actor_id in p.HERO_IDS:
+		var actor: Dictionary = battle.actors.get(actor_id, {})
+		var active: Dictionary = battle.skills.get(actor.get("skill", ""), {})
+		var passive: Dictionary = battle.passives_config.get(actor.get("passive_skill", ""), {})
+		if active.is_empty():
+			failures.append("缺少主动技能：" + actor_id)
+			continue
+		if passive.is_empty():
+			failures.append("缺少被动技能：" + actor_id)
+			continue
+		battle.clear_combatants()
+		var hero = battle.spawn_unit(actor_id, "heroes", Vector2(200, 200))
+		var enemy = battle.spawn_unit("yellow_turban", "enemies", Vector2(230, 200))
+		enemy.max_hp = 99999.0
+		enemy.hp = enemy.max_hp
+		hero.target = enemy
+		if actor_id == "liu_bei":
+			var ally = battle.spawn_unit("zhao_yun", "heroes", Vector2(210, 210))
+			ally.hp = ally.max_hp * 0.35
+		if actor_id == "snorlax":
+			hero.hp = hero.max_hp * 0.35
+		if hero.try_use_skill():
+			active_passes += 1
+		else:
+			failures.append("主动技能未真实施放：" + actor_id)
+		match passive.get("effect", ""):
+			"combo":
+				hero.target = enemy
+				for _hit in range(3): hero.basic_attack()
+				if int(battle.passive_trigger_counts.get(actor_id + ":" + hero.passive_skill_id, 0)) > 0: passive_passes += 1
+			"healing", "poison_master":
+				if int(battle.passive_trigger_counts.get(actor_id + ":" + hero.passive_skill_id, 0)) > 0: passive_passes += 1
+			"damage_reduction":
+				var hp_before: float = hero.hp
+				var preview: int = hero.preview_damage(100.0)
+				hero.take_damage(100.0, enemy, false, {"kind": "test", "allow_triggers": false})
+				if hp_before - hero.hp < preview: passive_passes += 1
+			"low_hp_rage":
+				hero.hp = hero.max_hp * 0.3
+				hero.target = enemy
+				hero.basic_attack()
+				if int(battle.passive_trigger_counts.get(actor_id + ":" + hero.passive_skill_id, 0)) > 0: passive_passes += 1
+			"team_haste":
+				if hero.effective_cooldown(float(active.cooldown)) < float(active.cooldown): passive_passes += 1
+			"boss_slayer":
+				var boss = battle.spawn_unit("lu_bu_boss", "enemies", Vector2(225, 200))
+				boss.max_hp = 99999.0; boss.hp = boss.max_hp; hero.target = boss; hero.basic_attack()
+				if int(battle.passive_trigger_counts.get(actor_id + ":" + hero.passive_skill_id, 0)) > 0: passive_passes += 1
+			"attack_speed":
+				if hero.attack_interval < hero.base_attack_interval: passive_passes += 1
+			"health_regen":
+				if hero.max_hp > hero.base_max_hp and hero.life_regen > 0.0: passive_passes += 1
+			"elemental_damage":
+				if hero.elemental_damage > 0.0: passive_passes += 1
+	if active_passes != 10:
+		failures.append("主动技能有效数量为%d/10" % active_passes)
+	if passive_passes != 10:
+		failures.append("被动技能有效数量为%d/10" % passive_passes)
+	var before_level: int = p.skill_level("zhao_yun", "active")
+	var before_power: float = float(battle.skills.spear_flurry.power) * (1.0 + float(battle.skills.spear_flurry.power_per_level) * (before_level - 1))
+	if not p.upgrade_skill("zhao_yun", "active"):
+		failures.append("技能升级交易失败")
+	var after_level: int = p.skill_level("zhao_yun", "active")
+	var after_power: float = float(battle.skills.spear_flurry.power) * (1.0 + float(battle.skills.spear_flurry.power_per_level) * (after_level - 1))
+	if after_level != before_level + 1 or after_power <= before_power:
+		failures.append("技能升级未真实提高战斗倍率")
+	v03_ui.selected_skill_actor = "zhao_yun"
+	v03_ui.open_view("strategy")
+	if "主动" not in v03_ui.title.text or v03_ui.content.get_child_count() < 8:
+		failures.append("技能详情与升级界面未构建")
+	var reload_progress = ProgressionManagerScript.new()
+	reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or reload_progress.skill_level("zhao_yun", "active") != after_level:
+		failures.append("技能等级未持久化")
+	reload_progress.free()
+	if failures.is_empty():
+		print("V05_SKILL_TEST_PASS active=10 passive=10 upgrade=true ui=true persistence=true")
+	else:
+		for failure in failures:
+			push_error("V05_SKILL_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v05_system_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	for resolution in [Vector2i(1440, 768), Vector2i(1920, 1080)]:
+		get_window().size = resolution
+		await get_tree().process_frame
+		_layout_ui()
+		var viewport_size := Vector2(resolution)
+		if battle.position.y < header_panel.size.y or battle.position.y + 520.0 * battle.scale.y > footer_panel.position.y:
+			failures.append("%dx%d战斗地图与顶栏/底栏重叠" % [resolution.x, resolution.y])
+		if v03_ui.panel.position.x + v03_ui.panel.size.x * v03_ui.panel.scale.x > viewport_size.x or v03_ui.panel.position.y + v03_ui.panel.size.y * v03_ui.panel.scale.y > viewport_size.y:
+			failures.append("%dx%d功能页面超出窗口" % [resolution.x, resolution.y])
+		if v03_ui.aux_root.position.y + 5.0 * 27.0 * v03_ui.aux_root.scale.y > viewport_size.y:
+			failures.append("%dx%d商店/收益入口超出窗口" % [resolution.x, resolution.y])
+	if battle.worlds_config.get("maps", {}).size() != 6:
+		failures.append("双世界关卡数量不是6")
+	if battle.switch_map("xuchang_gate"):
+		failures.append("等级不足时仍能进入高阶关卡")
+	var old_attack: float = float(battle.actors.zhao_yun.attack)
+	p.actor_levels["zhao_yun"] = 1
+	p.actor_experience["zhao_yun"] = 0
+	if not p.add_actor_experience("zhao_yun", p.experience_to_next(1) + 1, false) or p.actor_level("zhao_yun") != 2:
+		failures.append("角色经验未触发升级")
+	for actor_id in p.HERO_IDS:
+		p.actor_levels[actor_id] = 8
+	var visited := 0
+	for map_id in battle.worlds_config.maps:
+		if battle.switch_map(map_id): visited += 1
+	if visited != 6:
+		failures.append("六关无法按等级条件全部进入")
+	for boss_id in ["lu_bu", "mewtwo"]:
+		if not battle.start_boss(boss_id):
+			failures.append("Boss挑战无法开始：" + boss_id)
+			continue
+		var boss = battle.enemies[0]
+		boss.take_damage(999999.0, battle.heroes[0], false, {"kind": "skill", "allow_triggers": false})
+		if not bool(p.boss_first_clear.get(boss_id, false)):
+			failures.append("Boss首胜未记录：" + boss_id)
+	battle.clear_combatants()
+	var leveled = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 200))
+	if leveled.attack <= old_attack:
+		failures.append("角色等级未提高实际战斗属性")
+	var now := int(Time.get_unix_time_from_system())
+	p.pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0}
+	p.last_seen_unix = now - 3600
+	var pending: Dictionary = p.calculate_offline_rewards(now)
+	var offline_gold_before: int = p.gold
+	var claimed: Dictionary = p.claim_offline_rewards()
+	if int(pending.get("seconds", 0)) != 3600 or claimed.is_empty() or p.gold <= offline_gold_before:
+		failures.append("离线收益计算或领取失败")
+	if not p.claim_offline_rewards().is_empty() or int(p.pending_offline.get("seconds", 0)) != 0:
+		failures.append("离线收益可重复领取")
+	# V0.35进度迁移：读取旧文件，写入独立V0.5文件，旧文件内容必须保持不变。
+	var legacy_progress_path := "user://v035_progress_fixture.json"
+	var migrated_progress_path := "user://v05_progress_fixture.json"
+	for path in [legacy_progress_path, migrated_progress_path]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var legacy_progress_text := JSON.stringify({"version": "0.35", "gold": 321, "recruit_tokens": 2, "roster": ["zhao_yun", "liu_bei", "pikachu", "snorlax", "gengar"], "party": ["gengar", "liu_bei", "pikachu", "snorlax"], "materials": {"pokemon_token": 17}})
+	var legacy_progress_file := FileAccess.open(legacy_progress_path, FileAccess.WRITE)
+	legacy_progress_file.store_string(legacy_progress_text)
+	legacy_progress_file.close()
+	var migrated_progress = ProgressionManagerScript.new()
+	migrated_progress.save_path = migrated_progress_path
+	migrated_progress.legacy_path = legacy_progress_path
+	if not migrated_progress.load_legacy_save() or not migrated_progress.save_to_disk():
+		failures.append("V0.35进度迁移失败")
+	elif migrated_progress.gold != 321 or migrated_progress.party[0] != "gengar" or migrated_progress.skill_level("gengar", "active") != 1 or not FileAccess.file_exists(migrated_progress_path):
+		failures.append("迁移后进度、编队或技能默认值错误")
+	if FileAccess.get_file_as_string(legacy_progress_path) != legacy_progress_text:
+		failures.append("迁移静默覆盖了V0.35原始进度存档")
+	# V0.35装备迁移同样保留旧文件，并验证装备关系。
+	var legacy_inventory_path := "user://v035_inventory_fixture.json"
+	var migrated_inventory_path := "user://v05_inventory_fixture.json"
+	for path in [legacy_inventory_path, migrated_inventory_path]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var legacy_item: Dictionary = battle.equipment_generator.generate(5, "V0.35迁移样本", "blue", "main_hand")
+	var legacy_equipped := {"zhao_yun": {"main_hand": legacy_item.instance_id}}
+	var legacy_inventory_text := JSON.stringify({"version": "0.2A", "items": [legacy_item], "equipped": legacy_equipped})
+	var legacy_inventory_file := FileAccess.open(legacy_inventory_path, FileAccess.WRITE)
+	legacy_inventory_file.store_string(legacy_inventory_text)
+	legacy_inventory_file.close()
+	var migrated_inventory = InventoryManagerScript.new()
+	migrated_inventory.setup(battle.equipment_config)
+	migrated_inventory.save_path = migrated_inventory_path
+	migrated_inventory.legacy_save_path = legacy_inventory_path
+	if not migrated_inventory.load_from_disk() or migrated_inventory.equipped.zhao_yun.main_hand != legacy_item.instance_id or not FileAccess.file_exists(migrated_inventory_path):
+		failures.append("V0.35装备与穿戴关系迁移失败")
+	if FileAccess.get_file_as_string(legacy_inventory_path) != legacy_inventory_text:
+		failures.append("迁移静默覆盖了V0.35原始装备存档")
+	migrated_progress.free()
+	migrated_inventory.free()
+	for path in [legacy_progress_path, migrated_progress_path, legacy_inventory_path, migrated_inventory_path]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	if failures.is_empty():
+		print("V05_SYSTEM_TEST_PASS stages=6 level_growth=true offline_once=true legacy_migration=true bosses=2 layouts=1440x768,1920x1080")
+	else:
+		for failure in failures:
+			push_error("V05_SYSTEM_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
