@@ -40,6 +40,10 @@ var pokemon_world_unlocked := false
 var last_stage_id := "hulao_pass"
 var migration_source_version := ""
 var level_history: Dictionary = {}
+var learned_general_skills: Dictionary = {}
+var equipped_general_skills: Dictionary = {}
+var general_skill_levels: Dictionary = {}
+var skill_priorities: Dictionary = {}
 
 func setup() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -80,6 +84,16 @@ func ensure_growth_layout() -> void:
 		skill_levels[actor_id]["passive"] = clampi(int(skill_levels[actor_id].get("passive", 1)), 1, 10)
 		if not level_history.has(actor_id) or typeof(level_history.get(actor_id, [])) != TYPE_ARRAY:
 			level_history[actor_id] = []
+		if not learned_general_skills.has(actor_id) or typeof(learned_general_skills.get(actor_id, [])) != TYPE_ARRAY:
+			learned_general_skills[actor_id] = []
+		if not equipped_general_skills.has(actor_id) or typeof(equipped_general_skills.get(actor_id, {})) != TYPE_DICTIONARY:
+			equipped_general_skills[actor_id] = {"active": "", "passive": ""}
+		for category in ["active", "passive"]:
+			if not equipped_general_skills[actor_id].has(category): equipped_general_skills[actor_id][category] = ""
+		if not general_skill_levels.has(actor_id) or typeof(general_skill_levels.get(actor_id, {})) != TYPE_DICTIONARY:
+			general_skill_levels[actor_id] = {}
+		if not skill_priorities.has(actor_id) or typeof(skill_priorities.get(actor_id, [])) != TYPE_ARRAY:
+			skill_priorities[actor_id] = ["exclusive", "general"]
 
 func ensure_world_layout() -> void:
 	var sanitized: Array = []
@@ -321,6 +335,61 @@ func upgrade_skill(actor_id: String, kind: String) -> bool:
 	save_to_disk()
 	return true
 
+func learn_general_skill(actor_id: String, skill_id: String) -> bool:
+	if actor_id not in roster or skill_id.is_empty() or skill_id in learned_general_skills.get(actor_id, []):
+		return false
+	var cost_gold := 120
+	var cost_dust := 8
+	if gold < cost_gold or int(materials.get("salvage_dust", 0)) < cost_dust:
+		return false
+	gold -= cost_gold
+	materials["salvage_dust"] = int(materials.get("salvage_dust", 0)) - cost_dust
+	learned_general_skills[actor_id].append(skill_id)
+	general_skill_levels[actor_id][skill_id] = 1
+	record_transaction("学习通用技能", "%s:%s" % [actor_id, skill_id], -cost_gold)
+	changed.emit()
+	save_to_disk()
+	return true
+
+func equip_general_skill(actor_id: String, skill_id: String, category: String) -> bool:
+	if actor_id not in roster or category not in ["active", "passive"]:
+		return false
+	if not skill_id.is_empty() and skill_id not in learned_general_skills.get(actor_id, []):
+		return false
+	equipped_general_skills[actor_id][category] = skill_id
+	changed.emit()
+	save_to_disk()
+	return true
+
+func general_skill_level(actor_id: String, skill_id: String) -> int:
+	return maxi(1, int(general_skill_levels.get(actor_id, {}).get(skill_id, 1)))
+
+func upgrade_general_skill(actor_id: String, skill_id: String) -> bool:
+	if skill_id not in learned_general_skills.get(actor_id, []):
+		return false
+	var level := general_skill_level(actor_id, skill_id)
+	if level >= 10:
+		return false
+	var cost_gold := 35 + level * 30
+	var cost_dust := 3 + level * 2
+	if gold < cost_gold or int(materials.get("salvage_dust", 0)) < cost_dust:
+		return false
+	gold -= cost_gold
+	materials["salvage_dust"] = int(materials.get("salvage_dust", 0)) - cost_dust
+	general_skill_levels[actor_id][skill_id] = level + 1
+	record_transaction("通用技能升级", "%s:%s Lv.%d" % [actor_id, skill_id, level + 1], -cost_gold)
+	changed.emit()
+	save_to_disk()
+	return true
+
+func toggle_skill_priority(actor_id: String) -> void:
+	if skill_priorities.get(actor_id, ["exclusive", "general"])[0] == "exclusive":
+		skill_priorities[actor_id] = ["general", "exclusive"]
+	else:
+		skill_priorities[actor_id] = ["exclusive", "general"]
+	changed.emit()
+	save_to_disk()
+
 func record_transaction(action: String, detail: String, gold_delta: int) -> void:
 	transaction_log.push_front({"time": int(Time.get_unix_time_from_system()), "action": action, "detail": detail, "gold": gold_delta})
 	if transaction_log.size() > 30:
@@ -354,7 +423,7 @@ func claim_offline_rewards() -> Dictionary:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "migrated_from_legacy": migrated_from_legacy, "migration_source_version": migration_source_version, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "migrated_from_legacy": migrated_from_legacy, "migration_source_version": migration_source_version, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -402,6 +471,10 @@ func apply_payload(parsed) -> bool:
 	actor_experience = parsed.get("actor_experience", {})
 	skill_levels = parsed.get("skill_levels", {})
 	level_history = parsed.get("level_history", {})
+	learned_general_skills = parsed.get("learned_general_skills", {})
+	equipped_general_skills = parsed.get("equipped_general_skills", {})
+	general_skill_levels = parsed.get("general_skill_levels", {})
+	skill_priorities = parsed.get("skill_priorities", {})
 	transaction_log = parsed.get("transaction_log", [])
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))

@@ -28,6 +28,7 @@ var worlds_config: Dictionary
 var special_config: Dictionary
 var shop_config: Dictionary
 var passives_config: Dictionary
+var general_skills_config: Dictionary
 var inventory
 var equipment_generator
 var progression
@@ -63,6 +64,7 @@ func _ready() -> void:
 	special_config = DataLoaderScript.load_json("res://data/special_effects.json")
 	shop_config = DataLoaderScript.load_json("res://data/shop.json")
 	passives_config = DataLoaderScript.load_json("res://data/passives.json")
+	general_skills_config = DataLoaderScript.load_json("res://data/general_skills.json")
 	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args()
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)

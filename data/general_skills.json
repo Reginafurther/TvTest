@@ -1,0 +1,6 @@
+{
+  "power_strike": {"name":"破阵一击","category":"active","type":"damage","cooldown":7.0,"power":1.35,"power_per_level":0.08,"range":180,"description":"对当前目标造成物理伤害，适合输出与坦克补充爆发。"},
+  "healing_wave": {"name":"治愈波纹","category":"active","type":"heal","cooldown":9.0,"power":0.85,"power_per_level":0.07,"range":260,"description":"治疗生命比例最低的队友。"},
+  "battle_focus": {"name":"战意专注","category":"passive","type":"stat_bonus","attack":0.08,"attack_per_level":0.012,"description":"持续提高最终攻击。"},
+  "iron_will": {"name":"钢铁意志","category":"passive","type":"stat_bonus","health":0.10,"defense":0.08,"per_level":0.012,"description":"持续提高最终生命与防御。"}
+}

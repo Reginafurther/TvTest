@@ -17,6 +17,7 @@ var boss_dialog: ConfirmationDialog
 var pending_boss := ""
 var toolbar_buttons: Dictionary = {}
 var inventory_ui
+var character_ui
 var toolbar_root: GridContainer
 var aux_root: VBoxContainer
 var log_lines: Array[String] = []
@@ -49,7 +50,7 @@ func build_toolbar() -> void:
 	var backpack_space := Control.new()
 	backpack_space.custom_minimum_size = Vector2(105, 57)
 	toolbar_root.add_child(backpack_space)
-	for spec in [["伙伴", "party"], ["招募", "recruit"], ["世界", "world"], ["Boss", "boss"], ["锻造", "craft"], ["策略", "strategy"], ["暂停", "pause"]]:
+	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["Boss", "boss"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(105, 57)
@@ -57,6 +58,8 @@ func build_toolbar() -> void:
 		V035ThemeScript.button(button, "gold" if spec[1] in ["recruit", "boss"] else "cream")
 		if spec[1] == "pause":
 			button.pressed.connect(_toggle_pause)
+		elif spec[1] in ["party", "strategy"]:
+			button.pressed.connect(_open_character_view.bind("growth" if spec[1] == "party" else "skills"))
 		else:
 			button.pressed.connect(open_view.bind(spec[1]))
 		toolbar_root.add_child(button)
@@ -129,6 +132,8 @@ func build_panel() -> void:
 	add_child(boss_dialog)
 
 func open_view(view: String) -> void:
+	if character_ui != null and character_ui.panel.visible:
+		character_ui.close_panel()
 	if inventory_ui != null and inventory_ui.panel.visible:
 		inventory_ui.toggle()
 	current_view = view
@@ -136,6 +141,10 @@ func open_view(view: String) -> void:
 	battle.is_paused = true
 	battle.battle_state_changed.emit("功能界面中")
 	refresh()
+
+func _open_character_view(tab_name: String) -> void:
+	if panel.visible: close_panel()
+	if character_ui != null: character_ui.open(tab_name)
 
 func close_panel() -> void:
 	panel.visible = false

@@ -22,7 +22,7 @@ func is_equipped(instance_id: String) -> bool:
 
 func dismantle(instance_id: String) -> int:
 	var item = inventory.find_item(instance_id)
-	if item == null or is_equipped(instance_id):
+	if item == null or is_equipped(instance_id) or bool(item.get("locked", false)):
 		return 0
 	var reward := maxi(1, (int(item.quality_rank) + 1) * 4 + int(item.level) * 2)
 	var index: int = inventory.items.find(item)
@@ -36,7 +36,7 @@ func dismantle(instance_id: String) -> int:
 
 func begin_reroll(instance_id: String, affix_index: int) -> Dictionary:
 	var item = inventory.find_item(instance_id)
-	if item == null or affix_index < 0 or affix_index >= item.get("affixes", []).size():
+	if item == null or bool(item.get("locked", false)) or affix_index < 0 or affix_index >= item.get("affixes", []).size():
 		return {}
 	var cost := 8 + int(item.level) * 2 + int(item.quality_rank) * 5
 	if not progression.spend_material("salvage_dust", cost):

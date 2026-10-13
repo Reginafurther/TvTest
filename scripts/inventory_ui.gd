@@ -23,6 +23,7 @@ var selected_equipment_slot := ""
 var actor_ids: Array = []
 var actor_names: Array = []
 var feature_ui
+var character_ui
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -172,7 +173,10 @@ func build_detail_column(parent: HBoxContainer) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_inventory"):
-		toggle()
+		if character_ui != null:
+			character_ui.toggle("inventory")
+		else:
+			toggle()
 		get_viewport().set_input_as_handled()
 
 func toggle() -> void:

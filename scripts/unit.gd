@@ -65,6 +65,11 @@ var basic_attack_count := 0
 var monster_level := 1
 var enemy_type := "normal"
 var reward_claimed := false
+var general_active_id := ""
+var general_passive_id := ""
+var general_active_data: Dictionary = {}
+var general_passive_data: Dictionary = {}
+var general_skill_timer := 0.0
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
 	actor_id = id
@@ -76,6 +81,10 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 		actor_level = battle.progression.actor_level(id)
 		active_skill_level = battle.progression.skill_level(id, "active")
 		passive_skill_level = battle.progression.skill_level(id, "passive")
+		general_active_id = str(battle.progression.equipped_general_skills.get(id, {}).get("active", ""))
+		general_passive_id = str(battle.progression.equipped_general_skills.get(id, {}).get("passive", ""))
+		general_active_data = battle.general_skills_config.get(general_active_id, {})
+		general_passive_data = battle.general_skills_config.get(general_passive_id, {})
 	passive_skill_id = info.get("passive_skill", info.get("talent", ""))
 	passive_data = battle.passives_config.get(passive_skill_id, {})
 	base_max_hp = float(info.get("max_hp", 100)) * (1.0 + (actor_level - 1) * 0.08)
@@ -90,6 +99,7 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 	attack_range = float(info.get("attack_range", 60))
 	attack_interval = base_attack_interval
 	skill_timer = randf_range(1.5, float(skill.get("cooldown", 6.0)))
+	general_skill_timer = randf_range(1.8, float(general_active_data.get("cooldown", 7.0))) if not general_active_data.is_empty() else 9999.0
 	if info.has("boss_id"):
 		control_resistance = 0.35
 	add_to_group(team)
@@ -106,6 +116,7 @@ func _physics_process(delta: float) -> void:
 		return
 	attack_timer = maxf(0.0, attack_timer - delta)
 	skill_timer = maxf(0.0, skill_timer - delta)
+	general_skill_timer = maxf(0.0, general_skill_timer - delta)
 	repath_timer -= delta
 	hit_flash = maxf(0.0, hit_flash - delta)
 	taunt_timer = maxf(0.0, taunt_timer - delta)
@@ -138,7 +149,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		return
 	var distance := position.distance_to(target.position)
-	if skill_timer <= 0.0 and battle.strategy_allows(self) and try_use_skill():
+	if try_auto_skills():
 		return
 	if faction == "heroes" and actor_data.get("combat_style", "melee") == "ranged":
 		var preferred := float(actor_data.get("preferred_range", attack_range * 0.8))
@@ -191,7 +202,7 @@ func process_healer(delta: float) -> void:
 		velocity = Vector2.ZERO
 		return
 	target = ally
-	if skill_timer <= 0.0 and battle.strategy_allows(self) and try_use_skill():
+	if try_auto_skills():
 		return
 	if position.distance_to(ally.position) > attack_range:
 		move_toward_point(ally.position, delta)
@@ -227,6 +238,43 @@ func basic_attack() -> void:
 		target.take_damage(attack * passive_value(), self, false, {"kind": "passive", "allow_triggers": true})
 		battle.note_passive(actor_id, passive_skill_id)
 	battle.spawn_tracer(position, target.position, _accent_color())
+
+func try_auto_skills() -> bool:
+	var priority: Array = battle.progression.skill_priorities.get(actor_id, ["exclusive", "general"]) if faction == "heroes" else ["exclusive"]
+	for kind in priority:
+		if kind == "general" and general_skill_timer <= 0.0 and try_use_general_skill():
+			return true
+		if kind == "exclusive" and skill_timer <= 0.0 and battle.strategy_allows(self) and try_use_skill():
+			return true
+	return false
+
+func try_use_general_skill() -> bool:
+	if general_active_data.is_empty():
+		return false
+	var level: int = battle.progression.general_skill_level(actor_id, general_active_id)
+	var power: float = float(general_active_data.get("power", 1.0)) * (1.0 + float(general_active_data.get("power_per_level", 0.0)) * (level - 1))
+	match general_active_data.get("type", ""):
+		"damage":
+			var enemy = battle.find_closest_enemy(self)
+			if is_instance_valid(enemy) and position.distance_to(enemy.position) <= float(general_active_data.get("range", 180)):
+				enemy.take_damage(attack * power * (1.0 + physical_damage), self, false, {"kind": "skill", "allow_triggers": true})
+				battle.spawn_ring(enemy.position, Color("#F2C66D"))
+				general_skill_timer = effective_general_cooldown(float(general_active_data.get("cooldown", 7.0)))
+				combat_event.emit("%s 施放通用技能【%s】" % [_name(), general_active_data.get("name", general_active_id)])
+				battle.on_skill(self)
+				return true
+		"heal":
+			var ally = battle.lowest_health_ally(self, float(general_active_data.get("range", 260)))
+			if is_instance_valid(ally) and ally.hp < ally.max_hp:
+				ally.heal(attack * power, self)
+				battle.spawn_ring(ally.position, Color("#78F0A8"))
+				general_skill_timer = effective_general_cooldown(float(general_active_data.get("cooldown", 9.0)))
+				battle.on_skill(self)
+				return true
+	return false
+
+func effective_general_cooldown(base_cooldown: float) -> float:
+	return maxf(0.5, base_cooldown * (1.0 - cooldown_reduction))
 
 func try_use_skill() -> bool:
 	var kind: String = skill_data.get("type", "")
@@ -422,6 +470,12 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	physical_damage = maxf(-0.9, float(stats.get("physical_damage", 0)))
 	elemental_damage = maxf(-0.9, float(stats.get("elemental_damage", 0)))
 	life_regen = maxf(0.0, float(stats.get("life_regen", 0)))
+	if general_passive_data.get("type", "") == "stat_bonus":
+		var general_level: int = battle.progression.general_skill_level(actor_id, general_passive_id)
+		var level_bonus: float = float(general_passive_data.get("per_level", general_passive_data.get("attack_per_level", 0.0))) * (general_level - 1)
+		max_hp *= 1.0 + float(general_passive_data.get("health", 0.0)) + level_bonus if float(general_passive_data.get("health", 0.0)) > 0.0 else 1.0
+		attack *= 1.0 + float(general_passive_data.get("attack", 0.0)) + float(general_passive_data.get("attack_per_level", 0.0)) * (general_level - 1)
+		defense *= 1.0 + float(general_passive_data.get("defense", 0.0)) + level_bonus if float(general_passive_data.get("defense", 0.0)) > 0.0 else 1.0
 	match passive_data.get("effect", ""):
 		"health_regen":
 			max_hp *= 1.0 + passive_value()
@@ -473,6 +527,8 @@ func combat_snapshot() -> Dictionary:
 		"actor_level": actor_level,
 		"active_skill_level": active_skill_level,
 		"passive_skill_level": passive_skill_level
+		,"general_active": general_active_id
+		,"general_passive": general_passive_id
 	}
 
 func _draw() -> void:

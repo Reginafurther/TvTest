@@ -5,10 +5,11 @@ signal inventory_changed
 signal equipment_changed(actor_id: String)
 signal save_completed(path: String)
 
-const SAVE_VERSION := "0.5"
-const SAVE_PATH := "user://wanjie_v05_inventory.json"
-const LEGACY_SAVE_PATH := "user://wanjie_v02_save.json"
-const TEST_SAVE_PATH := "user://wanjie_v05_test_inventory.json"
+const SAVE_VERSION := "0.6"
+const SAVE_PATH := "user://wanjie_v06_inventory.json"
+const LEGACY_SAVE_PATH := "user://wanjie_v05_inventory.json"
+const V02_LEGACY_SAVE_PATH := "user://wanjie_v02_save.json"
+const TEST_SAVE_PATH := "user://wanjie_v06_test_inventory.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
 
 var config: Dictionary
@@ -45,7 +46,9 @@ func add_item(item: Dictionary, autosave: bool = true) -> bool:
 		return false
 	if find_item(item.get("instance_id", "")) != null:
 		return false
-	items.append(item.duplicate(true))
+	var stored := item.duplicate(true)
+	stored["locked"] = bool(stored.get("locked", false))
+	items.append(stored)
 	inventory_changed.emit()
 	if autosave:
 		save_to_disk()
@@ -103,6 +106,67 @@ func get_equipped_item(actor_id: String, slot: String):
 	if not equipped.has(actor_id):
 		return null
 	return find_item(String(equipped[actor_id].get(slot, "")))
+
+func item_owner(instance_id: String) -> String:
+	for actor_id in equipped:
+		if instance_id in equipped[actor_id].values():
+			return actor_id
+	return ""
+
+func set_item_locked(instance_id: String, locked: bool) -> bool:
+	var item = find_item(instance_id)
+	if item == null:
+		last_error = "背包中找不到这件装备。"
+		return false
+	item.set("locked", locked)
+	inventory_changed.emit()
+	save_to_disk()
+	return true
+
+func item_score(item: Dictionary) -> float:
+	var stats := item_stats(item)
+	return float(stats.get("attack", 0)) * 5.0 + float(stats.get("defense", 0)) * 3.0 + float(stats.get("health", 0)) * 0.30 + float(stats.get("crit_chance", 0)) * 300.0 + float(stats.get("crit_damage", 0)) * 120.0 + float(stats.get("attack_speed", 0)) * 180.0 + float(stats.get("cooldown_reduction", 0)) * 180.0 + float(stats.get("physical_damage", 0)) * 140.0 + float(stats.get("elemental_damage", 0)) * 140.0 + float(stats.get("life_regen", 0)) * 8.0
+
+func optimize_candidates(actor_id: String, min_quality_rank: int = 3, maximum: int = 3) -> Array:
+	var choices: Array = []
+	var chosen_ids: Array = []
+	if not equipped.has(actor_id):
+		return choices
+	for slot in equipped[actor_id]:
+		var current = get_equipped_item(actor_id, slot)
+		var current_score := item_score(current) if current != null else 0.0
+		var best_item
+		var best_gain := 0.0
+		for item in items:
+			if str(item.get("instance_id", "")) in chosen_ids:
+				continue
+			if int(item.get("quality_rank", 0)) < min_quality_rank:
+				continue
+			var owner := item_owner(str(item.get("instance_id", "")))
+			if not owner.is_empty() and owner != actor_id:
+				continue
+			if slot not in item.get("compatible_slots", [item.get("slot", "")]):
+				continue
+			var gain := item_score(item) - current_score
+			if gain > best_gain and str(item.get("instance_id", "")) != str(equipped[actor_id][slot]):
+				best_gain = gain
+				best_item = item
+		if best_item != null:
+			choices.append({"instance_id": best_item.instance_id, "slot": slot, "gain": best_gain, "name": best_item.get("name", "装备")})
+			chosen_ids.append(str(best_item.instance_id))
+	choices.sort_custom(func(a, b): return float(a.gain) > float(b.gain))
+	if choices.size() > maximum:
+		choices.resize(maximum)
+	return choices
+
+func apply_optimization(actor_id: String, choices: Array) -> int:
+	var applied := 0
+	for choice in choices.slice(0, 3):
+		if item_owner(str(choice.instance_id)) not in ["", actor_id]:
+			continue
+		if equip_item(actor_id, str(choice.instance_id), str(choice.slot)):
+			applied += 1
+	return applied
 
 func get_actor_stats(actor_id: String, excluding_slot: String = "") -> Dictionary:
 	var totals: Dictionary = {}
@@ -167,6 +231,9 @@ func load_from_disk() -> bool:
 	if not FileAccess.file_exists(source_path) and not legacy_save_path.is_empty() and FileAccess.file_exists(legacy_save_path):
 		source_path = legacy_save_path
 		migrated_from_legacy = true
+	if not FileAccess.file_exists(source_path) and FileAccess.file_exists(V02_LEGACY_SAVE_PATH):
+		source_path = V02_LEGACY_SAVE_PATH
+		migrated_from_legacy = true
 	if not FileAccess.file_exists(source_path):
 		ensure_equipment_layout()
 		return false
@@ -176,6 +243,8 @@ func load_from_disk() -> bool:
 		push_warning("存档格式无效，已忽略")
 		return false
 	items = parsed.get("items", [])
+	for item in items:
+		item["locked"] = bool(item.get("locked", false))
 	equipped = parsed.get("equipped", {})
 	remove_broken_references()
 	ensure_equipment_layout()

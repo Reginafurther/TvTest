@@ -61,6 +61,9 @@ func sell(instance_id: String) -> Dictionary:
 	if item == null:
 		last_error = "背包中找不到该装备。"
 		return {}
+	if bool(item.get("locked", false)):
+		last_error = "锁定装备不可出售，请先解除锁定。"
+		return {}
 	if is_equipped(instance_id):
 		last_error = "穿戴中的装备不可出售，请先卸下。"
 		return {}
