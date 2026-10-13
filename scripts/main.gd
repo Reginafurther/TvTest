@@ -102,6 +102,8 @@ func _ready() -> void:
 		call_deferred("finish_v06_character_test")
 	elif "--v061-start-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v061_start_test")
+	elif "--v061-ai-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_ai_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -1406,6 +1408,85 @@ func finish_v061_start_test() -> void:
 		print("V061_START_TEST_PASS liu_bei_only=true tokens=150 recruit_token_removed=true recruit3=true empty_slots=true deploy_replace=true persistence=true old_save_ignored=true")
 	else:
 		for failure in failures: push_error("V061_START_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_ai_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.roster = ["snorlax", "zhao_yun", "pikachu", "liu_bei"]
+	p.party = ["snorlax", "zhao_yun", "pikachu", "liu_bei"]
+	battle.clear_combatants()
+	battle.combat_stats.reset(battle.elapsed)
+	battle.ai_trace.clear()
+	battle.spawn_party()
+	var by_id: Dictionary = {}
+	for hero in battle.heroes: by_id[hero.actor_id] = hero
+	if by_id.size() != 4:
+		failures.append("受控AI测试未生成四种职业角色")
+	else:
+		if by_id.snorlax.position.x <= by_id.pikachu.position.x or by_id.zhao_yun.position.x <= by_id.liu_bei.position.x:
+			failures.append("阵型数据未让坦克/近战出生在远程与治疗之前")
+	Engine.time_scale = 4.0
+	for test_wave in range(1, 4):
+		for enemy in battle.enemies:
+			if is_instance_valid(enemy): enemy.queue_free()
+		battle.enemies.clear()
+		battle.ai_test_wave = test_wave
+		var interceptor_target = battle.spawn_unit("yellow_turban", "enemies", Vector2(690 + test_wave * 12, 250 + test_wave * 10))
+		var second_enemy = battle.spawn_unit("zubat", "enemies", Vector2(900, 62 + test_wave * 18))
+		for enemy in [interceptor_target, second_enemy]:
+			enemy.max_hp = 100000.0
+			enemy.hp = enemy.max_hp
+			enemy.attack = 1.0
+			enemy.move_speed = 0.0
+		# 明确制造一名威胁后排的敌人，验证坦克动态拦截，而非只追最近目标。
+		interceptor_target.target = by_id.pikachu
+		interceptor_target.taunt_timer = 99.0
+		by_id.snorlax.hp = maxf(1.0, by_id.snorlax.max_hp * 0.58)
+		await get_tree().create_timer(8.0).timeout
+	Engine.time_scale = 1.0
+	var wave_seen: Dictionary = {}
+	var actions: Dictionary = {}
+	var distances: Dictionary = {"snorlax": [], "pikachu": []}
+	var final_distances: Dictionary = {}
+	var snorlax_intercepts := false
+	for row in battle.ai_trace:
+		wave_seen[int(row.test_wave)] = true
+		var actor_id := str(row.actor_id)
+		if not actions.has(actor_id): actions[actor_id] = {}
+		actions[actor_id][str(row.action)] = true
+		if distances.has(actor_id) and float(row.enemy_distance) >= 0.0:
+			distances[actor_id].append(float(row.enemy_distance))
+			final_distances["%s:%d" % [actor_id, int(row.test_wave)]] = float(row.enemy_distance)
+		if actor_id == "snorlax" and str(row.target) == "yellow_turban": snorlax_intercepts = true
+	if wave_seen.size() != 3:
+		failures.append("AI位置轨迹未覆盖三轮战斗")
+	if not snorlax_intercepts:
+		failures.append("坦克未动态拦截攻击后排的敌人")
+	for actor_id in ["snorlax", "zhao_yun"]:
+		if not actions.get(actor_id, {}).has("advance") and not actions.get(actor_id, {}).has("engage") and not actions.get(actor_id, {}).has("basic_attack"):
+			failures.append(actor_id + "未主动接敌")
+	if not actions.get("pikachu", {}).has("hold_range") and not actions.get("pikachu", {}).has("basic_attack"):
+		failures.append("远程角色未进入安全射击状态")
+	var safe_samples := 0
+	for distance in distances.pikachu:
+		if float(distance) >= float(battle.actors.pikachu.minimum_safe_distance) * 0.75: safe_samples += 1
+	if distances.pikachu.is_empty() or float(safe_samples) / distances.pikachu.size() < 0.75:
+		failures.append("皮卡丘长时间停留在最低安全距离内")
+	for test_wave in range(1, 4):
+		var tank_key := "snorlax:%d" % test_wave
+		var ranged_key := "pikachu:%d" % test_wave
+		if not final_distances.has(tank_key) or not final_distances.has(ranged_key) or float(final_distances[tank_key]) >= float(final_distances[ranged_key]):
+			failures.append("第%d轮结束时坦克没有比远程更靠近敌人" % test_wave)
+	var stats: Dictionary = battle.combat_stats.actors
+	if float(stats.get("liu_bei", {}).get("healing", 0.0)) <= 0.0 or float(stats.get("liu_bei", {}).get("basic", 0.0)) > 0.0:
+		failures.append("刘备普通攻击未保持治疗行为")
+	if float(stats.get("snorlax", {}).get("basic", 0.0)) <= 0.0:
+		failures.append("卡比兽普通攻击未造成真实伤害")
+	if failures.is_empty():
+		print("V061_AI_TEST_PASS waves=3 tank_intercept=true melee_advance=true ranged_spacing=true healer_basic=heal snorlax_basic=damage trace_rows=%d" % battle.ai_trace.size())
+	else:
+		for failure in failures: push_error("V061_AI_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 

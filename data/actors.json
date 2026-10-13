@@ -3,7 +3,7 @@
     "name": "赵云",
     "world": "三国",
     "role": "高速输出",
-    "combat_style": "melee",
+    "combat_style": "melee", "combat_role": "melee_dps", "target_priority": "high_threat", "preferred_range": 58, "minimum_safe_distance": 0, "formation_position": "front_flank",
     "max_hp": 460,
     "attack": 48,
     "defense": 16,
@@ -19,7 +19,7 @@
     "name": "刘备",
     "world": "三国",
     "role": "治疗辅助",
-    "combat_style": "healer",
+    "combat_style": "healer", "combat_role": "healer", "target_priority": "lowest_health_ally", "minimum_safe_distance": 120, "formation_position": "back_center",
     "basic_action": "heal",
     "preferred_range": 155,
     "max_hp": 520,
@@ -37,7 +37,7 @@
     "name": "皮卡丘",
     "world": "宝可梦",
     "role": "雷电输出",
-    "combat_style": "ranged",
+    "combat_style": "ranged", "combat_role": "ranged_dps", "target_priority": "low_health_enemy", "minimum_safe_distance": 110, "formation_position": "back_flank",
     "preferred_range": 155,
     "max_hp": 390,
     "attack": 44,
@@ -54,7 +54,7 @@
     "name": "卡比兽",
     "world": "宝可梦",
     "role": "恢复坦克",
-    "combat_style": "tank",
+    "combat_style": "tank", "combat_role": "tank", "target_priority": "intercept_backline", "preferred_range": 52, "minimum_safe_distance": 0, "formation_position": "front_center",
     "max_hp": 850,
     "attack": 35,
     "defense": 28,
@@ -97,27 +97,27 @@
     "skill": "enemy_strike"
   },
   "zhang_fei": {
-    "name": "张飞", "world": "三国", "role": "嘲讽坦克", "combat_style": "tank", "max_hp": 760, "attack": 37, "defense": 31,
+    "name": "张飞", "world": "三国", "role": "嘲讽坦克", "combat_style": "tank", "combat_role": "tank", "target_priority": "intercept_backline", "preferred_range": 52, "minimum_safe_distance": 0, "formation_position": "front_center", "max_hp": 760, "attack": 37, "defense": 31,
     "move_speed": 78, "attack_range": 62, "attack_interval": 1.2, "color": "5C4538", "accent": "E2C36A", "skill": "roaring_taunt", "passive_skill": "damage_reduction", "talent": "damage_reduction"
   },
   "dian_wei": {
-    "name": "典韦", "world": "三国", "role": "狂暴反击", "combat_style": "melee", "max_hp": 680, "attack": 43, "defense": 25,
+    "name": "典韦", "world": "三国", "role": "狂暴反击", "combat_style": "melee", "combat_role": "melee_dps", "target_priority": "high_threat", "preferred_range": 56, "minimum_safe_distance": 0, "formation_position": "front_flank", "max_hp": 680, "attack": 43, "defense": 25,
     "move_speed": 84, "attack_range": 64, "attack_interval": 1.05, "color": "9E4D43", "accent": "E8D0A0", "skill": "blood_rage", "passive_skill": "low_hp_rage", "talent": "low_hp_rage"
   },
   "zhuge_liang": {
-    "name": "诸葛亮", "world": "三国", "role": "阵法辅助", "combat_style": "ranged", "preferred_range": 170, "max_hp": 440, "attack": 42, "defense": 15,
+    "name": "诸葛亮", "world": "三国", "role": "阵法辅助", "combat_style": "ranged", "combat_role": "ranged_dps", "target_priority": "cluster", "preferred_range": 180, "minimum_safe_distance": 120, "formation_position": "back_flank", "max_hp": 440, "attack": 42, "defense": 15,
     "move_speed": 88, "attack_range": 205, "attack_interval": 1.25, "color": "6C8DB8", "accent": "E9F1F5", "skill": "eight_trigrams", "passive_skill": "team_haste", "talent": "team_haste"
   },
   "lu_bu": {
-    "name": "吕布", "world": "三国", "role": "范围爆发", "combat_style": "melee", "max_hp": 610, "attack": 64, "defense": 22,
+    "name": "吕布", "world": "三国", "role": "范围爆发", "combat_style": "melee", "combat_role": "melee_dps", "target_priority": "high_threat", "preferred_range": 65, "minimum_safe_distance": 0, "formation_position": "front_flank", "max_hp": 610, "attack": 64, "defense": 22,
     "move_speed": 98, "attack_range": 78, "attack_interval": 1.0, "color": "A62632", "accent": "F3C453", "skill": "sky_piercer", "passive_skill": "boss_slayer", "talent": "boss_slayer"
   },
   "gengar": {
-    "name": "耿鬼", "world": "宝可梦", "role": "诅咒中毒", "combat_style": "ranged", "preferred_range": 150, "max_hp": 420, "attack": 47, "defense": 13,
+    "name": "耿鬼", "world": "宝可梦", "role": "诅咒中毒", "combat_style": "ranged", "combat_role": "ranged_dps", "target_priority": "status_target", "preferred_range": 165, "minimum_safe_distance": 105, "formation_position": "back_flank", "max_hp": 420, "attack": 47, "defense": 13,
     "move_speed": 108, "attack_range": 185, "attack_interval": 1.0, "color": "5E3C8C", "accent": "E48BDE", "skill": "venom_curse", "passive_skill": "poison_master", "talent": "poison_master"
   },
   "mewtwo": {
-    "name": "超梦", "world": "宝可梦", "role": "超能爆发", "combat_style": "ranged", "preferred_range": 190, "max_hp": 540, "attack": 68, "defense": 18,
+    "name": "超梦", "world": "宝可梦", "role": "超能爆发", "combat_style": "ranged", "combat_role": "ranged_dps", "target_priority": "high_threat", "preferred_range": 205, "minimum_safe_distance": 130, "formation_position": "back_center", "max_hp": 540, "attack": 68, "defense": 18,
     "move_speed": 102, "attack_range": 230, "attack_interval": 1.1, "color": "D6D0E8", "accent": "9C62C8", "skill": "psycho_burst", "passive_skill": "psychic_focus", "talent": "psychic_focus"
   },
   "forest_bug": {

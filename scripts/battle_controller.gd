@@ -54,6 +54,9 @@ var trigger_counts := {"crit_lightning": 0, "thorn_reflect": 0, "poison_spread":
 var passive_trigger_counts: Dictionary = {}
 var stage_cleared := false
 var stage_boss_active := false
+var ai_trace: Array = []
+var ai_trace_timer := 0.0
+var ai_test_wave := 0
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -122,7 +125,7 @@ func spawn_party() -> void:
 	for i in range(ids.size()):
 		if str(ids[i]).is_empty():
 			continue
-		var pos := Vector2(120 + (i % 2) * 70, 190 + (i / 2) * 110)
+		var pos := formation_point(str(ids[i]), i)
 		spawn_unit(ids[i], "heroes", pos)
 	party_changed.emit(heroes)
 
@@ -170,6 +173,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2):
 	add_child(unit)
 	if faction == "heroes":
 		heroes.append(unit)
+		unit.home_position = pos
 		unit.apply_equipment_stats(inventory.get_actor_stats(id), equipment_config.get("rules", {}))
 		unit.set_special_effects(inventory.get_actor_specials(id))
 	else:
@@ -180,6 +184,10 @@ func _process(delta: float) -> void:
 	if is_paused or game_over:
 		return
 	elapsed += delta
+	ai_trace_timer += delta
+	if ai_trace_timer >= 0.25:
+		ai_trace_timer = 0.0
+		record_ai_snapshot()
 	for key in effect_cooldowns.keys():
 		effect_cooldowns[key] = maxf(0.0, float(effect_cooldowns[key]) - delta)
 	if enemies.is_empty() and has_damage_dealer_in_party():
@@ -213,6 +221,62 @@ func find_closest_enemy(seeker):
 				best = distance
 				closest = candidate
 	return closest
+
+func select_combat_target(seeker):
+	var pool: Array = enemies if seeker.faction == "heroes" else heroes
+	var available: Array = []
+	for candidate in pool:
+		if is_instance_valid(candidate) and not candidate.dead:
+			available.append(candidate)
+	if available.is_empty(): return null
+	if seeker.faction != "heroes":
+		return find_closest_enemy(seeker)
+	match seeker.actor_data.get("target_priority", "closest"):
+		"intercept_backline":
+			for enemy in available:
+				if is_instance_valid(enemy.target) and enemy.target.actor_data.get("combat_role", "") in ["ranged_dps", "healer"]:
+					return enemy
+		"low_health_enemy":
+			available.sort_custom(func(a, b): return a.hp / a.max_hp < b.hp / b.max_hp)
+			return available[0]
+		"high_threat":
+			available.sort_custom(func(a, b): return a.attack > b.attack)
+			return available[0]
+		"status_target":
+			for enemy in available:
+				if enemy.poison_time <= 0.0: return enemy
+	return find_closest_enemy(seeker)
+
+func formation_point(actor_id: String, slot_index: int) -> Vector2:
+	var formation := str(actors.get(actor_id, {}).get("formation_position", "front_flank"))
+	var y := 135.0 + slot_index * 88.0
+	match formation:
+		"front_center": return Vector2(315, y)
+		"front_flank": return Vector2(245, y)
+		"back_center": return Vector2(105, y)
+		"back_flank": return Vector2(135, y)
+	return Vector2(200, y)
+
+func tactical_ranged_point(unit, threat) -> Vector2:
+	var preferred := float(unit.actor_data.get("preferred_range", unit.attack_range * 0.85))
+	var away: Vector2 = threat.position.direction_to(unit.position)
+	if away.length_squared() < 0.01: away = Vector2.LEFT
+	var desired: Vector2 = threat.position + away.normalized() * preferred
+	desired.x = clampf(desired.x, 28.0, BattleMapScript.ARENA_SIZE.x - 28.0)
+	desired.y = clampf(desired.y, 38.0, BattleMapScript.ARENA_SIZE.y - 28.0)
+	if point_blocked(desired):
+		var side := Vector2(-away.y, away.x) * (70.0 if hash(unit.actor_id) % 2 == 0 else -70.0)
+		desired += side
+		desired.x = clampf(desired.x, 28.0, BattleMapScript.ARENA_SIZE.x - 28.0)
+		desired.y = clampf(desired.y, 38.0, BattleMapScript.ARENA_SIZE.y - 28.0)
+	return desired
+
+func record_ai_snapshot() -> void:
+	for hero in heroes:
+		if not is_instance_valid(hero) or hero.dead: continue
+		var enemy = find_closest_enemy(hero)
+		ai_trace.append({"time": elapsed, "test_wave": ai_test_wave, "actor_id": hero.actor_id, "role": hero.actor_data.get("combat_role", ""), "position": hero.position, "enemy_distance": hero.position.distance_to(enemy.position) if enemy != null else -1.0, "velocity": hero.velocity, "target": hero.target.actor_id if is_instance_valid(hero.target) else "", "action": hero.current_action})
+	if ai_trace.size() > 1200: ai_trace = ai_trace.slice(ai_trace.size() - 1200)
 
 func lowest_health_ally(seeker, max_distance: float = 260.0):
 	var pool: Array = heroes if seeker.faction == "heroes" else enemies
