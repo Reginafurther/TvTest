@@ -1,8 +1,10 @@
 {
-  "portraits": {},
-  "units": {},
+  "portraits": {"zhao_yun": "res://assets/portraits/zhao_yun_v035.png", "liu_bei": "res://assets/portraits/liu_bei_v035.png"},
+  "portraits_regions": {"zhao_yun": [390, 150, 550, 820], "liu_bei": [360, 110, 650, 900]},
+  "units": {"zhao_yun": "res://assets/units/zhao_yun_v035.png", "liu_bei": "res://assets/units/liu_bei_v035.png"},
   "equipment_icons": {},
   "function_icons": {},
-  "maps_ground": {},
-  "maps_decor": {}
+  "maps_ground": {"hulao_pass": "res://assets/maps/ground/hulao_pass_v035.png"},
+  "maps_decor": {},
+  "maps_obstacles": {"hulao_pass": "res://assets/maps/decor/boulder_cluster_v035.png"}
 }

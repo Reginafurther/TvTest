@@ -7,6 +7,7 @@ const V03UIScript = preload("res://scripts/v03_ui.gd")
 const TutorialUIScript = preload("res://scripts/tutorial_ui.gd")
 const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
 const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
+const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 
 var battle: Node2D
 var stats_label: Label
@@ -24,11 +25,17 @@ var loot_notice: Label
 var loot_notice_time := 0.0
 var objective_label: Label
 var settings_button: Button
+var header_panel: PanelContainer
+var footer_panel: PanelContainer
+var objective_chip: PanelContainer
+var objective_button: Button
+var backdrop: ColorRect
 
 func _ready() -> void:
+	DisplayServer.window_set_title("万界冒险团 V0.35 主界面版")
 	build_background()
 	battle = BattleControllerScript.new()
-	battle.position = Vector2(180, 136)
+	battle.position = Vector2(190, 70)
 	add_child(battle)
 	build_ui()
 	battle.stats_changed.connect(update_stats)
@@ -54,8 +61,12 @@ func _ready() -> void:
 	_update_gold()
 	_update_objective()
 	update_party(battle.heroes)
-	add_log("四人小队已进入青草渡口，自动战斗开始")
-	if "--v031-test" in OS.get_cmdline_user_args():
+	get_viewport().size_changed.connect(_layout_ui)
+	_layout_ui()
+	add_log("四人小队已进入虎牢关，自动战斗开始")
+	if "--v035-preview" in OS.get_cmdline_user_args():
+		get_tree().create_timer(2.0).timeout.connect(_save_v035_preview)
+	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
 		finish_v03_persist_write()
@@ -83,101 +94,147 @@ func _process(_delta: float) -> void:
 		battle.restart()
 
 func build_background() -> void:
-	var backdrop := ColorRect.new()
-	backdrop.color = Color("#16232A")
+	backdrop = ColorRect.new()
+	backdrop.color = Color("#284D55")
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	backdrop.size = Vector2(1440, 800)
+	backdrop.size = Vector2(1440, 768)
 	add_child(backdrop)
 
 func build_ui() -> void:
+	header_panel = PanelContainer.new()
+	header_panel.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#25485A"), Color("#D8AA62"), 0, 0))
+	header_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(header_panel)
+	footer_panel = PanelContainer.new()
+	footer_panel.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#F8EBCD"), Color("#C6924A"), 12, 0))
+	footer_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(footer_panel)
+
 	var title := Label.new()
-	title.text = "万界冒险团 V0.31"
-	title.position = Vector2(18, 10)
-	title.add_theme_font_size_override("font_size", 25)
-	title.add_theme_color_override("font_color", Color("#FFF2B5"))
+	title.name = "GameTitle"
+	title.text = "万界冒险团  V0.35"
+	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
 	state_label = Label.new()
 	state_label.text = "● 自动战斗中"
-	state_label.position = Vector2(435, 22)
-	state_label.add_theme_color_override("font_color", Color("#82EEA6"))
+	V035ThemeScript.label(state_label, 15, Color("#A9F3BB"))
 	add_child(state_label)
 
 	stats_label = Label.new()
 	stats_label.text = "击败 0  ·  第 1 波  ·  00:00"
-	stats_label.position = Vector2(985, 22)
-	stats_label.size = Vector2(300, 30)
+	stats_label.size = Vector2(265, 30)
 	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	stats_label.add_theme_font_size_override("font_size", 17)
+	V035ThemeScript.label(stats_label, 15, Color("#FFF1D2"))
 	add_child(stats_label)
 
 	backpack_button = Button.new()
-	backpack_button.text = "背包 / 装备  B"
-	backpack_button.position = Vector2(17, 70)
-	backpack_button.size = Vector2(150, 42)
+	backpack_button.text = "背包"
+	backpack_button.tooltip_text = "背包与装备（B）"
+	backpack_button.size = Vector2(105, 57)
+	V035ThemeScript.button(backpack_button, "gold")
 	backpack_button.pressed.connect(_on_backpack_pressed)
 	add_child(backpack_button)
 
-	var footer := ColorRect.new()
-	footer.position = Vector2(0, 680)
-	footer.size = Vector2(1440, 120)
-	footer.color = Color("#101B22")
-	add_child(footer)
-
 	cards = HBoxContainer.new()
-	cards.position = Vector2(18, 694)
-	cards.size = Vector2(850, 92)
-	cards.add_theme_constant_override("separation", 8)
+	cards.size = Vector2(846, 126)
+	cards.add_theme_constant_override("separation", 6)
 	add_child(cards)
 
 	log_label = RichTextLabel.new()
-	log_label.position = Vector2(884, 695)
-	log_label.size = Vector2(536, 90)
+	log_label.visible = false
 	log_label.bbcode_enabled = true
-	log_label.fit_content = false
-	log_label.scroll_active = true
-	log_label.add_theme_font_size_override("normal_font_size", 13)
 	add_child(log_label)
 
 	help_label = Label.new()
-	help_label.text = "左键地图：集结点    空格：暂停    B：背包    R：全灭重开"
-	help_label.position = Vector2(184, 655)
-	help_label.add_theme_color_override("font_color", Color("#E8F2DF"))
+	help_label.text = "左键地图设集结点 · 空格暂停 · B背包"
+	V035ThemeScript.label(help_label, 13, Color("#F7F5DB"))
 	help_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	help_label.add_theme_constant_override("outline_size", 4)
 	add_child(help_label)
 
 	world_label = Label.new()
-	world_label.position = Vector2(18, 43)
-	world_label.add_theme_font_size_override("font_size", 17)
+	world_label.size = Vector2(440, 34)
+	world_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	V035ThemeScript.label(world_label, 21, Color("#FFF1D2"))
 	add_child(world_label)
 	gold_label = Label.new()
-	gold_label.position = Vector2(1210, 52)
-	gold_label.add_theme_color_override("font_color", Color("#FFE299"))
+	V035ThemeScript.label(gold_label, 18, Color("#FFE299"))
 	add_child(gold_label)
 	settings_button = Button.new()
-	settings_button.text = "设置 / 引导"
-	settings_button.position = Vector2(1275, 70)
-	settings_button.size = Vector2(145, 42)
+	settings_button.text = "设置"
+	settings_button.size = Vector2(82, 38)
+	V035ThemeScript.button(settings_button, "blue")
 	settings_button.pressed.connect(_open_settings)
 	add_child(settings_button)
+	objective_chip = PanelContainer.new()
+	objective_chip.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#FFF3D9"), Color("#C9934D"), 13, 7))
+	add_child(objective_chip)
 	objective_label = Label.new()
-	objective_label.position = Vector2(1250, 160)
-	objective_label.size = Vector2(176, 250)
-	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	objective_label.add_theme_color_override("font_color", Color("#BBD9E4"))
-	add_child(objective_label)
+	objective_label.size = Vector2(265, 43)
+	V035ThemeScript.label(objective_label, 16, Color("#493520"))
+	objective_chip.add_child(objective_label)
+	objective_button = Button.new()
+	objective_button.text = "查看目标"
+	objective_button.size = Vector2(88, 36)
+	V035ThemeScript.button(objective_button, "gold")
+	objective_button.pressed.connect(func(): v03_ui.open_view("objectives"))
+	add_child(objective_button)
 	loot_notice = Label.new()
-	loot_notice.position = Vector2(470, 142)
 	loot_notice.size = Vector2(480, 42)
 	loot_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	loot_notice.add_theme_font_size_override("font_size", 22)
 	loot_notice.visible = false
 	add_child(loot_notice)
 
+func _layout_ui() -> void:
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var factor: float = minf(viewport_size.x / 1440.0, viewport_size.y / 768.0)
+	var offset_x: float = (viewport_size.x - 1440.0 * factor) * 0.5
+	var header_h: float = 55.0 * factor
+	var footer_h: float = 153.0 * factor
+	var footer_y: float = viewport_size.y - footer_h
+	backdrop.size = viewport_size
+	header_panel.position = Vector2.ZERO
+	header_panel.size = Vector2(viewport_size.x, header_h)
+	footer_panel.position = Vector2(0, footer_y)
+	footer_panel.size = Vector2(viewport_size.x, footer_h)
+	var battle_scale: float = minf((viewport_size.x - 24.0 * factor) / 1060.0, (footer_y - header_h - 28.0 * factor) / 520.0)
+	battle.scale = Vector2.ONE * battle_scale
+	battle.position = Vector2((viewport_size.x - 1060.0 * battle_scale) * 0.5, header_h + (footer_y - header_h - 520.0 * battle_scale) * 0.5)
+	var title_node: Label = get_node("GameTitle")
+	title_node.position = Vector2(offset_x + 18 * factor, 7 * factor)
+	title_node.scale = Vector2.ONE * factor
+	state_label.position = Vector2(offset_x + 308 * factor, 20 * factor)
+	state_label.scale = Vector2.ONE * factor
+	world_label.position = Vector2(offset_x + 485 * factor, 10 * factor)
+	world_label.scale = Vector2.ONE * factor
+	stats_label.position = Vector2(offset_x + 895 * factor, 19 * factor)
+	stats_label.scale = Vector2.ONE * factor
+	gold_label.position = Vector2(offset_x + 1190 * factor, 5 * factor)
+	gold_label.scale = Vector2.ONE * factor
+	settings_button.position = Vector2(offset_x + 1340 * factor, 8 * factor)
+	settings_button.scale = Vector2.ONE * factor
+	cards.position = Vector2(offset_x + 10 * factor, footer_y + 14 * factor)
+	cards.scale = Vector2.ONE * factor
+	backpack_button.position = Vector2(offset_x + 864 * factor, footer_y + 12 * factor)
+	backpack_button.scale = Vector2.ONE * factor
+	help_label.position = Vector2(battle.position.x + 8 * factor, footer_y - 23 * factor)
+	help_label.scale = Vector2.ONE * factor
+	objective_chip.position = Vector2(offset_x + 198 * factor, header_h + 17 * factor)
+	objective_chip.size = Vector2(375, 58)
+	objective_chip.scale = Vector2.ONE * factor
+	objective_button.position = Vector2(offset_x + 470 * factor, header_h + 28 * factor)
+	objective_button.scale = Vector2.ONE * factor
+	loot_notice.position = Vector2(offset_x + 470 * factor, footer_y - 60 * factor)
+	loot_notice.scale = Vector2.ONE * factor
+	if v03_ui != null: v03_ui.apply_layout(viewport_size, factor, offset_x, footer_y)
+	if tutorial_ui != null: tutorial_ui.apply_layout(viewport_size, factor, offset_x, header_h)
+	if inventory_ui != null: inventory_ui.apply_layout(viewport_size)
+
 func _update_world(map_id: String) -> void:
 	var data: Dictionary = battle.worlds_config.maps.get(map_id, {})
-	world_label.text = "世界：%s    地图：%s  · Lv.%d" % [data.get("world", ""), data.get("name", ""), data.get("level", 1)]
+	world_label.text = "%s  ·  %s   Lv.%d" % [data.get("world", ""), data.get("name", ""), data.get("level", 1)]
 
 func _update_gold() -> void:
 	gold_label.text = "金币 %d" % battle.progression.gold
@@ -185,11 +242,9 @@ func _update_gold() -> void:
 func _update_objective() -> void:
 	if objective_label == null: return
 	var p = battle.progression
-	if p.guide_finished:
-		objective_label.text = "当前目标\n\n挂机击败怪物\n自动拾取装备与材料\n打开背包穿戴装备\n招募并更换伙伴\n挑战传奇 Boss"
-	else:
-		var step: int = clampi(p.guide_step, 0, 5)
-		objective_label.text = "当前目标\n\n" + TutorialUIScript.STEPS[step][0] + "\n\n" + TutorialUIScript.STEPS[step][1]
+	objective_chip.visible = p.guide_finished
+	objective_button.visible = p.guide_finished
+	objective_label.text = "当前目标：刷取装备并挑战 Boss"
 
 func _show_loot(item: Dictionary) -> void:
 	var quality: Dictionary = battle.equipment_config.qualities.get(item.quality, {})
@@ -208,6 +263,12 @@ func _open_settings() -> void:
 	add_child(popup)
 	popup.popup_centered()
 
+func _save_v035_preview() -> void:
+	var path := "user://v035_preview.png"
+	get_viewport().get_texture().get_image().save_png(path)
+	print("V035_PREVIEW " + ProjectSettings.globalize_path(path))
+	get_tree().quit()
+
 func update_stats(kills: int, elapsed: float, wave: int) -> void:
 	var minutes := int(elapsed) / 60
 	var seconds := int(elapsed) % 60
@@ -220,41 +281,58 @@ func update_state(message: String) -> void:
 func update_party(party: Array) -> void:
 	for child in cards.get_children():
 		child.queue_free()
-	for unit in party:
-		if not is_instance_valid(unit):
-			continue
+	for actor_id in battle.progression.party:
+		var unit = battle.get_hero(actor_id)
+		var actor_data: Dictionary = battle.actors.get(actor_id, {})
+		var alive: bool = is_instance_valid(unit) and not unit.dead
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size = Vector2(207, 85)
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color("#21333C")
-		style.border_color = Color(unit.actor_data.get("color", "FFFFFF"))
-		style.set_border_width_all(2)
-		style.set_corner_radius_all(8)
-		style.set_content_margin_all(8)
-		panel.add_theme_stylebox_override("panel", style)
+		panel.custom_minimum_size = Vector2(207, 124)
+		var accent := Color(actor_data.get("color", "FFFFFF"))
+		panel.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#F5E8C9") if alive else Color("#C7C1B7"), accent.darkened(0.15), 11, 7))
 		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 5)
 		panel.add_child(row)
-		var portrait: Texture2D = ArtCatalogScript.texture("portraits", unit.actor_id)
+		var portrait: Texture2D = ArtCatalogScript.texture("portraits", actor_id)
 		if portrait != null:
 			var avatar := TextureRect.new()
 			avatar.texture = portrait
-			avatar.custom_minimum_size = Vector2(45, 45)
+			avatar.custom_minimum_size = Vector2(65, 100)
 			avatar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			avatar.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			row.add_child(avatar)
 		else:
 			var avatar_placeholder := Label.new()
-			avatar_placeholder.text = unit._name().substr(0, 1)
-			avatar_placeholder.custom_minimum_size = Vector2(38, 45)
+			avatar_placeholder.text = str(actor_data.get("name", actor_id)).substr(0, 1)
+			avatar_placeholder.custom_minimum_size = Vector2(61, 100)
 			avatar_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			avatar_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			avatar_placeholder.add_theme_font_size_override("font_size", 22)
-			avatar_placeholder.add_theme_color_override("font_color", Color(unit.actor_data.get("color", "FFFFFF")))
+			avatar_placeholder.add_theme_font_size_override("font_size", 36)
+			avatar_placeholder.add_theme_color_override("font_color", accent.darkened(0.15))
 			row.add_child(avatar_placeholder)
-		var label := Label.new()
-		label.text = "%s  ·  %s\nHP %d/%d  ◆%d  ☠%s\n攻 %.0f  防 %.0f  %s" % [unit._name(), unit.actor_data.get("role", ""), unit.hp, unit.max_hp, int(unit.shield), "是" if unit.poison_time > 0 else "无", unit.attack, unit.defense, unit._skill_name()]
-		label.add_theme_font_size_override("font_size", 13)
-		row.add_child(label)
+		var details := VBoxContainer.new()
+		details.custom_minimum_size = Vector2(120, 100)
+		details.add_theme_constant_override("separation", 3)
+		row.add_child(details)
+		var name_label := Label.new()
+		name_label.text = str(actor_data.get("name", actor_id))
+		V035ThemeScript.label(name_label, 17, Color("#3C3027"))
+		details.add_child(name_label)
+		var hp_label := Label.new()
+		hp_label.text = "%d / %d" % [int(unit.hp), int(unit.max_hp)] if alive else "已倒下"
+		V035ThemeScript.label(hp_label, 13, Color("#584635"))
+		details.add_child(hp_label)
+		var health_bar := ProgressBar.new()
+		health_bar.custom_minimum_size = Vector2(115, 14)
+		health_bar.max_value = unit.max_hp if alive else 1
+		health_bar.value = unit.hp if alive else 0
+		health_bar.show_percentage = false
+		health_bar.add_theme_stylebox_override("background", V035ThemeScript.box(Color("#725F4F"), Color("#9B7A57"), 6, 0))
+		health_bar.add_theme_stylebox_override("fill", V035ThemeScript.box(Color("#69D977"), Color("#42964C"), 6, 0))
+		details.add_child(health_bar)
+		var status := Label.new()
+		status.text = ("◆护盾  " if alive and unit.shield > 0 else "") + ("☠中毒" if alive and unit.poison_time > 0 else "正常" if alive else "等待复活")
+		V035ThemeScript.label(status, 12, Color("#6E553B"))
+		details.add_child(status)
 		cards.add_child(panel)
 
 func add_log(message: String) -> void:
@@ -513,6 +591,28 @@ func finish_v031_test() -> void:
 			if not v03_ui.panel.visible or v03_ui.current_view != view:
 				failures.append("功能入口未打开：" + view)
 			v03_ui.close_panel()
+	if v03_ui.toolbar_root.get_child_count() != 8 or v03_ui.aux_root.get_child_count() != 4:
+		failures.append("V0.35 底部与侧边功能布局不完整")
+	if not objective_chip.visible or battle.is_paused:
+		failures.append("V0.35 引导结束后目标或战斗状态异常")
+	for view in ["rewards", "objectives", "logs"]:
+		v03_ui.toolbar_buttons[view].pressed.emit()
+		if not v03_ui.panel.visible or v03_ui.current_view != view:
+			failures.append("V0.35 独立页面未打开：" + view)
+		v03_ui.close_panel()
+	battle.log_message.emit("V035_LOG_FIXTURE")
+	if "V035_LOG_FIXTURE" not in v03_ui.log_lines:
+		failures.append("V0.35 日志页面未接收真实战斗事件")
+	v03_ui.toolbar_buttons["pause"].pressed.emit()
+	if not battle.is_paused:
+		failures.append("V0.35 暂停按钮无效")
+	v03_ui.toolbar_buttons["pause"].pressed.emit()
+	if battle.is_paused:
+		failures.append("V0.35 暂停按钮无法恢复战斗")
+	if not ArtCatalogScript.texture("portraits", "zhao_yun") is AtlasTexture or ArtCatalogScript.texture("maps_ground", "hulao_pass") == null or ArtCatalogScript.texture("maps_obstacles", "hulao_pass") == null:
+		failures.append("V0.35 主界面美术配置或头像裁切未加载")
+	if battle.position.y < header_panel.size.y or battle.position.y + 520.0 * battle.scale.y > footer_panel.position.y:
+		failures.append("V0.35 战斗地图与顶栏或底栏重叠")
 	v03_ui._preview_boss("lu_bu")
 	if "推荐等级" not in v03_ui.boss_dialog.dialog_text:
 		failures.append("Boss挑战前信息缺失")
@@ -570,6 +670,7 @@ func finish_v031_test() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
 	if failures.is_empty():
 		print("V031_TEST_PASS guide=6 skip_replay=true menus=8 old_save=true art_fallback=true inventory=true")
+		print("V035_TEST_PASS map=visible cards=4 menus=12 pause=true art=true log=event_driven")
 	else:
 		for failure in failures: push_error("V031_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)

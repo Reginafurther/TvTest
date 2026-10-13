@@ -2,6 +2,7 @@ class_name V03UI
 extends CanvasLayer
 
 const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
+const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 
 var battle
 var panel: PanelContainer
@@ -16,6 +17,9 @@ var boss_dialog: ConfirmationDialog
 var pending_boss := ""
 var toolbar_buttons: Dictionary = {}
 var inventory_ui
+var toolbar_root: GridContainer
+var aux_root: VBoxContainer
+var log_lines: Array[String] = []
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -24,24 +28,63 @@ func setup(owner_battle) -> void:
 	build_panel()
 	battle.progression_changed.connect(refresh_if_open)
 	battle.inventory.inventory_changed.connect(refresh_if_open)
+	battle.log_message.connect(_remember_log)
 
 func build_toolbar() -> void:
-	var bar := HBoxContainer.new()
-	bar.position = Vector2(178, 70)
-	bar.add_theme_constant_override("separation", 5)
-	add_child(bar)
-	for spec in [["伙伴 / 编队", "party"], ["招募", "recruit"], ["世界地图", "world"], ["Boss挑战", "boss"], ["分解 / 重铸", "craft"], ["技能策略", "strategy"], ["战斗统计", "stats"]]:
+	toolbar_root = GridContainer.new()
+	toolbar_root.columns = 4
+	toolbar_root.add_theme_constant_override("h_separation", 4)
+	toolbar_root.add_theme_constant_override("v_separation", 4)
+	add_child(toolbar_root)
+	var backpack_space := Control.new()
+	backpack_space.custom_minimum_size = Vector2(105, 57)
+	toolbar_root.add_child(backpack_space)
+	for spec in [["伙伴", "party"], ["招募", "recruit"], ["世界", "world"], ["Boss", "boss"], ["锻造", "craft"], ["策略", "strategy"], ["暂停", "pause"]]:
 		var button := Button.new()
 		button.text = spec[0]
+		button.custom_minimum_size = Vector2(105, 57)
 		button.icon = ArtCatalogScript.texture("function_icons", spec[1])
-		button.pressed.connect(open_view.bind(spec[1]))
-		bar.add_child(button)
+		V035ThemeScript.button(button, "gold" if spec[1] in ["recruit", "boss"] else "cream")
+		if spec[1] == "pause":
+			button.pressed.connect(_toggle_pause)
+		else:
+			button.pressed.connect(open_view.bind(spec[1]))
+		toolbar_root.add_child(button)
 		toolbar_buttons[spec[1]] = button
+	aux_root = VBoxContainer.new()
+	aux_root.add_theme_constant_override("separation", 2)
+	add_child(aux_root)
+	for spec in [["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["统计", "stats"]]:
+		var button := Button.new()
+		button.text = spec[0]
+		button.custom_minimum_size = Vector2(115, 30)
+		V035ThemeScript.button(button, "blue")
+		button.add_theme_font_size_override("font_size", 14)
+		button.pressed.connect(open_view.bind(spec[1]))
+		aux_root.add_child(button)
+		toolbar_buttons[spec[1]] = button
+
+func apply_layout(_viewport_size: Vector2, factor: float, offset_x: float, footer_y: float) -> void:
+	toolbar_root.position = Vector2(offset_x + 864 * factor, footer_y + 12 * factor)
+	toolbar_root.scale = Vector2.ONE * factor
+	aux_root.position = Vector2(offset_x + 1305 * factor, footer_y + 12 * factor)
+	aux_root.scale = Vector2.ONE * factor
+	panel.position = Vector2(offset_x + 890 * factor, 72 * factor)
+	panel.scale = Vector2.ONE * factor
+
+func _toggle_pause() -> void:
+	battle.is_paused = not battle.is_paused
+	battle.battle_state_changed.emit("已暂停" if battle.is_paused else "自动战斗中")
+
+func _remember_log(message: String) -> void:
+	log_lines.append(message)
+	if log_lines.size() > 80: log_lines.pop_front()
+	if panel.visible and current_view == "logs": refresh()
 
 func build_panel() -> void:
 	panel = PanelContainer.new()
-	panel.position = Vector2(890, 125)
-	panel.size = Vector2(534, 535)
+	panel.position = Vector2(890, 72)
+	panel.size = Vector2(534, 526)
 	panel.visible = false
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("#17262F")
@@ -106,6 +149,35 @@ func refresh() -> void:
 		"craft": build_craft()
 		"strategy": build_strategy()
 		"stats": build_stats()
+		"rewards": build_rewards()
+		"objectives": build_objectives()
+		"logs": build_logs()
+
+func build_rewards() -> void:
+	title.text = "挂机收益"
+	var snap: Dictionary = battle.stats_snapshot()
+	var info := Label.new()
+	info.text = "本场自动战斗 %.0f 秒\n\n获得装备：%d 件\n获得招募材料：%d 个\n累计金币：%d\n资源收益估算：%.1f / 分钟" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, snap.resources_per_minute]
+	info.add_theme_font_size_override("font_size", 20)
+	content.add_child(info)
+
+func build_objectives() -> void:
+	title.text = "关卡目标"
+	var info := Label.new()
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备与世界材料。\n在背包比较属性，为四人换装。\n用材料定向招募伙伴，调整四人队伍。\n准备好后前往传奇 Boss 挑战。" % battle.worlds_config.maps[battle.current_map_id].name
+	if not battle.progression.guide_finished:
+		var step: int = clampi(battle.progression.guide_step, 0, 5)
+		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["使用初始招募令", "观察自动战斗", "等待装备掉落", "穿戴一件装备", "定向招募伙伴", "调整编队"][step]]
+	info.add_theme_font_size_override("font_size", 19)
+	content.add_child(info)
+
+func build_logs() -> void:
+	title.text = "战斗日志"
+	var text_view := RichTextLabel.new()
+	text_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	text_view.text = "\n".join(log_lines)
+	content.add_child(text_view)
 
 func build_world() -> void:
 	title.text = "双世界冒险"

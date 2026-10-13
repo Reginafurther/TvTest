@@ -18,7 +18,7 @@ func _ready() -> void:
 func _draw() -> void:
 	var ground: Texture2D = ArtCatalogScript.texture("maps_ground", map_id)
 	if ground != null:
-		draw_texture_rect(ground, Rect2(Vector2.ZERO, ARENA_SIZE), true)
+		draw_texture_rect(ground, Rect2(Vector2.ZERO, ARENA_SIZE), false)
 	else:
 		draw_rect(Rect2(Vector2.ZERO, ARENA_SIZE), Color("#9ACF79"), true)
 		for x in range(0, int(ARENA_SIZE.x), 64):
@@ -33,10 +33,14 @@ func _draw() -> void:
 	var decor: Texture2D = ArtCatalogScript.texture("maps_decor", map_id)
 	if decor != null:
 		draw_texture_rect(decor, Rect2(Vector2.ZERO, ARENA_SIZE), false)
+	var obstacle_art: Texture2D = ArtCatalogScript.texture("maps_obstacles", map_id)
 	for rect in obstacles:
-		draw_style_box(_rock_box(), rect)
-		for i in range(3):
-			draw_circle(rect.position + Vector2(35 + i * 55, 18 + (i % 2) * 24), 20, Color("#667866"))
+		if obstacle_art != null:
+			draw_texture_rect(obstacle_art, rect.grow(10), false)
+		else:
+			draw_style_box(_rock_box(), rect)
+			for i in range(3):
+				draw_circle(rect.position + Vector2(35 + i * 55, 18 + (i % 2) * 24), 20, Color("#667866"))
 	if rally_position.x >= 0:
 		draw_circle(rally_position, 18, Color(1, 1, 1, 0.16), true)
 		draw_arc(rally_position, 18, 0, TAU, 32, Color("#FFF6A2"), 3)

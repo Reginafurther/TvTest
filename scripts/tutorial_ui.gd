@@ -1,6 +1,8 @@
 class_name TutorialUI
 extends CanvasLayer
 
+const V035ThemeScript = preload("res://scripts/v035_theme.gd")
+
 const STEPS := [
 	["1/6 初始招募", "你有 1 枚招募令。点击“招募”，获得第一位新伙伴。", "招募", "recruit"],
 	["2/6 自动战斗", "战斗自动进行。观察角色索敌、移动与击败怪物；点击地图可设集结点。", "查看地图", ""],
@@ -39,42 +41,55 @@ func setup(owner_battle, backpack, features) -> void:
 
 func build_ui() -> void:
 	panel = PanelContainer.new()
-	panel.position = Vector2(8, 160)
-	panel.size = Vector2(166, 315)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#142832")
-	style.border_color = Color("#E5BC66")
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.position = Vector2(198, 72)
+	panel.size = Vector2(400, 110)
+	panel.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#FFF4DB"), Color("#CB9750"), 14, 8))
 	add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 9)
-	panel.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	panel.add_child(row)
+	var text_column := VBoxContainer.new()
+	text_column.custom_minimum_size = Vector2(265, 90)
+	row.add_child(text_column)
 	title = Label.new()
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", Color("#FFF0B4"))
-	box.add_child(title)
+	V035ThemeScript.label(title, 18, Color("#493721"))
+	text_column.add_child(title)
 	description = Label.new()
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	description.custom_minimum_size = Vector2(140, 140)
-	box.add_child(description)
+	description.custom_minimum_size = Vector2(260, 60)
+	V035ThemeScript.label(description, 14, Color("#5E4A36"))
+	text_column.add_child(description)
+	var actions := VBoxContainer.new()
+	actions.custom_minimum_size = Vector2(105, 90)
+	actions.add_theme_constant_override("separation", 3)
+	row.add_child(actions)
 	action_button = Button.new()
+	V035ThemeScript.button(action_button, "gold")
+	action_button.add_theme_font_size_override("font_size", 14)
+	action_button.custom_minimum_size = Vector2(102, 37)
 	action_button.pressed.connect(_go_to_action)
-	box.add_child(action_button)
+	actions.add_child(action_button)
 	replay_next = Button.new()
-	replay_next.text = "已了解，下一步"
+	replay_next.text = "下一步"
+	V035ThemeScript.button(replay_next, "green")
+	replay_next.add_theme_font_size_override("font_size", 12)
+	replay_next.custom_minimum_size = Vector2(102, 24)
 	replay_next.pressed.connect(func(): battle.progression.set_guide_step(battle.progression.guide_step + 1))
-	box.add_child(replay_next)
+	actions.add_child(replay_next)
 	var skip := Button.new()
-	skip.text = "跳过引导"
+	skip.text = "跳过"
+	V035ThemeScript.button(skip, "cream")
+	skip.add_theme_font_size_override("font_size", 12)
+	skip.custom_minimum_size = Vector2(102, 24)
 	skip.pressed.connect(func(): battle.progression.skip_guide())
-	box.add_child(skip)
+	actions.add_child(skip)
 	objective = Label.new()
-	objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	objective.add_theme_color_override("font_color", Color("#A8D9E9"))
-	box.add_child(objective)
+	objective.visible = false
+	text_column.add_child(objective)
+
+func apply_layout(_viewport_size: Vector2, factor: float, offset_x: float, header_h: float) -> void:
+	panel.position = Vector2(offset_x + 198 * factor, header_h + 14 * factor)
+	panel.scale = Vector2.ONE * factor
 
 func _process(_delta: float) -> void:
 	if not battle.progression.guide_finished:
@@ -107,7 +122,7 @@ func refresh() -> void:
 	var step: int = clampi(p.guide_step, 0, 5)
 	title.text = STEPS[step][0]
 	description.text = STEPS[step][1]
-	action_button.text = "前往：" + STEPS[step][2]
+	action_button.text = "前往" + STEPS[step][2]
 	replay_next.visible = p.guide_replay
 	objective.text = "回顾模式 · 点下一步" if p.guide_replay else ("正在进行 · 不会阻止战斗" if not battle.is_paused else "查看界面中 · 关闭后继续战斗")
 

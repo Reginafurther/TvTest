@@ -374,7 +374,7 @@ func _draw() -> void:
 	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
 	var artwork: Texture2D = ArtCatalogScript.texture("units", actor_id)
 	if artwork != null:
-		draw_texture_rect(artwork, Rect2(-32, -52, 64, 72), false)
+		draw_texture_rect(artwork, Rect2(-38, -58, 76, 83), false)
 	else:
 		draw_circle(Vector2(0, 5), 16, base.darkened(0.16))
 		draw_rect(Rect2(-12, -2, 24, 26), base, true)

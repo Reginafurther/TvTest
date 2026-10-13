@@ -35,7 +35,7 @@ func setup(owner_battle) -> void:
 
 func build_ui() -> void:
 	panel = PanelContainer.new()
-	panel.position = Vector2(372, 122)
+	panel.position = Vector2(194, 108)
 	panel.size = Vector2(1052, 540)
 	panel.visible = false
 	var panel_style := StyleBoxFlat.new()
@@ -73,6 +73,11 @@ func build_ui() -> void:
 	build_inventory_column(columns)
 	build_equipment_column(columns)
 	build_detail_column(columns)
+
+func apply_layout(viewport_size: Vector2) -> void:
+	var factor: float = minf(viewport_size.x / 1440.0, viewport_size.y / 768.0)
+	panel.scale = Vector2.ONE * factor
+	panel.position = (viewport_size - panel.size * factor) * 0.5
 
 func build_inventory_column(parent: HBoxContainer) -> void:
 	var column := VBoxContainer.new()
