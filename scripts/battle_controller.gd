@@ -54,11 +54,11 @@ func _ready() -> void:
 	loot_config = DataLoaderScript.load_json("res://data/loot_tables.json")
 	worlds_config = DataLoaderScript.load_json("res://data/worlds.json")
 	special_config = DataLoaderScript.load_json("res://data/special_effects.json")
-	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args()
+	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args()
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
 	add_child(inventory)
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args():
 		inventory.clear_test_save()
 	inventory.load_from_disk()
 	inventory.equipment_changed.connect(_on_equipment_changed)
@@ -72,6 +72,7 @@ func _ready() -> void:
 	combat_stats = CombatStatsScript.new()
 	combat_stats.reset()
 	battle_map = BattleMapScript.new()
+	battle_map.map_id = current_map_id
 	add_child(battle_map)
 	setup_navigation()
 	spawn_party()
@@ -226,6 +227,7 @@ func _on_unit_died(unit) -> void:
 	if unit.faction == "enemies":
 		enemies.erase(unit)
 		kills += 1
+		progression.add_gold(1 + int(worlds_config.maps.get(current_map_id, {}).get("level", 1)))
 		if is_instance_valid(unit.last_damage_source):
 			combat_stats.record_kill(unit.last_damage_source.actor_id)
 		if not active_boss_id.is_empty() and unit.actor_data.has("boss_id"):
@@ -292,6 +294,8 @@ func switch_map(map_id: String) -> bool:
 		return false
 	clear_combatants()
 	current_map_id = map_id
+	battle_map.map_id = map_id
+	battle_map.queue_redraw()
 	active_boss_id = ""
 	wave = 1
 	spawn_party()

@@ -1,6 +1,8 @@
 class_name V03UI
 extends CanvasLayer
 
+const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
+
 var battle
 var panel: PanelContainer
 var content: VBoxContainer
@@ -10,6 +12,10 @@ var selected_item_id := ""
 var selected_affix := 0
 var confirm_dialog: ConfirmationDialog
 var pending_dismantle := ""
+var boss_dialog: ConfirmationDialog
+var pending_boss := ""
+var toolbar_buttons: Dictionary = {}
+var inventory_ui
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -21,19 +27,21 @@ func setup(owner_battle) -> void:
 
 func build_toolbar() -> void:
 	var bar := HBoxContainer.new()
-	bar.position = Vector2(20, 54)
+	bar.position = Vector2(178, 70)
 	bar.add_theme_constant_override("separation", 5)
 	add_child(bar)
-	for spec in [["世界地图", "world"], ["招募编队", "recruit"], ["分解重铸", "craft"], ["战斗策略", "strategy"], ["战斗统计", "stats"]]:
+	for spec in [["伙伴 / 编队", "party"], ["招募", "recruit"], ["世界地图", "world"], ["Boss挑战", "boss"], ["分解 / 重铸", "craft"], ["技能策略", "strategy"], ["战斗统计", "stats"]]:
 		var button := Button.new()
 		button.text = spec[0]
+		button.icon = ArtCatalogScript.texture("function_icons", spec[1])
 		button.pressed.connect(open_view.bind(spec[1]))
 		bar.add_child(button)
+		toolbar_buttons[spec[1]] = button
 
 func build_panel() -> void:
 	panel = PanelContainer.new()
-	panel.position = Vector2(120, 105)
-	panel.size = Vector2(860, 500)
+	panel.position = Vector2(890, 125)
+	panel.size = Vector2(534, 535)
 	panel.visible = false
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("#17262F")
@@ -62,8 +70,14 @@ func build_panel() -> void:
 	confirm_dialog.title = "确认分解高品质装备"
 	confirm_dialog.confirmed.connect(confirm_dismantle)
 	add_child(confirm_dialog)
+	boss_dialog = ConfirmationDialog.new()
+	boss_dialog.title = "传奇 Boss 挑战前确认"
+	boss_dialog.confirmed.connect(_confirm_boss)
+	add_child(boss_dialog)
 
 func open_view(view: String) -> void:
+	if inventory_ui != null and inventory_ui.panel.visible:
+		inventory_ui.toggle()
 	current_view = view
 	panel.visible = true
 	battle.is_paused = true
@@ -87,7 +101,8 @@ func refresh() -> void:
 	clear_content()
 	match current_view:
 		"world": build_world()
-		"recruit": build_recruit()
+		"recruit", "party": build_recruit()
+		"boss": build_boss()
 		"craft": build_craft()
 		"strategy": build_strategy()
 		"stats": build_stats()
@@ -104,16 +119,31 @@ func build_world() -> void:
 		button.disabled = map_id == battle.current_map_id and battle.active_boss_id.is_empty()
 		button.pressed.connect(func(): battle.switch_map(map_id); close_panel())
 		content.add_child(button)
-	add_separator("传奇挑战")
+
+func build_boss() -> void:
+	title.text = "传奇 Boss 挑战"
+	var hint := Label.new()
+	hint.text = "挑战前查看能力与推荐等级；首胜永久解锁对应角色，之后可重复挑战。"
+	content.add_child(hint)
 	for boss_id in battle.worlds_config.bosses:
 		var data: Dictionary = battle.worlds_config.bosses[boss_id]
 		var button := Button.new()
 		button.text = "%s　%s" % [data.name, "已首胜，可重复挑战" if battle.progression.boss_first_clear[boss_id] else "首胜解锁角色"]
-		button.pressed.connect(func(): battle.start_boss(boss_id); close_panel())
+		button.pressed.connect(_preview_boss.bind(boss_id))
 		content.add_child(button)
 
+func _preview_boss(boss_id: String) -> void:
+	pending_boss = boss_id
+	var data: Dictionary = battle.worlds_config.bosses[boss_id]
+	var actor: Dictionary = battle.actors[data.actor]
+	boss_dialog.dialog_text = "%s\n世界：%s　推荐等级：Lv.8\n生命：%d　攻击：%d　防御：%d\n机制：专属技能、控制抗性与重复控制衰减。\n首胜：永久解锁%s；重复挑战：获得材料。\n\n现在开始挑战？" % [data.name, data.world, int(actor.get("max_hp", 0)), int(actor.get("attack", 0)), int(actor.get("defense", 0)), battle.actors[data.unlock_actor].name]
+	boss_dialog.popup_centered()
+
+func _confirm_boss() -> void:
+	if battle.start_boss(pending_boss): close_panel()
+
 func build_recruit() -> void:
-	title.text = "角色招募与四人编队"
+	title.text = "角色招募与四人编队" if current_view == "recruit" else "伙伴与四人编队"
 	var p = battle.progression
 	var info := Label.new()
 	info.text = "招募令：%d　虎符：%d　精灵结晶：%d　已招募：%d/10" % [p.recruit_tokens, p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
@@ -124,7 +154,7 @@ func build_recruit() -> void:
 	recruit.pressed.connect(use_recruit_token)
 	content.add_child(recruit)
 	var list := ItemList.new()
-	list.custom_minimum_size = Vector2(0, 190)
+	list.custom_minimum_size = Vector2(0, 160)
 	for actor_id in battle.worlds_config.recruitment.costs:
 		var cost: Array = battle.worlds_config.recruitment.costs[actor_id]
 		var owned: bool = actor_id in p.roster
@@ -135,17 +165,18 @@ func build_recruit() -> void:
 	var hint := Label.new()
 	hint.text = "双击未招募角色可定向兑换。编队变更会立即重建战场。"
 	content.add_child(hint)
-	var row := HBoxContainer.new()
-	content.add_child(row)
+	var grid := GridContainer.new()
+	grid.columns = 1
+	content.add_child(grid)
 	for i in range(4):
 		var select := OptionButton.new()
-		select.custom_minimum_size = Vector2(190, 36)
+		select.custom_minimum_size = Vector2(455, 32)
 		for actor_id in p.roster:
 			select.add_item("位置%d · %s" % [i + 1, battle.actors[actor_id].name])
 			select.set_item_metadata(select.item_count - 1, actor_id)
 			if actor_id == p.party[i]: select.select(select.item_count - 1)
 		select.item_selected.connect(change_party.bind(i, select))
-		row.add_child(select)
+		grid.add_child(select)
 
 func build_craft() -> void:
 	title.text = "装备分解与词条重铸"
@@ -242,7 +273,7 @@ func build_stats() -> void:
 	title.text = "实时战斗统计"
 	var snap: Dictionary = battle.stats_snapshot()
 	var text := RichTextLabel.new(); text.bbcode_enabled = true; text.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	text.text = "统计时长 %.1f 秒　装备 %d　材料 %d　资源/分钟 %.1f\n\n" % [snap.duration, snap.resources.equipment, snap.resources.materials, snap.resources_per_minute]
+	text.text = "本场实时统计 %.1f 秒　装备 %d 件　材料 %d 个　收益 %.1f 件/分钟\nDPS = 每秒平均伤害；换地图/重开后从零统计。\n\n" % [snap.duration, snap.resources.equipment, snap.resources.materials, snap.resources_per_minute]
 	for actor_id in snap.actors:
 		var row: Dictionary = snap.actors[actor_id]
 		text.append_text("[b]%s[/b]　伤害 %.0f　DPS %.1f　普攻 %.0f　技能 %.0f　特效 %.0f　治疗 %.0f　承伤 %.0f　技能%d　击杀%d\n" % [battle.actors.get(actor_id, {"name": actor_id}).name, row.damage, row.dps, row.basic, row.skill, row.effect, row.healing, row.taken, row.skills, row.kills])

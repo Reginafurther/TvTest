@@ -2,13 +2,18 @@ class_name ProgressionManager
 extends Node
 
 signal changed
-const VERSION := "0.3"
+const VERSION := "0.31"
 const NORMAL_PATH := "user://wanjie_v03_progress.json"
 const TEST_PATH := "user://wanjie_v03_test_progress.json"
 
 var save_path := NORMAL_PATH
 var materials := {"salvage_dust": 0, "three_kingdoms_token": 0, "pokemon_token": 0}
 var recruit_tokens := 1
+var gold := 0
+var guide_step := 0
+var guide_finished := false
+var guide_skipped := false
+var guide_replay := false
 var roster: Array = ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
 var party: Array = ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
 var boss_first_clear := {"lu_bu": false, "mewtwo": false}
@@ -19,11 +24,13 @@ var strategy_presets := {
 var active_strategy := "稳健"
 
 func setup() -> void:
-	if "--v03-test" in OS.get_cmdline_user_args() or "--v03-persist-write" in OS.get_cmdline_user_args() or "--v03-persist-read" in OS.get_cmdline_user_args():
+	if "--v03-test" in OS.get_cmdline_user_args() or "--v03-persist-write" in OS.get_cmdline_user_args() or "--v03-persist-read" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args():
 		save_path = TEST_PATH
-	if "--v03-test" in OS.get_cmdline_user_args() or "--v03-persist-write" in OS.get_cmdline_user_args():
+	if "--v03-test" in OS.get_cmdline_user_args() or "--v03-persist-write" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args():
 		clear_test_save()
-	load_from_disk()
+	if not load_from_disk() and save_path == NORMAL_PATH and FileAccess.file_exists("user://wanjie_v02_save.json"):
+		guide_step = 6
+		guide_finished = true
 
 func clear_test_save() -> void:
 	if FileAccess.file_exists(TEST_PATH):
@@ -31,6 +38,34 @@ func clear_test_save() -> void:
 
 func add_material(id: String, amount: int) -> void:
 	materials[id] = maxi(0, int(materials.get(id, 0)) + amount)
+	changed.emit()
+	save_to_disk()
+
+func add_gold(amount: int) -> void:
+	gold = maxi(0, gold + amount)
+	changed.emit()
+	save_to_disk()
+
+func set_guide_step(value: int) -> void:
+	guide_step = clampi(value, 0, 6)
+	guide_finished = guide_step >= 6
+	if guide_finished: guide_replay = false
+	guide_skipped = false
+	changed.emit()
+	save_to_disk()
+
+func skip_guide() -> void:
+	guide_finished = true
+	guide_skipped = true
+	guide_replay = false
+	changed.emit()
+	save_to_disk()
+
+func restart_guide() -> void:
+	guide_step = 0
+	guide_finished = false
+	guide_skipped = false
+	guide_replay = true
 	changed.emit()
 	save_to_disk()
 
@@ -94,7 +129,7 @@ func save_to_disk() -> bool:
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		return false
-	file.store_string(JSON.stringify({"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy}, "  "))
+	file.store_string(JSON.stringify({"version": VERSION, "materials": materials, "recruit_tokens": recruit_tokens, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay}, "  "))
 	return true
 
 func load_from_disk() -> bool:
@@ -106,6 +141,12 @@ func load_from_disk() -> bool:
 	# Missing fields are filled with V0.3 defaults: this is the V0.2A migration path.
 	materials.merge(parsed.get("materials", {}), true)
 	recruit_tokens = int(parsed.get("recruit_tokens", recruit_tokens))
+	gold = int(parsed.get("gold", 0))
+	# Older saves remain playable; onboarding can be explicitly replayed from Settings.
+	guide_step = int(parsed.get("guide_step", 6))
+	guide_finished = bool(parsed.get("guide_finished", true))
+	guide_skipped = bool(parsed.get("guide_skipped", false))
+	guide_replay = bool(parsed.get("guide_replay", false))
 	roster = parsed.get("roster", roster)
 	party = parsed.get("party", party)
 	boss_first_clear.merge(parsed.get("boss_first_clear", {}), true)

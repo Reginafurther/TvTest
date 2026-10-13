@@ -1,6 +1,8 @@
 class_name InventoryUI
 extends CanvasLayer
 
+const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
+
 var battle
 var inventory
 var config: Dictionary
@@ -17,8 +19,9 @@ var equip_button: Button
 var unequip_button: Button
 var selected_item_id := ""
 var selected_equipment_slot := ""
-var actor_ids := ["zhao_yun", "liu_bei", "pikachu", "snorlax"]
-var actor_names := ["赵云", "刘备", "皮卡丘", "卡比兽"]
+var actor_ids: Array = []
+var actor_names: Array = []
+var feature_ui
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -32,8 +35,8 @@ func setup(owner_battle) -> void:
 
 func build_ui() -> void:
 	panel = PanelContainer.new()
-	panel.position = Vector2(58, 62)
-	panel.size = Vector2(984, 570)
+	panel.position = Vector2(372, 122)
+	panel.size = Vector2(1052, 540)
 	panel.visible = false
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color("#17262F")
@@ -116,9 +119,7 @@ func build_equipment_column(parent: HBoxContainer) -> void:
 	heading.add_theme_font_size_override("font_size", 18)
 	column.add_child(heading)
 	actor_select = OptionButton.new()
-	for i in range(actor_ids.size()):
-		actor_select.add_item(actor_names[i])
-		actor_select.set_item_metadata(i, actor_ids[i])
+	refresh_actor_choices()
 	actor_select.item_selected.connect(_on_actor_changed)
 	column.add_child(actor_select)
 	equipment_list = ItemList.new()
@@ -161,6 +162,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func toggle() -> void:
+	if not panel.visible and feature_ui != null and feature_ui.panel.visible:
+		feature_ui.close_panel()
 	panel.visible = not panel.visible
 	if panel.visible:
 		battle.is_paused = true
@@ -171,6 +174,7 @@ func toggle() -> void:
 		battle.battle_state_changed.emit("自动战斗中")
 
 func refresh_all() -> void:
+	refresh_actor_choices()
 	refresh_inventory()
 	refresh_equipment()
 	capacity_label.text = "容量  %d / %d" % [inventory.items.size(), inventory.capacity]
@@ -191,7 +195,8 @@ func refresh_inventory() -> void:
 		return int(a.quality_rank) > int(b.quality_rank))
 	for item in visible_items:
 		var label := "Lv.%d  %s  [%s]" % [item.level, item.name, slot_name(item.slot)]
-		var index := item_list.add_item(label)
+		var icon: Texture2D = ArtCatalogScript.texture("equipment_icons", str(item.get("template_id", item.get("slot", ""))))
+		var index := item_list.add_item(label, icon)
 		item_list.set_item_metadata(index, item.instance_id)
 		item_list.set_item_custom_fg_color(index, quality_color(item.quality))
 		if item.instance_id == selected_item_id:
@@ -311,6 +316,22 @@ func _on_loot_obtained(_item: Dictionary) -> void:
 
 func current_actor_id() -> String:
 	return actor_select.get_item_metadata(actor_select.selected)
+
+func refresh_actor_choices() -> void:
+	if actor_select == null or battle == null: return
+	var previous := ""
+	if actor_select.selected >= 0 and actor_select.selected < actor_select.item_count:
+		previous = actor_select.get_item_metadata(actor_select.selected)
+	actor_ids = battle.progression.roster.duplicate()
+	actor_names.clear()
+	actor_select.clear()
+	for actor_id in actor_ids:
+		var name_value: String = battle.actors.get(actor_id, {}).get("name", actor_id)
+		actor_names.append(name_value)
+		actor_select.add_item(name_value)
+		actor_select.set_item_metadata(actor_select.item_count - 1, actor_id)
+		if actor_id == previous: actor_select.select(actor_select.item_count - 1)
+	if actor_select.selected < 0 and actor_select.item_count > 0: actor_select.select(0)
 
 func slot_name(slot: String) -> String:
 	return config.get("slots", {}).get(slot, slot)

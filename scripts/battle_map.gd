@@ -1,6 +1,8 @@
 class_name BattleMap
 extends Node2D
 
+const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
+
 const ARENA_SIZE := Vector2(1060, 520)
 var obstacles: Array[Rect2] = [
 	Rect2(425, 100, 185, 72),
@@ -8,21 +10,29 @@ var obstacles: Array[Rect2] = [
 	Rect2(748, 220, 92, 84)
 ]
 var rally_position := Vector2(-100, -100)
+var map_id := "hulao_pass"
 
 func _ready() -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, ARENA_SIZE), Color("#9ACF79"), true)
-	for x in range(0, int(ARENA_SIZE.x), 64):
-		for y in range(0, int(ARENA_SIZE.y), 64):
-			var checker := int(x / 64) + int(y / 64)
-			var tile_color := Color("#94C774") if checker % 2 == 0 else Color("#9DCE7C")
-			draw_rect(Rect2(x, y, 64, 64), tile_color, true)
-	# River and stepping stones are visual flavor; rocks are actual pathfinding blockers.
-	draw_colored_polygon(PackedVector2Array([Vector2(0, 244), Vector2(310, 218), Vector2(700, 250), Vector2(1060, 226), Vector2(1060, 294), Vector2(700, 316), Vector2(310, 282), Vector2(0, 306)]), Color("#69BBD0"))
-	for x in range(110, 1000, 170):
-		draw_circle(Vector2(x, 268 + sin(float(x)) * 8), 12, Color("#D5D6B2"))
+	var ground: Texture2D = ArtCatalogScript.texture("maps_ground", map_id)
+	if ground != null:
+		draw_texture_rect(ground, Rect2(Vector2.ZERO, ARENA_SIZE), true)
+	else:
+		draw_rect(Rect2(Vector2.ZERO, ARENA_SIZE), Color("#9ACF79"), true)
+		for x in range(0, int(ARENA_SIZE.x), 64):
+			for y in range(0, int(ARENA_SIZE.y), 64):
+				var checker := int(x / 64) + int(y / 64)
+				var tile_color := Color("#94C774") if checker % 2 == 0 else Color("#9DCE7C")
+				draw_rect(Rect2(x, y, 64, 64), tile_color, true)
+		# River and stepping stones are visual flavor; rocks are actual pathfinding blockers.
+		draw_colored_polygon(PackedVector2Array([Vector2(0, 244), Vector2(310, 218), Vector2(700, 250), Vector2(1060, 226), Vector2(1060, 294), Vector2(700, 316), Vector2(310, 282), Vector2(0, 306)]), Color("#69BBD0"))
+		for x in range(110, 1000, 170):
+			draw_circle(Vector2(x, 268 + sin(float(x)) * 8), 12, Color("#D5D6B2"))
+	var decor: Texture2D = ArtCatalogScript.texture("maps_decor", map_id)
+	if decor != null:
+		draw_texture_rect(decor, Rect2(Vector2.ZERO, ARENA_SIZE), false)
 	for rect in obstacles:
 		draw_style_box(_rock_box(), rect)
 		for i in range(3):

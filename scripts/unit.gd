@@ -3,6 +3,7 @@ extends CharacterBody2D
 
 const BattleMapScript = preload("res://scripts/battle_map.gd")
 const FloatingTextScript = preload("res://scripts/floating_text.gd")
+const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
 
 signal died(unit)
 signal combat_event(message: String)
@@ -300,6 +301,7 @@ func has_special(id: String) -> bool:
 
 func add_shield(amount: float) -> void:
 	shield = maxf(shield, amount)
+	show_number("◆ 护盾", Color("#80C8FF"))
 	queue_redraw()
 
 func apply_poison(damage_per_second: float, duration: float, source, depth: int) -> void:
@@ -307,6 +309,8 @@ func apply_poison(damage_per_second: float, duration: float, source, depth: int)
 	poison_time = maxf(poison_time, duration)
 	poison_source = source
 	poison_depth = depth
+	show_number("☠ 中毒", Color("#C58DFF"))
+	queue_redraw()
 
 func apply_hard_control(duration: float) -> float:
 	# Boss hard-control duration diminishes per application and is capped cumulatively.
@@ -368,12 +372,16 @@ func _draw() -> void:
 		base = Color.WHITE
 	# Soft shadow, oversized head and compact body form the placeholder chibi silhouette.
 	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
-	draw_circle(Vector2(0, 5), 16, base.darkened(0.16))
-	draw_rect(Rect2(-12, -2, 24, 26), base, true)
-	draw_circle(Vector2(0, -14), 22, base)
-	draw_circle(Vector2(-7, -17), 2.2, Color("#17202A"))
-	draw_circle(Vector2(7, -17), 2.2, Color("#17202A"))
-	draw_arc(Vector2(0, -9), 5, 0.2, PI - 0.2, 12, accent, 2)
+	var artwork: Texture2D = ArtCatalogScript.texture("units", actor_id)
+	if artwork != null:
+		draw_texture_rect(artwork, Rect2(-32, -52, 64, 72), false)
+	else:
+		draw_circle(Vector2(0, 5), 16, base.darkened(0.16))
+		draw_rect(Rect2(-12, -2, 24, 26), base, true)
+		draw_circle(Vector2(0, -14), 22, base)
+		draw_circle(Vector2(-7, -17), 2.2, Color("#17202A"))
+		draw_circle(Vector2(7, -17), 2.2, Color("#17202A"))
+		draw_arc(Vector2(0, -9), 5, 0.2, PI - 0.2, 12, accent, 2)
 	draw_arc(Vector2.ZERO, 17, 0, TAU, 24, accent, 3)
 	if faction == "heroes":
 		draw_circle(Vector2(0, -36), 4, Color("#68D6FF"))
@@ -382,6 +390,10 @@ func _draw() -> void:
 	# HP bar
 	draw_rect(Rect2(-24, -47, 48, 6), Color(0.08, 0.09, 0.1, 0.85), true)
 	draw_rect(Rect2(-23, -46, 46 * (hp / max_hp), 4), Color("#65D97B") if faction == "heroes" else Color("#EE6158"), true)
+	if shield > 0:
+		draw_arc(Vector2.ZERO, 28, 0, TAU, 24, Color("#80C8FF"), 3)
+	if poison_time > 0:
+		draw_circle(Vector2(23, -37), 5, Color("#C58DFF"))
 
 func draw_chibi_ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
 	var points := PackedVector2Array()

@@ -19,7 +19,7 @@ var save_path := SAVE_PATH
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
-	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args():
+	if "--equipment-test" in OS.get_cmdline_user_args() or "--persistence-write" in OS.get_cmdline_user_args() or "--persistence-read" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args():
 		save_path = TEST_SAVE_PATH
 	ensure_equipment_layout()
 
