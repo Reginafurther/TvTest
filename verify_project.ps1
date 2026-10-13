@@ -21,6 +21,7 @@ $required = @(
     'scripts/art_catalog.gd',
     'scripts/v035_theme.gd',
     'scripts/shop_manager.gd',
+    'scripts/character_ui.gd',
     'assets/maps/ground/hulao_pass_v035.png',
     'assets/maps/decor/boulder_cluster_v035.png',
     'data/actors.json',
@@ -31,7 +32,8 @@ $required = @(
     'data/special_effects.json',
     'data/art_resources.json',
     'data/passives.json',
-    'data/shop.json'
+    'data/shop.json',
+    'data/general_skills.json'
 )
 
 foreach ($relative in $required) {
@@ -65,7 +67,9 @@ foreach ($id in $heroActors) {
 }
 
 $worlds = Get-Content -Raw -LiteralPath (Join-Path $root 'data/worlds.json') | ConvertFrom-Json
-if ($worlds.maps.PSObject.Properties.Count -ne 6) { throw 'V0.5 requires exactly six configured stages.' }
+if ($worlds.maps.PSObject.Properties.Count -ne 20) { throw 'V0.6 requires exactly twenty configured stages.' }
+$globalStages = @($worlds.maps.PSObject.Properties.Value | ForEach-Object { [int]$_.global_stage } | Sort-Object)
+if (($globalStages -join ',') -ne ((1..20) -join ',')) { throw 'V0.6 global stage numbering must be exactly 1 through 20.' }
 $shop = Get-Content -Raw -LiteralPath (Join-Path $root 'data/shop.json') | ConvertFrom-Json
 if ($shop.products.PSObject.Properties.Count -lt 7) { throw 'V0.5 shop catalog is incomplete.' }
 
@@ -111,7 +115,13 @@ if ($godotPath -and (Test-Path -LiteralPath $godotPath)) {
     if ($LASTEXITCODE -ne 0) { throw "V0.5 skill validation failed with exit code $LASTEXITCODE" }
     & $godotPath --headless --path $root -- --v05-system-test
     if ($LASTEXITCODE -ne 0) { throw "V0.5 progression/migration validation failed with exit code $LASTEXITCODE" }
-    Write-Host 'PASS: V0.1 through V0.5 runtime and persistence suites are valid.' -ForegroundColor Green
+    & $godotPath --headless --path $root -- --v06-world-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.6 world progression validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v06-progression-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.6 experience and AI validation failed with exit code $LASTEXITCODE" }
+    & $godotPath --headless --path $root -- --v06-character-test
+    if ($LASTEXITCODE -ne 0) { throw "V0.6 character page validation failed with exit code $LASTEXITCODE" }
+    Write-Host 'PASS: V0.1 through V0.6 runtime and persistence suites are valid.' -ForegroundColor Green
 } else {
     Write-Host 'PASS: Files, actor/skill references, 9 slots, and 10 affix definitions are valid.' -ForegroundColor Green
     Write-Warning 'Godot was not found. Set GODOT_BIN to the Godot executable to run both runtime tests.'

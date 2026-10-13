@@ -82,6 +82,10 @@ func _ready() -> void:
 		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_shop.png", "shop")
 	elif "--v05-preview-skills" in OS.get_cmdline_user_args():
 		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_skills.png", "strategy")
+	elif "--v06-preview-character-1440" in OS.get_cmdline_user_args():
+		call_deferred("_save_v06_character_preview", Vector2i(1440, 768), "v06_character_1440.png")
+	elif "--v06-preview-character-1920" in OS.get_cmdline_user_args():
+		call_deferred("_save_v06_character_preview", Vector2i(1920, 1080), "v06_character_1920.png")
 	elif "--v05-core-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v05_core_test")
 	elif "--v05-shop-test" in OS.get_cmdline_user_args():
@@ -326,6 +330,23 @@ func _save_v05_preview(window_size: Vector2i, file_name: String, view: String) -
 	print("V05_PREVIEW " + ProjectSettings.globalize_path(path))
 	get_tree().quit()
 
+func _save_v06_character_preview(window_size: Vector2i, file_name: String) -> void:
+	get_window().size = window_size
+	await get_tree().process_frame
+	_layout_ui()
+	character_ui.open("stats")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var path := "user://" + file_name
+	var image := get_viewport().get_texture().get_image()
+	if image == null or image.is_empty():
+		push_error("V06_PREVIEW_FAIL rendering texture unavailable")
+		get_tree().quit(1)
+		return
+	image.save_png(path)
+	print("V06_PREVIEW " + ProjectSettings.globalize_path(path))
+	get_tree().quit()
+
 func update_stats(kills: int, elapsed: float, wave: int) -> void:
 	var minutes := int(elapsed) / 60
 	var seconds := int(elapsed) % 60
@@ -503,6 +524,8 @@ func finish_v03_test() -> void:
 	if battle.kills <= 0 or battle.stats_snapshot().actors.is_empty():
 		failures.append("真实战斗统计或挂机战斗未产生数据")
 	# Independent world pools and clean target rebuild.
+	for stage in range(1, 11):
+		battle.progression.complete_stage(stage)
 	if not battle.switch_map("viridian_forest") or battle.current_map_id != "viridian_forest":
 		failures.append("世界切换失败")
 	for enemy in battle.enemies:
@@ -561,6 +584,8 @@ func finish_v03_test() -> void:
 	if battle.strategy_allows(hero): failures.append("技能敌人数阈值未生效")
 	preset.enemy_count = 1
 	# Both boss first clears unlock exactly once; repeats pay material instead.
+	for stage in range(11, 21):
+		p.complete_stage(stage)
 	for boss_id in ["lu_bu", "mewtwo"]:
 		battle.start_boss(boss_id)
 		var boss = battle.enemies[0]
@@ -645,9 +670,14 @@ func finish_v031_test() -> void:
 			failures.append("缺少功能按钮：" + view)
 		else:
 			v03_ui.toolbar_buttons[view].pressed.emit()
-			if not v03_ui.panel.visible or v03_ui.current_view != view:
-				failures.append("功能入口未打开：" + view)
-			v03_ui.close_panel()
+			if view in ["party", "strategy"]:
+				if not character_ui.panel.visible or character_ui.tabs.current_tab != (3 if view == "party" else 1):
+					failures.append("统一角色功能入口未打开：" + view)
+				character_ui.close_panel()
+			else:
+				if not v03_ui.panel.visible or v03_ui.current_view != view:
+					failures.append("功能入口未打开：" + view)
+				v03_ui.close_panel()
 	if v03_ui.toolbar_root.get_child_count() != 8 or v03_ui.aux_root.get_child_count() != 5:
 		failures.append("V0.35 底部与侧边功能布局不完整")
 	if not objective_chip.visible or battle.is_paused:
@@ -683,8 +713,8 @@ func finish_v031_test() -> void:
 			node.hide()
 			node.queue_free()
 	if not settings_open: failures.append("设置入口未打开")
-	if not inventory_ui.panel.visible or inventory_ui.actor_select.item_count != p.roster.size():
-		failures.append("背包入口或角色选择未更新")
+	if not character_ui.panel.visible or character_ui.tabs.current_tab != 2 or character_ui.actor_list.item_count != p.roster.size():
+		failures.append("统一角色背包入口或角色选择未更新")
 	backpack_button.pressed.emit()
 	if ArtCatalogScript.texture("portraits", "missing_actor") != null or ArtCatalogScript.texture("maps_ground", "missing_map") != null:
 		failures.append("缺少美术资源未安全回退")
@@ -951,8 +981,8 @@ func finish_v05_system_test() -> void:
 			failures.append("%dx%d功能页面超出窗口" % [resolution.x, resolution.y])
 		if v03_ui.aux_root.position.y + 5.0 * 27.0 * v03_ui.aux_root.scale.y > viewport_size.y:
 			failures.append("%dx%d商店/收益入口超出窗口" % [resolution.x, resolution.y])
-	if battle.worlds_config.get("maps", {}).size() != 6:
-		failures.append("双世界关卡数量不是6")
+	if battle.worlds_config.get("maps", {}).size() != 20:
+		failures.append("双世界主线关卡数量不是20")
 	if battle.switch_map("xuchang_gate"):
 		failures.append("等级不足时仍能进入高阶关卡")
 	var old_attack: float = float(battle.actors.zhao_yun.attack)
@@ -961,12 +991,14 @@ func finish_v05_system_test() -> void:
 	if not p.add_actor_experience("zhao_yun", p.experience_to_next(1) + 1, false) or p.actor_level("zhao_yun") != 2:
 		failures.append("角色经验未触发升级")
 	for actor_id in p.HERO_IDS:
-		p.actor_levels[actor_id] = 8
+		p.actor_levels[actor_id] = 20
 	var visited := 0
-	for map_id in battle.worlds_config.maps:
+	for stage in range(1, 21):
+		var map_id: String = battle.stage_id_for_number(stage)
 		if battle.switch_map(map_id): visited += 1
-	if visited != 6:
-		failures.append("六关无法按等级条件全部进入")
+		if not p.is_stage_complete(stage): p.complete_stage(stage)
+	if visited != 20:
+		failures.append("20关无法按主线顺序全部进入")
 	for boss_id in ["lu_bu", "mewtwo"]:
 		if not battle.start_boss(boss_id):
 			failures.append("Boss挑战无法开始：" + boss_id)
@@ -1031,7 +1063,7 @@ func finish_v05_system_test() -> void:
 	for path in [legacy_progress_path, migrated_progress_path, legacy_inventory_path, migrated_inventory_path]:
 		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	if failures.is_empty():
-		print("V05_SYSTEM_TEST_PASS stages=6 level_growth=true offline_once=true legacy_migration=true bosses=2 layouts=1440x768,1920x1080")
+		print("V05_SYSTEM_TEST_PASS stages=20 level_growth=true offline_once=true legacy_migration=true bosses=2 layouts=1440x768,1920x1080")
 	else:
 		for failure in failures:
 			push_error("V05_SYSTEM_TEST_FAIL: " + failure)

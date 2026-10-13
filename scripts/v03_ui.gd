@@ -211,7 +211,7 @@ func build_objectives() -> void:
 	title.text = "关卡目标"
 	var info := Label.new()
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在背包换装，在商店形成买卖循环，在技能页升级主动/被动能力。\n招募并调整四人队伍，提升平均等级后挑战六关与传奇 Boss。" % battle.worlds_config.maps[battle.current_map_id].name
+	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—20关推进；通关三国第10关后永久开放宝可梦世界。" % battle.worlds_config.maps[battle.current_map_id].name
 	if not battle.progression.guide_finished:
 		var step: int = clampi(battle.progression.guide_step, 0, 5)
 		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["使用初始招募令", "观察自动战斗", "等待装备掉落", "穿戴一件装备", "定向招募伙伴", "调整编队"][step]]
