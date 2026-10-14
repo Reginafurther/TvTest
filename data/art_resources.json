@@ -3,9 +3,18 @@
   "portraits_regions": {},
   "units": {"zhao_yun": "res://assets/units/zhao_yun_v06.png", "liu_bei": "res://assets/units/liu_bei_v06.png"},
   "equipment_icons": {},
-  "function_icons": {},
+  "function_icons": {
+    "party": "res://assets/ui/functions/party_v06.svg",
+    "recruit": "res://assets/ui/functions/recruit_v06.svg",
+    "world": "res://assets/ui/functions/world_v06.svg",
+    "boss": "res://assets/ui/functions/boss_v06.svg",
+    "craft": "res://assets/ui/functions/craft_v06.svg",
+    "strategy": "res://assets/ui/functions/strategy_v06.svg",
+    "pause": "res://assets/ui/functions/pause_v06.svg"
+  },
   "maps_ground": {"hulao_pass": "res://assets/maps/ground/hulao_pass_v035.png"},
   "maps_decor": {},
   "maps_obstacles": {"hulao_pass": "res://assets/maps/decor/boulder_cluster_v035.png"}
 }
+
 
