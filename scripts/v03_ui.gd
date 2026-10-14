@@ -218,6 +218,11 @@ func build_objectives() -> void:
 		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["用虎符定向招募", "将输出角色上阵", "观察职业自动战斗", "等待装备掉落", "穿戴一件装备", "补齐四人编队"][step]]
 	info.add_theme_font_size_override("font_size", 19)
 	content.add_child(info)
+	var auto_push := CheckButton.new()
+	auto_push.text = "通关后自动进入下一关（第20关后持续重复）"
+	auto_push.button_pressed = battle.progression.auto_push
+	auto_push.toggled.connect(func(enabled: bool): battle.set_auto_push(enabled))
+	content.add_child(auto_push)
 
 func build_logs() -> void:
 	title.text = "战斗日志"
@@ -267,16 +272,19 @@ func build_shop() -> void:
 	var separator := HSeparator.new()
 	content.add_child(separator)
 	var sell_title := Label.new()
-	sell_title.text = "出售背包装备（穿戴中的装备会标记且不可出售）"
+	sell_title.text = "出售背包装备（仅显示未穿戴且未锁定装备）"
 	content.add_child(sell_title)
 	var sell_list := ItemList.new()
 	sell_list.custom_minimum_size = Vector2(0, 105)
+	var eligible_ids: Array[String] = []
 	for item in battle.inventory.items:
-		var equipped: bool = battle.shop.is_equipped(item.instance_id)
-		var index := sell_list.add_item("%s%s　售价%d" % ["[穿戴] " if equipped else "", item.name, battle.shop.sell_price(item)])
+		if battle.shop.is_equipped(item.instance_id) or bool(item.get("locked", false)): continue
+		eligible_ids.append(str(item.instance_id))
+		var index := sell_list.add_item("%s　售价%d" % [item.name, battle.shop.sell_price(item)])
 		sell_list.set_item_metadata(index, item.instance_id)
 		if item.instance_id == selected_shop_item:
 			sell_list.select(index)
+	if selected_shop_item not in eligible_ids: selected_shop_item = ""
 	sell_list.item_selected.connect(_select_shop_item.bind(sell_list))
 	sell_list.item_activated.connect(_sell_shop_item.bind(sell_list))
 	content.add_child(sell_list)
@@ -312,8 +320,8 @@ func shop_product_icon(product: Dictionary) -> Texture2D:
 	var color := Color("#67B7FF")
 	if product.get("type", "") == "equipment":
 		color = Color(battle.equipment_config.qualities.get(product.get("quality", "white"), {}).get("color", "D7DEE3"))
-	elif product.get("type", "") == "recruit_token":
-		color = Color("#FFD166")
+	elif product.get("type", "") == "skill_book":
+		color = Color("#B889E8")
 	var image := Image.create(24, 24, false, Image.FORMAT_RGBA8)
 	image.fill(color)
 	var texture := ImageTexture.create_from_image(image)

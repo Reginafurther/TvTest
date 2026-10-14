@@ -137,7 +137,7 @@ func build_center_column(parent: HBoxContainer) -> void:
 		portrait_box.add_child(button)
 		slot_buttons[slot] = button
 	var optimize := Button.new()
-	optimize.text = "一键优化（最多3件·紫色+）"
+	optimize.text = "一键优化（最多3件·按职业收益）"
 	optimize.tooltip_text = "只使用未穿戴装备或当前角色自己的装备，不会拿走其他角色装备"
 	optimize.pressed.connect(_preview_optimization)
 	V035ThemeScript.button(optimize, "gold")
@@ -263,7 +263,7 @@ func refresh_center() -> void:
 	actor_role.text = "%s · %s · %s" % [data.get("world", ""), data.get("role", ""), "上阵中" if selected_actor in battle.progression.party else "未上阵，可正常培养"]
 	exp_bar.max_value = needed
 	exp_bar.value = xp
-	exp_label.text = "经验 %d / %d（%.1f%%）" % [xp, needed, 100.0 * xp / maxf(1.0, needed)]
+	exp_label.text = "Lv.%d / 上限Lv.%d　经验 %d / %d（%.1f%%）" % [level, battle.progression.actor_level_cap(), xp, needed, 100.0 * xp / maxf(1.0, needed)]
 	for old in portrait_box.find_children("CharacterPortrait", "Control", false, false): old.queue_free()
 	var portrait := TextureRect.new()
 	portrait.name = "CharacterPortrait"
@@ -305,7 +305,7 @@ func refresh_stats() -> void:
 	for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
 	var live = battle.get_hero(selected_actor)
 	if live != null: final = live.combat_snapshot()
-	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n等级 Lv.%d　当前经验 %d / %d\n\n[b]属性　　　　　 基础　　 装备加成　　 最终[/b]\n%s\n\n装备变更会即时刷新战场单位；未上阵角色也使用同一套最终属性计算。" % [data.name, level, int(battle.progression.actor_experience[selected_actor]), battle.progression.experience_to_next(level), stat_rows(base, gear, final)]
+	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n等级 Lv.%d / 当前上限 Lv.%d　当前经验 %d / %d\n\n[b]属性　　　　　 基础　　 装备加成　　 最终[/b]\n%s\n\n装备变更会即时刷新战场单位；通关更高主线可提高当前等级上限。" % [data.name, level, battle.progression.actor_level_cap(), int(battle.progression.actor_experience[selected_actor]), battle.progression.experience_to_next(level), stat_rows(base, gear, final)]
 
 func stat_rows(base: Dictionary, gear: Dictionary, final: Dictionary) -> String:
 	var labels := {"health":"生命", "attack":"攻击", "defense":"防御", "crit_chance":"暴击率", "crit_damage":"暴击伤害", "attack_speed":"攻击速度", "cooldown_reduction":"冷却缩减"}
@@ -470,13 +470,14 @@ func _inventory_action(action: String) -> void:
 	refresh_all()
 
 func _preview_optimization() -> void:
-	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 3, 3)
+	var role := str(battle.actors.get(selected_actor, {}).get("combat_role", ""))
+	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 3, role)
 	if pending_optimization.is_empty():
-		feedback.text = "没有符合条件且能提升属性的紫色及以上装备。"
+		feedback.text = "没有未锁定且能按当前职业定位提升属性的装备。"
 		return
 	var lines: Array[String] = []
 	for choice in pending_optimization: lines.append("%s → %s（评分 %+.1f）" % [choice.name, battle.equipment_config.slots[choice.slot], float(choice.gain)])
-	optimize_dialog.dialog_text = "仅使用未穿戴或当前角色自己的装备；不会拿走其他角色装备。\n本次最多穿戴3件：\n\n" + "\n".join(lines)
+	optimize_dialog.dialog_text = "比较所有品质并按当前职业计算实际收益；锁定装备和其他角色装备不会被使用。\n本次最多穿戴3件：\n\n" + "\n".join(lines)
 	optimize_dialog.popup_centered()
 
 func _apply_optimization() -> void:

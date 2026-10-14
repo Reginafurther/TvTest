@@ -134,10 +134,11 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 		general_active_timers[general_id] = randf_range(1.2, float(battle.general_skills_config.get(general_id, {}).get("cooldown", 7.0)))
 	if info.has("boss_id"):
 		control_resistance = 0.35
+		if info.get("boss_mechanic", "") == "regeneration": life_regen = max_hp * 0.012
 	add_to_group(team)
 	var shape := CollisionShape2D.new()
 	var circle := CircleShape2D.new()
-	circle.radius = 16.0
+	circle.radius = 23.0 if info.has("boss_id") else 16.0
 	shape.shape = circle
 	add_child(shape)
 	queue_redraw()
@@ -325,11 +326,17 @@ func basic_attack() -> void:
 		battle.note_passive(actor_id, passive_skill_id)
 	if actor_data.get("boss_id", "") == "lu_bu" and hp / max_hp < 0.5:
 		amount *= 1.45
+	if actor_data.get("boss_mechanic", "") == "berserk" and hp / max_hp < 0.5:
+		amount *= 1.35
 	var critical := randf() < crit_chance
 	if critical:
 		amount *= crit_damage
 	if target.has_negative_status(): amount *= 1.0 + passive_effect_total("status_amplifier")
 	target.take_damage(amount, self, critical, {"kind": "basic", "critical": critical, "allow_triggers": true})
+	match str(actor_data.get("boss_mechanic", "")):
+		"venom_strike": target.apply_poison(attack * 0.12, 4.0, self, 0)
+		"shock_strike": target.apply_shock(2.2)
+		"regeneration": heal(amount * 0.16, self, false)
 	trigger_general_on_hit(target)
 	basic_attack_count += 1
 	if passive_data.get("effect", "") == "combo" and basic_attack_count % 3 == 0 and is_instance_valid(target) and not target.dead:
@@ -548,6 +555,7 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		raw_amount -= shared
 		damage_share_source.take_damage(shared, source, false, {"kind":"effect", "allow_triggers":false, "shared":true})
 	var amount := preview_damage(raw_amount)
+	if actor_data.get("boss_mechanic", "") == "stone_skin": amount = roundi(amount * 0.78)
 	if passive_data.get("effect", "") == "damage_reduction":
 		amount = roundi(amount * (1.0 - passive_value()))
 		battle.note_passive(actor_id, passive_skill_id)
@@ -569,6 +577,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	health_changed.emit(self)
 	battle.on_damage(source, self, amount, context)
 	if is_instance_valid(source) and source != self:
+		if actor_data.get("boss_mechanic", "") == "counter_guard":
+			source.take_damage(amount * 0.18, self, false, {"kind":"effect", "allow_triggers":false})
 		if temporary_counter_time > 0.0:
 			source.take_damage(attack * temporary_counter, self, false, {"kind":"effect", "allow_triggers":false})
 		var counter_chance := passive_effect_total("counter")
@@ -678,6 +688,14 @@ func has_negative_status() -> bool:
 func reduce_current_cooldowns(ratio: float) -> void:
 	skill_timer *= maxf(0.2, 1.0 - ratio)
 	for skill_id in general_active_timers: general_active_timers[skill_id] = float(general_active_timers[skill_id]) * maxf(0.2, 1.0 - ratio)
+
+func on_boss_skill_cast() -> void:
+	match str(actor_data.get("boss_mechanic", "")):
+		"shield_cycle": add_shield(max_hp * 0.08)
+		"war_banner":
+			for ally in allied_units(8): ally.add_shield(max_hp * 0.04)
+		"burning_aura":
+			for victim in battle.enemies_near(position, faction, 210.0, 8): victim.apply_burn(attack * 0.1, 4.0, self)
 
 func apply_hard_control(duration: float) -> float:
 	# Boss hard-control duration diminishes per application and is capped cumulatively.
@@ -818,6 +836,10 @@ func _draw() -> void:
 	var accent := _accent_color()
 	if hit_flash > 0:
 		base = Color.WHITE
+	if actor_data.has("boss_id"):
+		draw_circle(Vector2.ZERO, 34, Color(accent, 0.16))
+		draw_arc(Vector2.ZERO, 34, 0, TAU, 36, accent, 4)
+		draw_string(ThemeDB.fallback_font, Vector2(-28, -58), "BOSS", HORIZONTAL_ALIGNMENT_CENTER, 56, 14, Color("#FFE08A"))
 	# Soft shadow, oversized head and compact body form the placeholder chibi silhouette.
 	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
 	var artwork: Texture2D = ArtCatalogScript.texture("units", actor_id)

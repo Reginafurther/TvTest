@@ -38,8 +38,12 @@ var equipped_general_skills: Dictionary = {}
 var general_skill_levels: Dictionary = {}
 var skill_priorities: Dictionary = {}
 var skill_books: Dictionary = {}
+var auto_push := true
+var progression_config: Dictionary = {}
 
 func setup() -> void:
+	progression_config = JSON.parse_string(FileAccess.get_file_as_string("res://data/progression.json"))
+	if typeof(progression_config) != TYPE_DICTIONARY: progression_config = {}
 	var args := OS.get_cmdline_user_args()
 	var test_mode := false
 	for value in args:
@@ -245,9 +249,17 @@ func add_actor_experience(actor_id: String, amount: int, autosave: bool = true, 
 	if actor_id not in HERO_IDS or amount <= 0:
 		return false
 	ensure_growth_layout()
+	var cap := actor_level_cap()
+	var current_level := int(actor_levels[actor_id])
+	if current_level >= cap:
+		var storage_limit := floori(experience_to_next(current_level) * float(progression_config.get("cap_storage_ratio", 0.25)))
+		actor_experience[actor_id] = mini(storage_limit, int(actor_experience[actor_id]) + amount)
+		if autosave: changed.emit(); save_to_disk()
+		return false
 	actor_experience[actor_id] = int(actor_experience[actor_id]) + amount
 	var leveled := false
-	while int(actor_levels[actor_id]) < 60:
+	var maximum := int(progression_config.get("max_actor_level", 60))
+	while int(actor_levels[actor_id]) < mini(maximum, cap):
 		var needed := experience_to_next(int(actor_levels[actor_id]))
 		if int(actor_experience[actor_id]) < needed:
 			break
@@ -257,24 +269,33 @@ func add_actor_experience(actor_id: String, amount: int, autosave: bool = true, 
 		if level_history[actor_id].size() > 20:
 			level_history[actor_id].resize(20)
 		leveled = true
+	if int(actor_levels[actor_id]) >= cap:
+		actor_experience[actor_id] = mini(int(actor_experience[actor_id]), floori(experience_to_next(int(actor_levels[actor_id])) * float(progression_config.get("cap_storage_ratio", 0.25))))
 	if autosave:
 		changed.emit()
 		save_to_disk()
 	return leveled
 
 func experience_to_next(level: int) -> int:
-	return 35 + level * level * 8
+	var curve: Dictionary = progression_config.get("experience_curve", {})
+	return int(curve.get("base", 180)) + level * int(curve.get("linear", 90)) + level * level * int(curve.get("quadratic", 25))
+
+func actor_level_cap() -> int:
+	return clampi(maxi(1, completed_stages.size()), 1, int(progression_config.get("max_actor_level", 60)))
 
 func experience_for_kill(monster_level: int, enemy_type: String, hero_level: int) -> int:
-	var base := 5.0 + maxf(1.0, monster_level) * 2.0
+	var reward: Dictionary = progression_config.get("kill_experience", {})
+	var base := float(reward.get("base", 3.0)) + maxf(1.0, monster_level) * float(reward.get("per_monster_level", 1.2))
 	var type_multiplier := 1.0
 	match enemy_type:
-		"elite": type_multiplier = 2.5
-		"boss": type_multiplier = 8.0
+		"elite": type_multiplier = float(reward.get("elite_multiplier", 3.0))
+		"boss": type_multiplier = float(reward.get("boss_multiplier", 10.0))
 	var level_gap := hero_level - monster_level
 	var farm_multiplier := 1.0
-	if level_gap > 3:
-		farm_multiplier = maxf(0.15, 1.0 - (level_gap - 3) * 0.12)
+	var farm: Dictionary = progression_config.get("low_stage_farm", {})
+	var free_gap := int(farm.get("free_level_gap", 2))
+	if level_gap > free_gap:
+		farm_multiplier = maxf(float(farm.get("minimum_multiplier", 0.08)), 1.0 - (level_gap - free_gap) * float(farm.get("penalty_per_level", 0.16)))
 	return maxi(1, roundi(base * type_multiplier * farm_multiplier))
 
 func actor_level(actor_id: String) -> int:
@@ -431,7 +452,7 @@ func claim_offline_rewards() -> Dictionary:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "auto_push": auto_push, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -471,6 +492,7 @@ func apply_payload(parsed) -> bool:
 	general_skill_levels = parsed.get("general_skill_levels", {})
 	skill_priorities = parsed.get("skill_priorities", {})
 	skill_books = parsed.get("skill_books", {})
+	auto_push = bool(parsed.get("auto_push", true))
 	transaction_log = parsed.get("transaction_log", [])
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))

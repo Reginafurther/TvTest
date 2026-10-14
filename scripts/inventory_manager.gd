@@ -121,21 +121,31 @@ func set_item_locked(instance_id: String, locked: bool) -> bool:
 	save_to_disk()
 	return true
 
-func item_score(item: Dictionary) -> float:
+func item_score(item: Dictionary, combat_role: String = "") -> float:
 	var stats := item_stats(item)
-	return float(stats.get("attack", 0)) * 5.0 + float(stats.get("defense", 0)) * 3.0 + float(stats.get("health", 0)) * 0.30 + float(stats.get("crit_chance", 0)) * 300.0 + float(stats.get("crit_damage", 0)) * 120.0 + float(stats.get("attack_speed", 0)) * 180.0 + float(stats.get("cooldown_reduction", 0)) * 180.0 + float(stats.get("physical_damage", 0)) * 140.0 + float(stats.get("elemental_damage", 0)) * 140.0 + float(stats.get("life_regen", 0)) * 8.0
+	var weights := {"attack":5.0,"defense":3.0,"health":0.3,"crit_chance":300.0,"crit_damage":120.0,"attack_speed":180.0,"cooldown_reduction":180.0,"physical_damage":140.0,"elemental_damage":140.0,"life_regen":8.0}
+	match combat_role:
+		"tank": weights.merge({"attack":2.2,"defense":7.0,"health":0.7,"life_regen":14.0,"cooldown_reduction":130.0}, true)
+		"healer": weights.merge({"attack":4.5,"defense":3.5,"health":0.45,"cooldown_reduction":300.0,"attack_speed":220.0,"life_regen":11.0}, true)
+		"ranged_dps": weights.merge({"attack":5.8,"defense":1.8,"health":0.2,"crit_chance":360.0,"crit_damage":155.0,"elemental_damage":230.0,"cooldown_reduction":210.0}, true)
+		"melee_dps": weights.merge({"attack":6.2,"defense":2.5,"health":0.28,"crit_chance":350.0,"physical_damage":230.0,"attack_speed":220.0}, true)
+	var score := 0.0
+	for stat_id in weights: score += float(stats.get(stat_id, 0.0)) * float(weights[stat_id])
+	return score
 
-func optimize_candidates(actor_id: String, min_quality_rank: int = 3, maximum: int = 3) -> Array:
+func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: int = 3, combat_role: String = "") -> Array:
 	var choices: Array = []
 	var chosen_ids: Array = []
 	if not equipped.has(actor_id):
 		return choices
 	for slot in equipped[actor_id]:
 		var current = get_equipped_item(actor_id, slot)
-		var current_score := item_score(current) if current != null else 0.0
+		var current_score := item_score(current, combat_role) if current != null else 0.0
 		var best_item
 		var best_gain := 0.0
 		for item in items:
+			if bool(item.get("locked", false)):
+				continue
 			if str(item.get("instance_id", "")) in chosen_ids:
 				continue
 			if int(item.get("quality_rank", 0)) < min_quality_rank:
@@ -145,7 +155,7 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 3, maximum: i
 				continue
 			if slot not in item.get("compatible_slots", [item.get("slot", "")]):
 				continue
-			var gain := item_score(item) - current_score
+			var gain := item_score(item, combat_role) - current_score
 			if gain > best_gain and str(item.get("instance_id", "")) != str(equipped[actor_id][slot]):
 				best_gain = gain
 				best_item = item
@@ -160,6 +170,9 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 3, maximum: i
 func apply_optimization(actor_id: String, choices: Array) -> int:
 	var applied := 0
 	for choice in choices.slice(0, 3):
+		var item = find_item(str(choice.instance_id))
+		if item == null or bool(item.get("locked", false)):
+			continue
 		if item_owner(str(choice.instance_id)) not in ["", actor_id]:
 			continue
 		if equip_item(actor_id, str(choice.instance_id), str(choice.slot)):

@@ -106,6 +106,10 @@ func _ready() -> void:
 		call_deferred("finish_v061_ai_test")
 	elif "--v061-skill-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v061_skill_test")
+	elif "--v061-progression-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_progression_test")
+	elif "--v061-economy-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_economy_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -536,12 +540,14 @@ func finish_v03_test() -> void:
 		failures.append("世界切换失败")
 	for enemy in battle.enemies:
 		if enemy.actor_id not in ["zubat", "forest_bug"]: failures.append("常青森林敌人池串线")
-	# Recruitment is unique and party changes retain the old actor's equipment mapping.
+	# Material recruitment is unique and party changes retain equipment mapping.
 	var p = battle.progression
-	var first_recruit: String = p.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
-	var second_recruit: String = p.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
-	if first_recruit.is_empty() or not second_recruit.is_empty() or p.roster.count(first_recruit) != 1:
-		failures.append("招募令唯一性失败")
+	p.materials.three_kingdoms_token = 100
+	var first_recruit := "zhang_fei"
+	var first_ok: bool = p.exchange_actor(first_recruit, "three_kingdoms_token", 40)
+	var second_ok: bool = p.exchange_actor(first_recruit, "three_kingdoms_token", 40)
+	if not first_ok or second_ok or p.roster.count(first_recruit) != 1:
+		failures.append("材料招募唯一性失败")
 	var old_equipment: Dictionary = battle.inventory.equipped["zhao_yun"].duplicate(true)
 	p.set_party_member(0, first_recruit)
 	battle.rebuild_party()
@@ -638,7 +644,8 @@ func finish_v031_test() -> void:
 	if not v03_ui.panel.visible or v03_ui.current_view != "recruit":
 		failures.append("新手引导前往按钮无效")
 	v03_ui.close_panel()
-	var recruited: String = p.use_recruit_token(battle.worlds_config.recruitment.starter_pool, battle.equipment_generator.rng)
+	p.materials.three_kingdoms_token = 100
+	var recruited := "zhang_fei" if p.exchange_actor("zhang_fei", "three_kingdoms_token", 40) else ""
 	tutorial_ui.advance_from_state()
 	if recruited.is_empty() or p.guide_step != 1:
 		failures.append("初始招募未推进引导")
@@ -800,28 +807,18 @@ func finish_v05_core_test() -> void:
 	reload_inventory.free()
 	var p = battle.progression
 	var roster_before: int = p.roster.size()
-	var tokens_before: int = p.recruit_tokens
+	var material_before: int = int(p.materials.three_kingdoms_token)
 	v03_ui.open_view("recruit")
-	var recruit_button: Button
-	for node in v03_ui.content.find_children("*", "Button", true, false):
-		if node.text.begins_with("使用招募令"):
-			recruit_button = node
-			break
-	if recruit_button == null:
-		failures.append("招募令入口不存在")
-	else:
-		recruit_button.pressed.emit()
-	if p.roster.size() != roster_before + 1 or p.recruit_tokens != tokens_before - 1:
-		failures.append("真实招募按钮未正确扣令并获得角色")
-	if "招募成功" not in v03_ui.recruit_feedback:
-		failures.append("招募结果缺少明确反馈")
+	var recruited_ok: bool = p.exchange_actor("zhang_fei", "three_kingdoms_token", 40)
+	if not recruited_ok or p.roster.size() != roster_before + 1 or int(p.materials.three_kingdoms_token) != material_before - 40:
+		failures.append("材料招募未正确扣除资源并获得角色")
 	var reload_progress = ProgressionManagerScript.new()
 	reload_progress.save_path = p.save_path
-	if not reload_progress.load_from_disk() or reload_progress.roster.size() != p.roster.size() or reload_progress.recruit_tokens != p.recruit_tokens:
+	if not reload_progress.load_from_disk() or reload_progress.roster.size() != p.roster.size() or reload_progress.materials != p.materials:
 		failures.append("招募结果未写入V0.5独立存档")
 	reload_progress.free()
 	if failures.is_empty():
-		print("V05_CORE_TEST_PASS ui_equip=true combat_stats=true recruit_token=true persistence=true")
+		print("V05_CORE_TEST_PASS ui_equip=true combat_stats=true material_recruit=true persistence=true")
 	else:
 		for failure in failures:
 			push_error("V05_CORE_TEST_FAIL: " + failure)
@@ -845,7 +842,7 @@ func finish_v05_shop_test() -> void:
 		failures.append("商店装备未按JSON配置生成")
 	var gold_after_buy: int = p.gold
 	p.gold = 0
-	if not battle.shop.buy("recruit_token", 1).is_empty() or "金币不足" not in battle.shop.last_error:
+	if not battle.shop.buy("salvage_pack", 1).is_empty() or "金币不足" not in battle.shop.last_error:
 		failures.append("金币不足未阻止交易或缺少反馈")
 	p.gold = gold_after_buy
 	var old_capacity: int = battle.inventory.capacity
@@ -1032,7 +1029,7 @@ func finish_v05_system_test() -> void:
 	var migrated_progress_path := "user://v05_progress_fixture.json"
 	for path in [legacy_progress_path, migrated_progress_path]:
 		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	var legacy_progress_text := JSON.stringify({"version": "0.35", "gold": 321, "recruit_tokens": 2, "roster": ["zhao_yun", "liu_bei", "pikachu", "snorlax", "gengar"], "party": ["gengar", "liu_bei", "pikachu", "snorlax"], "materials": {"pokemon_token": 17}})
+	var legacy_progress_text := JSON.stringify({"version": "0.35", "gold": 321, "roster": ["zhao_yun", "liu_bei", "pikachu", "snorlax", "gengar"], "party": ["gengar", "liu_bei", "pikachu", "snorlax"], "materials": {"pokemon_token": 17}})
 	var legacy_progress_file := FileAccess.open(legacy_progress_path, FileAccess.WRITE)
 	legacy_progress_file.store_string(legacy_progress_text)
 	legacy_progress_file.close()
@@ -1607,6 +1604,179 @@ func finish_v061_skill_test() -> void:
 		print("V061_SKILL_TEST_PASS total=52 tk=16+10 pokemon=16+10 active_runtime=%d passive_runtime=%d slots=3+4 books=drop+shop+upgrade persistence=true" % [executed_actives, validated_passives])
 	else:
 		for failure in failures: push_error("V061_SKILL_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_progression_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.roster = ["zhao_yun", "liu_bei"]
+	p.party = ["zhao_yun", "liu_bei", "", ""]
+	p.completed_stages = []
+	p.ensure_world_layout()
+	p.actor_levels.zhao_yun = 1
+	p.actor_experience.zhao_yun = 0
+	if p.actor_level_cap() != 1 or p.can_enter_stage(11): failures.append("新档等级上限或宝可梦世界锁定错误")
+	p.add_actor_experience("zhao_yun", 999999, false, "cap_test")
+	if p.actor_level("zhao_yun") != 1 or int(p.actor_experience.zhao_yun) > floori(p.experience_to_next(1) * 0.25):
+		failures.append("Lv.1上限或封顶经验截留规则失效")
+	var normal_xp: int = p.experience_for_kill(10, "normal", 10)
+	var elite_xp: int = p.experience_for_kill(10, "elite", 10)
+	var boss_xp: int = p.experience_for_kill(10, "boss", 10)
+	if not (normal_xp < elite_xp and elite_xp < boss_xp) or p.experience_for_kill(1, "normal", 20) >= normal_xp:
+		failures.append("经验类型倍率或低关挂机衰减错误")
+	# 顺序完成20关时，上限随最高已完成关卡增长，且第10关永久开放第二世界。
+	p.set_block_signals(true)
+	p.completed_stages = []
+	for stage in range(1, 21):
+		if not p.complete_stage(stage): failures.append("无法顺序完成第%d关" % stage)
+		if p.actor_level_cap() != maxi(1, stage): failures.append("第%d关后等级上限错误" % stage)
+		if stage < 10 and p.pokemon_world_unlocked: failures.append("第10关前提前开放宝可梦世界")
+		if stage >= 10 and not p.pokemon_world_unlocked: failures.append("第10关后未开放宝可梦世界")
+	p.set_block_signals(false)
+	# 每关最终波都必须生成一个有名称、Boss标识和可实际施放技能的关底单位。
+	var ordered_maps: Array = battle.worlds_config.maps.keys()
+	ordered_maps.sort_custom(func(a, b): return int(battle.worlds_config.maps[a].global_stage) < int(battle.worlds_config.maps[b].global_stage))
+	var boss_names: Dictionary = {}
+	var boss_skills: Dictionary = {}
+	var boss_health_curve: Array[float] = []
+	var cast_count := 0
+	for map_id in ordered_maps:
+		var map_data: Dictionary = battle.worlds_config.maps[map_id]
+		if str(map_data.get("main_boss", "")).is_empty():
+			failures.append("第%d关没有最终波Boss" % int(map_data.global_stage))
+			continue
+		battle.clear_combatants()
+		battle.current_map_id = str(map_id)
+		battle.stage_cleared = false
+		battle.wave = int(map_data.waves_to_clear)
+		var hero = battle.spawn_unit("zhao_yun", "heroes", Vector2(790, 260))
+		battle.spawn_wave()
+		if battle.enemies.size() != 1: failures.append("第%d关最终波未只生成关底Boss" % int(map_data.global_stage)); continue
+		var boss = battle.enemies[0]
+		boss_names[boss._name()] = true
+		boss_skills[str(boss.actor_data.skill)] = true
+		boss_health_curve.append(boss.max_hp)
+		boss.target = hero
+		boss.hp = boss.max_hp * 0.4 if boss.skill_data.get("type", "") == "self_heal" else boss.max_hp
+		boss.skill_timer = 0.0
+		if boss.try_use_skill(): cast_count += 1
+		else: failures.append("第%d关Boss技能无法实际施放：%s" % [int(map_data.global_stage), boss._name()])
+	if boss_names.size() != 20 or boss_skills.size() != 20 or cast_count != 20:
+		failures.append("20关Boss名称/独立技能/运行数量不完整")
+	for index in range(1, boss_health_curve.size()):
+		if boss_health_curve[index] <= boss_health_curve[index - 1]: failures.append("Boss生命曲线在第%d关未递增" % (index + 1))
+	# 首通奖励只能结算一次；自动推关关闭时重复本关，开启时进入下一关，第20关始终循环。
+	battle.clear_combatants()
+	p.completed_stages = []
+	p.ensure_world_layout()
+	p.auto_push = true
+	battle.current_map_id = "hulao_pass"
+	battle.wave = 4
+	var reward_gold_before: int = p.gold
+	var reward_material_before := int(p.materials.three_kingdoms_token)
+	var defeated = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(800, 260), {"boss_id":"stage_1"})
+	battle.resolve_stage_wave(defeated)
+	var first_gold: int = p.gold
+	var first_material := int(p.materials.three_kingdoms_token)
+	if not p.is_stage_complete(1) or first_gold - reward_gold_before != 35 or first_material - reward_material_before != 8:
+		failures.append("第1关首通状态或首通奖励错误")
+	battle.resolve_stage_wave(defeated)
+	if p.gold != first_gold or int(p.materials.three_kingdoms_token) != first_material:
+		failures.append("重复通关错误重复发放首通奖励")
+	battle.continue_after_stage()
+	if int(battle.worlds_config.maps[battle.current_map_id].global_stage) != 2: failures.append("自动推关未进入下一关")
+	p.auto_push = false
+	var held_map: String = battle.current_map_id
+	battle.continue_after_stage()
+	if battle.current_map_id != held_map or battle.wave != 2: failures.append("关闭自动推关后未重新挂机当前关")
+	p.completed_stages = []
+	for stage in range(1, 21): p.completed_stages.append(stage)
+	p.ensure_world_layout()
+	p.auto_push = true
+	battle.current_map_id = "cerulean_cave"
+	battle.continue_after_stage()
+	if battle.current_map_id != "cerulean_cave": failures.append("第20关通关后未保持无限循环")
+	p.save_to_disk()
+	var reload_progress = ProgressionManagerScript.new(); reload_progress.save_path = p.save_path
+	if not reload_progress.load_from_disk() or not reload_progress.auto_push or reload_progress.actor_level_cap() != 20:
+		failures.append("世界进度、等级上限或自动推关设置未持久化")
+	reload_progress.free()
+	if failures.is_empty():
+		print("V061_PROGRESSION_TEST_PASS stages=20 bosses=20 unique_skills=20 boss_casts=20 level_cap=dynamic xp_curve=data_driven rewards_once=true auto_push=persisted endless_stage20=true")
+	else:
+		for failure in failures: push_error("V061_PROGRESSION_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_economy_test() -> void:
+	var failures: Array[String] = []
+	var inventory = battle.inventory
+	var p = battle.progression
+	p.roster = ["zhao_yun", "liu_bei", "snorlax"]
+	p.party = ["zhao_yun", "liu_bei", "snorlax", ""]
+	inventory.items.clear()
+	inventory.equipped.clear()
+	inventory.ensure_equipment_layout()
+	var purple_current: Dictionary = battle.equipment_generator.generate(8, "当前装备", "purple", "main_hand")
+	purple_current.base_stats = {"attack":5.0}
+	var blue_upgrade: Dictionary = battle.equipment_generator.generate(6, "低品质实用装备", "blue", "main_hand")
+	blue_upgrade.base_stats = {"attack":45.0, "crit_chance":0.04}
+	var locked_best: Dictionary = battle.equipment_generator.generate(9, "锁定装备", "orange", "main_hand")
+	locked_best.base_stats = {"attack":300.0}; locked_best.locked = true
+	var other_owner: Dictionary = battle.equipment_generator.generate(9, "他人装备", "orange", "main_hand")
+	other_owner.base_stats = {"attack":500.0}
+	var sellable: Dictionary = battle.equipment_generator.generate(3, "可出售装备", "white", "helmet")
+	for item in [purple_current, blue_upgrade, locked_best, other_owner]: inventory.add_item(item, false)
+	inventory.equip_item("zhao_yun", purple_current.instance_id, "main_hand")
+	inventory.equip_item("liu_bei", other_owner.instance_id, "main_hand")
+	var choices: Array = inventory.optimize_candidates("zhao_yun", 0, 3, "melee_dps")
+	if choices.size() > 3 or choices.is_empty(): failures.append("一键优化为空或超过3件")
+	var choice_ids: Array = choices.map(func(choice): return str(choice.instance_id))
+	if blue_upgrade.instance_id not in choice_ids: failures.append("蓝色装备属性更优时未被推荐")
+	if locked_best.instance_id in choice_ids or other_owner.instance_id in choice_ids: failures.append("一键优化使用了锁定或其他角色装备")
+	if inventory.apply_optimization("zhao_yun", choices) < 1 or inventory.get_equipped_item("zhao_yun", "main_hand").instance_id != blue_upgrade.instance_id:
+		failures.append("一键优化没有真实替换装备")
+	inventory.add_item(sellable, false)
+	var health_item: Dictionary = {"base_stats":{"health":100.0}}
+	var attack_item: Dictionary = {"base_stats":{"attack":12.0}}
+	if inventory.item_score(health_item, "tank") <= inventory.item_score(attack_item, "tank") or inventory.item_score(attack_item, "melee_dps") <= inventory.item_score(health_item, "melee_dps"):
+		failures.append("职业评分未区分坦克与近战输出收益")
+	# 商店出售列表只显示未穿戴且未锁定装备，并在交易后即时刷新。
+	v03_ui.open_view("shop")
+	var lists: Array[Node] = v03_ui.content.find_children("*", "ItemList", true, false)
+	if lists.size() < 2:
+		failures.append("商店出售列表不存在")
+	else:
+		var sell_list: ItemList = lists[1]
+		var listed: Array[String] = []
+		for index in range(sell_list.item_count): listed.append(str(sell_list.get_item_metadata(index)))
+		if blue_upgrade.instance_id in listed or other_owner.instance_id in listed or locked_best.instance_id in listed:
+			failures.append("出售列表仍显示已穿戴或锁定装备")
+		if sellable.instance_id not in listed: failures.append("出售列表遗漏可出售装备")
+	var gold_before: int = p.gold
+	v03_ui.selected_shop_item = str(sellable.instance_id)
+	v03_ui._sell_selected_shop_item()
+	if inventory.find_item(sellable.instance_id) != null or p.gold <= gold_before:
+		failures.append("商店出售未移除物品或增加金币")
+	await get_tree().process_frame
+	var refreshed_lists: Array[Node] = v03_ui.content.find_children("*", "ItemList", true, false)
+	if refreshed_lists.size() >= 2:
+		for index in range((refreshed_lists[1] as ItemList).item_count):
+			if str((refreshed_lists[1] as ItemList).get_item_metadata(index)) == sellable.instance_id: failures.append("出售后列表未实时刷新")
+	# 底层交易仍做二次校验，不能通过旧选择绕过。
+	if not battle.shop.sell(locked_best.instance_id).is_empty() or "锁定" not in battle.shop.last_error:
+		failures.append("锁定装备绕过出售底层校验")
+	if not battle.shop.sell(blue_upgrade.instance_id).is_empty() or "穿戴" not in battle.shop.last_error:
+		failures.append("穿戴装备绕过出售底层校验")
+	p.save_to_disk(); inventory.save_to_disk()
+	var reload_progress = ProgressionManagerScript.new(); reload_progress.save_path = p.save_path
+	var reload_inventory = InventoryManagerScript.new(); reload_inventory.setup(battle.equipment_config); reload_inventory.save_path = inventory.save_path
+	if not reload_progress.load_from_disk() or not reload_inventory.load_from_disk() or reload_inventory.find_item(sellable.instance_id) != null:
+		failures.append("交易记录或背包出售结果未持久化")
+	reload_progress.free(); reload_inventory.free()
+	if failures.is_empty():
+		print("V061_ECONOMY_TEST_PASS optimize=all_quality role_scoring=true max3=true locked_excluded=true no_steal=true shop_filter=true live_refresh=true bottom_validation=true persistence=true")
+	else:
+		for failure in failures: push_error("V061_ECONOMY_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 

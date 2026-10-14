@@ -124,13 +124,21 @@
     "name": "大针蜂", "world": "宝可梦", "role": "森林怪物", "enemy_type": "normal", "max_hp": 175, "attack": 24, "defense": 6,
     "move_speed": 105, "attack_range": 58, "attack_interval": 0.88, "color": "D9B43E", "accent": "3B3430", "skill": "enemy_strike"
   },
+  "stage_guardian_tk": {
+    "name":"三国关将","world":"三国","role":"主线关底Boss","enemy_type":"boss","max_hp":800,"attack":24,"defense":11,
+    "move_speed":76,"attack_range":82,"attack_interval":1.15,"color":"9E4D43","accent":"F2C66D","skill":"boss_yellow_banner","boss_id":"stage_guardian"
+  },
+  "stage_guardian_pk": {
+    "name":"宝可梦霸主","world":"宝可梦","role":"主线关底Boss","enemy_type":"boss","max_hp":1100,"attack":29,"defense":12,
+    "move_speed":88,"attack_range":175,"attack_interval":1.05,"color":"6577B5","accent":"BDEBFF","skill":"boss_forest_sting","boss_id":"stage_guardian"
+  },
   "lu_bu_boss": {
     "name": "魔神吕布", "world": "三国", "role": "传奇Boss", "enemy_type": "boss", "max_hp": 5200, "attack": 58, "defense": 26,
-    "move_speed": 82, "attack_range": 90, "attack_interval": 1.0, "color": "821D2A", "accent": "FFD15C", "skill": "boss_whirlwind", "boss_id": "lu_bu"
+    "move_speed": 82, "attack_range": 90, "attack_interval": 1.0, "color": "821D2A", "accent": "FFD15C", "skill": "boss_whirlwind", "boss_id": "lu_bu", "boss_mechanic":"berserk"
   },
   "mewtwo_boss": {
-    "name": "暴走超梦", "world": "宝可梦", "role": "传奇Boss", "enemy_type": "boss", "max_hp": 4700, "attack": 62, "defense": 21,
-    "move_speed": 92, "attack_range": 240, "attack_interval": 1.05, "color": "C5B9DD", "accent": "B65EE0", "skill": "boss_psychic_storm", "boss_id": "mewtwo"
+    "name": "暴走超梦", "world": "宝可梦", "role": "传奇Boss", "enemy_type": "boss", "max_hp": 10000, "attack": 90, "defense": 45,
+    "move_speed": 92, "attack_range": 240, "attack_interval": 1.05, "color": "C5B9DD", "accent": "B65EE0", "skill": "boss_psychic_storm", "boss_id": "mewtwo", "boss_mechanic":"shield_cycle"
   }
 }
 

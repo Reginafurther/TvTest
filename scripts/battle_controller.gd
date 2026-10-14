@@ -57,6 +57,7 @@ var stage_boss_active := false
 var ai_trace: Array = []
 var ai_trace_timer := 0.0
 var ai_test_wave := 0
+var stage_transition_timer := -1.0
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -136,8 +137,19 @@ func spawn_wave() -> void:
 	var target_wave := int(map_data.get("waves_to_clear", 3))
 	if not str(map_data.get("main_boss", "")).is_empty() and wave == target_wave:
 		stage_boss_active = true
-		spawn_unit(str(map_data.main_boss), "enemies", Vector2(875, 260))
-		log_message.emit("主线第 %d 关关底Boss登场：【%s】" % [int(map_data.get("global_stage", 1)), actors.get(map_data.main_boss, {}).get("name", "Boss")])
+		var stage := int(map_data.get("global_stage", 1))
+		var overrides: Dictionary = {}
+		if map_data.has("boss_name"):
+			overrides = {"name":map_data.boss_name, "skill":map_data.get("boss_skill", "enemy_strike"), "boss_mechanic":map_data.get("boss_mechanic", ""), "boss_id":"stage_%d" % stage}
+		var boss = spawn_unit(str(map_data.main_boss), "enemies", Vector2(875, 260), overrides)
+		boss.enemy_type = "boss"
+		boss.monster_level = stage
+		if str(map_data.main_boss).begins_with("stage_guardian"):
+			boss.max_hp *= 1.0 + stage * 0.35
+			boss.hp = boss.max_hp
+			boss.attack *= 1.0 + stage * 0.075
+			boss.defense *= 1.0 + stage * 0.055
+		log_message.emit("主线第 %d 关关底Boss登场：【%s】" % [stage, boss._name()])
 		wave += 1
 		return
 	var pool: Array = map_data.get("enemy_pool", ["yellow_turban"])
@@ -146,7 +158,11 @@ func spawn_wave() -> void:
 		var id: String = pool[(i + wave) % pool.size()]
 		var pos := Vector2(900 + randf_range(-50, 70), 70 + i * (380.0 / maxf(1, count - 1)) + randf_range(-18, 18))
 		var enemy = spawn_unit(id, "enemies", pos)
-		enemy.monster_level = int(map_data.get("difficulty_level", map_data.get("level", 1)))
+		var difficulty := int(map_data.get("difficulty_level", map_data.get("level", 1)))
+		enemy.monster_level = difficulty
+		enemy.max_hp *= 1.0 + (difficulty - 1) * 0.18
+		enemy.attack *= 1.0 + (difficulty - 1) * 0.11
+		enemy.defense *= 1.0 + (difficulty - 1) * 0.08
 		if wave >= 2 and i == count - 1:
 			enemy.enemy_type = "elite"
 			enemy.max_hp *= 1.75
@@ -158,9 +174,10 @@ func spawn_wave() -> void:
 	log_message.emit("第 %d 波敌人进入%s" % [wave, map_data.get("name", "地图")])
 	wave += 1
 
-func spawn_unit(id: String, faction: String, pos: Vector2):
+func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary = {}):
 	var unit = BattleUnitScript.new()
-	var data: Dictionary = actors.get(id, {})
+	var data: Dictionary = actors.get(id, {}).duplicate(true)
+	data.merge(overrides, true)
 	var skill: Dictionary = skills.get(data.get("skill", ""), {})
 	unit.setup(id, data, skill, faction, self)
 	if faction == "enemies":
@@ -184,6 +201,12 @@ func _process(delta: float) -> void:
 	if is_paused or game_over:
 		return
 	elapsed += delta
+	if stage_transition_timer >= 0.0:
+		stage_transition_timer -= delta
+		if stage_transition_timer <= 0.0:
+			stage_transition_timer = -1.0
+			continue_after_stage()
+		return
 	ai_trace_timer += delta
 	if ai_trace_timer >= 0.25:
 		ai_trace_timer = 0.0
@@ -230,6 +253,13 @@ func select_combat_target(seeker):
 			available.append(candidate)
 	if available.is_empty(): return null
 	if seeker.faction != "heroes":
+		var mechanic := str(seeker.actor_data.get("boss_mechanic", ""))
+		if mechanic == "backline_hunt":
+			for candidate in available:
+				if candidate.actor_data.get("combat_role", "") in ["healer", "ranged_dps"]: return candidate
+		if mechanic == "high_threat_hunt":
+			available.sort_custom(func(a, b): return a.attack > b.attack)
+			return available[0]
 		return find_closest_enemy(seeker)
 	match seeker.actor_data.get("target_priority", "closest"):
 		"intercept_backline":
@@ -480,6 +510,7 @@ func clear_combatants() -> void:
 	game_over = false
 	spawn_timer = 0.0
 	stage_boss_active = false
+	stage_transition_timer = -1.0
 
 func rebuild_party() -> void:
 	clear_combatants()
@@ -508,9 +539,10 @@ func resolve_stage_wave(defeated_unit) -> void:
 	if not str(map_data.get("main_boss", "")).is_empty() and not defeated_unit.actor_data.has("boss_id"):
 		return
 	var stage := int(map_data.get("global_stage", 1))
-	if progression.complete_stage(stage):
-		stage_cleared = true
-		stage_boss_active = false
+	var first_clear: bool = not progression.is_stage_complete(stage)
+	if first_clear and progression.complete_stage(stage):
+		progression.add_gold(int(map_data.get("first_clear_gold", 0)))
+		progression.add_material(str(map_data.get("material", "three_kingdoms_token")), int(map_data.get("first_clear_material", 0)))
 		if map_data.has("boss_id"):
 			var boss_id := str(map_data.boss_id)
 			var boss_data: Dictionary = worlds_config.bosses.get(boss_id, {})
@@ -522,6 +554,31 @@ func resolve_stage_wave(defeated_unit) -> void:
 		else:
 			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
 		battle_state_changed.emit("主线第%d关已通关" % stage)
+	elif not first_clear:
+		log_message.emit("第%d关挂机轮次完成，常规掉落已结算。" % stage)
+	stage_cleared = true
+	stage_boss_active = false
+	stage_transition_timer = 2.0
+
+func continue_after_stage() -> void:
+	var stage := int(worlds_config.maps.get(current_map_id, {}).get("global_stage", 1))
+	if progression.auto_push and stage < 20:
+		var next_id := stage_id_for_number(stage + 1)
+		if not next_id.is_empty() and progression.can_enter_stage(stage + 1):
+			switch_map(next_id)
+			return
+	clear_combatants()
+	wave = 1
+	stage_cleared = false
+	spawn_party()
+	if has_damage_dealer_in_party(): spawn_wave()
+	battle_state_changed.emit("重复挂机第%d关" % stage)
+
+func set_auto_push(enabled: bool) -> void:
+	progression.auto_push = enabled
+	progression.changed.emit()
+	progression.save_to_disk()
+	log_message.emit("自动推关已%s" % ("开启" if enabled else "关闭"))
 
 func stage_id_for_number(stage: int) -> String:
 	for map_id in worlds_config.maps:
@@ -568,6 +625,7 @@ func on_heal(source, amount: float) -> void:
 
 func on_skill(source) -> void:
 	combat_stats.record_skill(source.actor_id)
+	source.on_boss_skill_cast()
 
 func trigger_lightning(source, primary) -> void:
 	var effect: Dictionary = special_config.effects.crit_lightning
