@@ -12,6 +12,8 @@ var equipment_list: ItemList
 var actor_select: OptionButton
 var slot_filter: OptionButton
 var quality_filter: OptionButton
+var category_filter: OptionButton
+var sort_filter: OptionButton
 var detail: RichTextLabel
 var comparison: RichTextLabel
 var capacity_label: Label
@@ -92,8 +94,14 @@ func build_inventory_column(parent: HBoxContainer) -> void:
 	column.add_child(heading)
 	var filters := HBoxContainer.new()
 	column.add_child(filters)
+	category_filter = OptionButton.new()
+	category_filter.custom_minimum_size = Vector2(108, 34)
+	for category in ["装备", "材料", "技能书", "特殊道具", "收藏品"]:
+		category_filter.add_item(category)
+	category_filter.item_selected.connect(_on_category_changed)
+	filters.add_child(category_filter)
 	slot_filter = OptionButton.new()
-	slot_filter.custom_minimum_size = Vector2(170, 34)
+	slot_filter.custom_minimum_size = Vector2(116, 34)
 	slot_filter.add_item("全部部位")
 	slot_filter.set_item_metadata(0, "")
 	for slot in config.get("slots", {}):
@@ -102,7 +110,7 @@ func build_inventory_column(parent: HBoxContainer) -> void:
 	slot_filter.item_selected.connect(_on_filter_changed)
 	filters.add_child(slot_filter)
 	quality_filter = OptionButton.new()
-	quality_filter.custom_minimum_size = Vector2(150, 34)
+	quality_filter.custom_minimum_size = Vector2(108, 34)
 	quality_filter.add_item("全部品质")
 	quality_filter.set_item_metadata(0, "")
 	var qualities: Array = config.get("qualities", {}).keys()
@@ -112,6 +120,11 @@ func build_inventory_column(parent: HBoxContainer) -> void:
 		quality_filter.set_item_metadata(quality_filter.item_count - 1, quality)
 	quality_filter.item_selected.connect(_on_filter_changed)
 	filters.add_child(quality_filter)
+	sort_filter = OptionButton.new()
+	for value in ["新获得优先", "品质优先", "等级优先", "部位排序"]:
+		sort_filter.add_item(value)
+	sort_filter.item_selected.connect(_on_filter_changed)
+	column.add_child(sort_filter)
 	item_list = ItemList.new()
 	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_list.select_mode = ItemList.SELECT_SINGLE
@@ -173,11 +186,29 @@ func build_detail_column(parent: HBoxContainer) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_inventory"):
-		if character_ui != null:
-			character_ui.toggle("inventory")
-		else:
-			toggle()
+		toggle()
 		get_viewport().set_input_as_handled()
+
+func open_for_actor_slot(actor_id: String, slot: String) -> void:
+	if character_ui != null and character_ui.panel.visible:
+		character_ui.close_panel()
+	if feature_ui != null and feature_ui.panel.visible:
+		feature_ui.close_panel()
+	panel.visible = true
+	battle.is_paused = true
+	refresh_actor_choices()
+	for index in range(actor_select.item_count):
+		if str(actor_select.get_item_metadata(index)) == actor_id:
+			actor_select.select(index)
+			break
+	category_filter.select(0)
+	for index in range(slot_filter.item_count):
+		if str(slot_filter.get_item_metadata(index)) == slot:
+			slot_filter.select(index)
+			break
+	selected_equipment_slot = slot
+	refresh_all()
+	set_status("从角色页进入：只显示可用于%s的装备；换装后角色属性会立即刷新。" % slot_name(slot))
 
 func toggle() -> void:
 	if not panel.visible and feature_ui != null and feature_ui.panel.visible:
@@ -202,6 +233,14 @@ func refresh_all() -> void:
 
 func refresh_inventory() -> void:
 	item_list.clear()
+	var category := category_filter.get_item_text(category_filter.selected) if category_filter != null else "装备"
+	slot_filter.visible = category == "装备"
+	quality_filter.visible = category == "装备"
+	equip_button.visible = category == "装备"
+	comparison.visible = category == "装备"
+	if category != "装备":
+		refresh_resource_category(category)
+		return
 	var slot_value: String = slot_filter.get_item_metadata(slot_filter.selected) if slot_filter != null else ""
 	var quality_value: String = quality_filter.get_item_metadata(quality_filter.selected) if quality_filter != null else ""
 	var visible_items: Array = []
@@ -211,9 +250,11 @@ func refresh_inventory() -> void:
 		if not quality_value.is_empty() and item.get("quality", "") != quality_value:
 			continue
 		visible_items.append(item)
-	visible_items.sort_custom(func(a, b):
-		if int(a.quality_rank) == int(b.quality_rank): return int(a.level) > int(b.level)
-		return int(a.quality_rank) > int(b.quality_rank))
+	match sort_filter.selected if sort_filter != null else 0:
+		0: visible_items.reverse()
+		1: visible_items.sort_custom(func(a, b): return int(a.get("quality_rank", 0)) > int(b.get("quality_rank", 0)))
+		2: visible_items.sort_custom(func(a, b): return int(a.get("level", 0)) > int(b.get("level", 0)))
+		3: visible_items.sort_custom(func(a, b): return str(a.get("slot", "")) < str(b.get("slot", "")))
 	for item in visible_items:
 		var label := "Lv.%d  %s  [%s]" % [item.level, item.name, slot_name(item.slot)]
 		var icon: Texture2D = ArtCatalogScript.texture("equipment_icons", str(item.get("template_id", item.get("slot", ""))))
@@ -222,6 +263,36 @@ func refresh_inventory() -> void:
 		item_list.set_item_custom_fg_color(index, quality_color(item.quality))
 		if item.instance_id == selected_item_id:
 			item_list.select(index)
+
+func refresh_resource_category(category: String) -> void:
+	selected_item_id = ""
+	var rows: Array = []
+	match category:
+		"材料":
+			for id in battle.progression.materials:
+				rows.append([id, material_name(id), int(battle.progression.materials[id])])
+		"技能书":
+			for id in battle.progression.skill_books:
+				if int(battle.progression.skill_books[id]) > 0:
+					rows.append([id, str(battle.general_skills_config.get(id, {}).get("name", id)) + "技能书", int(battle.progression.skill_books[id])])
+		"特殊道具":
+			for id in battle.progression.special_items:
+				if int(battle.progression.special_items[id]) > 0:
+					rows.append([id, special_item_name(id), int(battle.progression.special_items[id])])
+		"收藏品":
+			for id in battle.progression.collectibles:
+				var value = battle.progression.collectibles[id]
+				rows.append([id, str(value.get("name", id)) if typeof(value) == TYPE_DICTIONARY else id, int(value.get("count", 1)) if typeof(value) == TYPE_DICTIONARY else int(value)])
+	for row in rows:
+		item_list.add_item("%s  ×%d" % [row[1], row[2]])
+		item_list.set_item_metadata(item_list.item_count - 1, "%s:%s" % [category, row[0]])
+	detail.text = "[b]%s[/b]\n共 %d 类物品；本页与角色、商店、秘境、奇遇和营地共用同一份真实存档。" % [category, rows.size()]
+
+func material_name(id: String) -> String:
+	return {"salvage_dust":"分解粉尘", "three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "rift_crystal":"秘境结晶", "rare_wood":"稀有木材"}.get(id, id)
+
+func special_item_name(id: String) -> String:
+	return {"recruit_ticket":"招募令", "camp_coupon":"营地券", "rift_key":"秘境钥匙"}.get(id, id)
 
 func refresh_equipment() -> void:
 	equipment_list.clear()
@@ -339,6 +410,10 @@ func _on_actor_changed(_index: int) -> void:
 		set_status("当前角色：%s；所选装备将穿戴给该角色。" % actor_names[actor_select.selected])
 
 func _on_filter_changed(_index: int) -> void:
+	refresh_inventory()
+
+func _on_category_changed(_index: int) -> void:
+	selected_item_id = ""
 	refresh_inventory()
 
 func _on_equipment_changed(_actor_id: String) -> void:

@@ -1,0 +1,46 @@
+{
+  "rift": {
+    "worlds": {
+      "three_kingdoms": {"name":"三国大秘境","required_stage":10,"boss_actor":"lu_bu_boss","material":"three_kingdoms_token","boss_name":"秘境·吕布"},
+      "pokemon": {"name":"宝可梦大秘境","required_stage":20,"boss_actor":"mewtwo_boss","material":"pokemon_token","boss_name":"秘境·超梦"}
+    },
+    "growth": {"health_linear":0.24,"health_quadratic":0.018,"attack_linear":0.105,"attack_quadratic":0.006,"defense_linear":0.075,"defense_quadratic":0.004},
+    "affixes": {
+      "berserk":{"name":"狂暴","mechanic":"berserk","unlock_floor":2,"description":"低生命时攻击提高。"},
+      "iron_wall":{"name":"铁壁","mechanic":"stone_skin","unlock_floor":4,"description":"提高防御并降低受到的伤害。"},
+      "venom":{"name":"剧毒","mechanic":"venom_strike","unlock_floor":6,"description":"攻击附加有限时毒伤。"},
+      "counter":{"name":"反击","mechanic":"counter_guard","unlock_floor":8,"description":"受到伤害时反击。"},
+      "healing_suppression":{"name":"抑疗","mechanic":"healing_suppression","unlock_floor":10,"description":"降低敌方治疗量。"},
+      "swift":{"name":"迅捷","mechanic":"swift","unlock_floor":12,"description":"提高攻击与移动速度。"},
+      "elemental":{"name":"元素强化","mechanic":"elemental_power","unlock_floor":15,"description":"技能伤害提高。"},
+      "summon":{"name":"召唤","mechanic":"summon","unlock_floor":18,"description":"周期召唤有上限的随从。"}
+    },
+    "reward": {"gold_base":22,"gold_per_floor":8,"material_base":2,"quality_bonus_floor":5,"first_clear_crystal":2}
+  },
+  "encounters": {
+    "minimum_interval":75.0,"chance_per_second":0.0025,"duration":60.0,
+    "types": {
+      "rare_elite":{"name":"异界精英","weight":38,"enemy":"stage_guardian_tk","reward_pool":"elite"},
+      "chest_mimic":{"name":"贪吃宝箱怪","weight":27,"enemy":"stage_guardian_pk","reward_pool":"chest"},
+      "wandering_merchant":{"name":"流浪商人","weight":22,"reward_pool":"merchant"},
+      "hidden_boss":{"name":"时空裂隙领主","weight":13,"enemy":"mewtwo_boss","reward_pool":"hidden"}
+    }
+  },
+  "furniture": {
+    "camp_flag":{"name":"冒险团旗帜","size":[2,2]},"campfire":{"name":"温暖篝火","size":[2,2]},"tent":{"name":"旅行帐篷","size":[3,2]},"bench":{"name":"木制长椅","size":[2,1]},
+    "small_table":{"name":"野餐小桌","size":[2,2]},"potted_plant":{"name":"旅行盆栽","size":[1,1]},"weapon_rack":{"name":"装备展示架","size":[2,1]},"trophy_stand":{"name":"战利品展台","size":[2,2]},"camp_rug":{"name":"团纹地毯","size":[3,2]},
+    "lu_bu_trophy":{"name":"无双战旗","size":[2,2]},"mewtwo_trophy":{"name":"超能结晶台","size":[2,2]},"mimic_chest":{"name":"宝箱怪纪念箱","size":[2,1]},"rift_beacon":{"name":"秘境信标","size":[1,2]}
+  },
+  "achievements": {
+    "party_four":{"name":"四人同行","condition":"party_size","target":4,"reward":{"furniture":"small_table"}},
+    "clear_tk":{"name":"平定三国","condition":"stage","target":10,"reward":{"furniture":"lu_bu_trophy"}},
+    "clear_pk":{"name":"跨越双界","condition":"stage","target":20,"reward":{"furniture":"mewtwo_trophy"}},
+    "orange_item":{"name":"橙光初现","condition":"orange_item","target":1,"reward":{"gold":120}},
+    "hidden_boss":{"name":"发现裂隙领主","condition":"encounter_hidden_boss","target":1,"reward":{"collectible":"rift_core"}},
+    "mimic":{"name":"会咬人的宝箱","condition":"encounter_chest_mimic","target":1,"reward":{"furniture":"mimic_chest"}},
+    "rift_10":{"name":"秘境十层","condition":"rift_floor","target":10,"reward":{"furniture":"rift_beacon"}},
+    "all_tk":{"name":"三国群英","condition":"roster_world","world":"三国","target":10,"reward":{"collectible":"tk_roster_badge"}},
+    "all_pk":{"name":"宝可梦伙伴","condition":"roster_world","world":"宝可梦","target":10,"reward":{"collectible":"pk_roster_badge"}},
+    "furniture_8":{"name":"温馨营地","condition":"furniture_count","target":8,"reward":{"gold":180}}
+  }
+}

@@ -9,6 +9,7 @@ const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
 const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 const CharacterUIScript = preload("res://scripts/character_ui.gd")
+const CampUIScript = preload("res://scripts/camp_ui.gd")
 
 var battle: Node2D
 var stats_label: Label
@@ -33,9 +34,10 @@ var objective_button: Button
 var backdrop: ColorRect
 var character_ui
 var character_button: Button
+var camp_ui
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.6.1")
+	DisplayServer.window_set_title("万界冒险团 V0.7")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -52,11 +54,17 @@ func _ready() -> void:
 	add_child(character_ui)
 	character_ui.setup(battle)
 	inventory_ui.character_ui = character_ui
+	character_ui.inventory_ui = inventory_ui
+	camp_ui = CampUIScript.new()
+	add_child(camp_ui)
+	camp_ui.setup(battle)
+	camp_ui.actor_requested.connect(func(actor_id): camp_ui.close_panel(); character_ui.selected_actor = actor_id; character_ui.open("stats"))
 	v03_ui = V03UIScript.new()
 	add_child(v03_ui)
 	v03_ui.setup(battle)
 	v03_ui.inventory_ui = inventory_ui
 	v03_ui.character_ui = character_ui
+	v03_ui.camp_ui = camp_ui
 	inventory_ui.feature_ui = v03_ui
 	tutorial_ui = TutorialUIScript.new()
 	add_child(tutorial_ui)
@@ -118,6 +126,12 @@ func _ready() -> void:
 		call_deferred("finish_v061_playtest_fixes_test")
 	elif "--v061-long-combat-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v061_long_combat_test")
+	elif "--v07-ui-actors-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v07_ui_actors_test")
+	elif "--v07-adventure-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v07_adventure_test")
+	elif "--v07-persistence-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v07_persistence_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -164,7 +178,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.6.1"
+	title.text = "万界冒险团  V0.7"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -221,7 +235,7 @@ func build_ui() -> void:
 	add_child(settings_button)
 	character_button = Button.new()
 	character_button.text = "角色"
-	character_button.tooltip_text = "统一角色养成：属性、装备、技能与背包"
+	character_button.tooltip_text = "角色养成：属性、编队、装备位与技能"
 	character_button.size = Vector2(82, 38)
 	V035ThemeScript.button(character_button, "gold")
 	character_button.pressed.connect(func(): character_ui.open("stats"))
@@ -251,7 +265,7 @@ func _layout_ui() -> void:
 	var factor: float = minf(viewport_size.x / 1440.0, viewport_size.y / 768.0)
 	var offset_x: float = (viewport_size.x - 1440.0 * factor) * 0.5
 	var header_h: float = 55.0 * factor
-	var footer_h: float = 153.0 * factor
+	var footer_h: float = 198.0 * factor
 	var footer_y: float = viewport_size.y - footer_h
 	backdrop.size = viewport_size
 	header_panel.position = Vector2.ZERO
@@ -438,7 +452,7 @@ func add_log(message: String) -> void:
 	log_label.scroll_to_line(999)
 
 func _on_backpack_pressed() -> void:
-	character_ui.toggle("inventory")
+	inventory_ui.toggle()
 
 func finish_smoke_test() -> void:
 	var passed: bool = battle.elapsed >= 18.0 and battle.heroes.size() > 0 and battle.kills > 0
@@ -2046,5 +2060,121 @@ func finish_v061_long_combat_test() -> void:
 	else:
 		for failure in failures: push_error("V061_LONG_COMBAT_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v07_ui_actors_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	if character_ui.tabs.get_tab_count() != 3 or inventory_ui.panel == character_ui.panel:
+		failures.append("角色页与背包页未彻底拆分")
+	if inventory_ui.category_filter.item_count != 5 or character_ui.inventory_ui != inventory_ui:
+		failures.append("独立背包五分类或跨页联动未建立")
+	p.roster = p.HERO_IDS.duplicate(); p.boss_first_clear = {"lu_bu":true,"mewtwo":true}; p.ensure_growth_layout()
+	p.materials.three_kingdoms_token = 9999; p.materials.pokemon_token = 9999
+	character_ui.selected_actor = "guan_yu"; character_ui.refresh_all(); character_ui._slot_pressed("main_hand")
+	if not inventory_ui.panel.visible or inventory_ui.current_actor_id() != "guan_yu" or str(inventory_ui.slot_filter.get_item_metadata(inventory_ui.slot_filter.selected)) != "main_hand":
+		failures.append("角色装备位未携带角色和部位跳转独立背包")
+	inventory_ui.toggle()
+	var new_ids := ["guan_yu","huang_zhong","diao_chan","zhou_yu","bulbasaur","charmander","squirtle","lucario","gardevoir","dragonite"]
+	var active_passes := 0
+	var passive_runtime := 0
+	for actor_id in new_ids:
+		if not battle.actors.has(actor_id): failures.append("缺少角色配置：" + actor_id); continue
+		var actor: Dictionary = battle.actors[actor_id]
+		if not battle.skills.has(str(actor.skill)) or not battle.passives_config.has(str(actor.passive_skill)):
+			failures.append("缺少专属主动或被动：" + actor_id); continue
+		if p.equipped_general_skills[actor_id].active.size() != 3 or p.equipped_general_skills[actor_id].passive.size() != 4:
+			failures.append("通用技能槽不是3+4：" + actor_id)
+		battle.clear_combatants()
+		var caster = battle.spawn_unit(actor_id, "heroes", Vector2(250, 250))
+		var ally = battle.spawn_unit("zhao_yun", "heroes", Vector2(270, 275)); ally.hp *= 0.45
+		var enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(330, 250), {"boss_id":"v07_skill_target"}); enemy.max_hp = 100000.0; enemy.hp = enemy.max_hp; enemy.attack = 1.0
+		caster.target = enemy; caster.skill_timer = 0.0
+		if actor_id == "guan_yu": enemy.hp = enemy.max_hp * 0.30
+		var before_hp: float = enemy.hp
+		if caster.try_use_skill() and (enemy.hp < before_hp or caster.shield > 0.0 or ally.shield > 0.0 or enemy.has_negative_status() or enemy.accumulated_control > 0.0): active_passes += 1
+		var effect := str(caster.passive_data.get("effect", ""))
+		match effect:
+			"health_regen":
+				if caster.max_hp > caster.base_max_hp and caster.life_regen > 0.0: passive_runtime += 1
+			"damage_reduction", "high_hp_guard":
+				var preview_hp: float = caster.hp; caster.take_damage(100.0, enemy, false, {"kind":"test","allow_triggers":false})
+				if preview_hp - caster.hp < caster.preview_damage(100.0): passive_runtime += 1
+			_:
+				if int(battle.passive_trigger_counts.get(actor_id + ":" + str(actor.passive_skill), 0)) > 0: passive_runtime += 1
+	if active_passes != 10: failures.append("新增专属主动真实触发%d/10" % active_passes)
+	if passive_runtime < 8: failures.append("新增固有被动真实验证%d/10" % passive_runtime)
+	if p.HERO_IDS.size() != 20: failures.append("角色总数不是20")
+	if failures.is_empty():
+		print("V07_UI_ACTORS_TEST_PASS pages=separate shared_inventory=true categories=5 actors=20 new_recruitable=10 active_runtime=10 passive_runtime=%d slots=3+4 equipment=9" % passive_runtime)
+	else:
+		for failure in failures: push_error("V07_UI_ACTORS_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v07_adventure_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.completed_stages = []
+	for stage in range(1, 21): p.completed_stages.append(stage)
+	p.ensure_world_layout(); p.roster = ["zhang_fei","zhao_yun","liu_bei","pikachu"]; p.party = p.roster.duplicate(); p.ensure_growth_layout()
+	if battle.adventure.main_stage_cap() != 20 or battle.adventure.can_challenge_rift("three_kingdoms", 21): failures.append("秘境上限未动态锁定当前主线20级")
+	if not battle.adventure.rift_world_unlocked("three_kingdoms") or not battle.adventure.rift_world_unlocked("pokemon"): failures.append("双世界秘境开放条件错误")
+	p.rift_progress.three_kingdoms = {"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
+	p.rift_progress.pokemon = {"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
+	if not battle.adventure.start_rift("three_kingdoms", 1): failures.append("三国秘境第1层无法进入")
+	elif battle.enemies.is_empty(): failures.append("秘境未真实生成Boss")
+	else:
+		var boss = battle.enemies[0]; boss.take_damage(boss.hp + boss.defense + 1000.0, battle.heroes[0], false, {"kind":"test","allow_triggers":false})
+		await get_tree().process_frame
+		if int(p.rift_progress.three_kingdoms.highest_clear) != 1 or 1 not in p.rift_progress.three_kingdoms.first_clear_claimed: failures.append("秘境首通进度或防重复标记未保存")
+	if not p.rift_progress.pokemon.first_clear_claimed.is_empty(): failures.append("双世界秘境进度发生串联")
+	var profile20: Dictionary = battle.adventure.rift_profile("pokemon", 20)
+	if profile20.get("affixes", []).size() < 3 or float(profile20.health) <= float(battle.actors.mewtwo_boss.max_hp): failures.append("高层Boss成长或词缀未实际配置")
+	battle.return_from_special_combat(true)
+	var event_success := 0
+	for event_id in ["rare_elite","chest_mimic","hidden_boss"]:
+		if not battle.adventure.trigger_encounter(event_id): failures.append("无法触发奇遇：" + event_id); continue
+		var special = battle.enemies.back(); special.take_damage(special.hp + special.defense + 1000.0, battle.heroes[0], false, {"kind":"test","allow_triggers":false})
+		await get_tree().process_frame
+		if int(p.encounter_counts.get(event_id, 0)) == 1: event_success += 1
+	if not battle.adventure.trigger_encounter("wandering_merchant"): failures.append("无法触发流浪商人")
+	else:
+		var stock_before := JSON.stringify(p.encounter_state.merchant_stock); p.gold = 9999
+		if not battle.adventure.buy_merchant_item(0) or JSON.stringify(p.encounter_state.merchant_stock) == stock_before: failures.append("商人购买未扣费或库存未固定为售罄")
+		battle.adventure.finish_encounter(false, {})
+	if event_success != 3: failures.append("战斗型奇遇真实结算%d/3" % event_success)
+	battle.adventure.grant_furniture("small_table", 2)
+	if not battle.adventure.place_furniture("small_table", Vector2i(0,0)): failures.append("家具无法摆放")
+	if battle.adventure.place_furniture("small_table", Vector2i(1,1)): failures.append("家具重叠检测失效")
+	var placement_id := str(p.camp_layout[0].placement_id)
+	if not battle.adventure.move_furniture(placement_id, Vector2i(4,2)): failures.append("家具无法移动")
+	if not battle.adventure.return_furniture(placement_id): failures.append("家具无法收回")
+	p.party = ["zhang_fei","zhao_yun","liu_bei","pikachu"]
+	if not battle.adventure.claim_achievement("party_four") or battle.adventure.claim_achievement("party_four"): failures.append("成就奖励重复领取保护失效")
+	if failures.is_empty():
+		print("V07_ADVENTURE_TEST_PASS rifts=2 dynamic_cap=20 no_floor21=true affixes=3 first_clear_once=true encounters=4 actual_enemies=3 merchant_fixed=true camp_place_move_return=true achievements_once=true")
+	else:
+		for failure in failures: push_error("V07_ADVENTURE_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v07_persistence_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.roster = ["liu_bei","guan_yu","bulbasaur"]
+	p.party = ["liu_bei","guan_yu","bulbasaur",""]
+	p.gold = 777; p.actor_levels.guan_yu = 9; p.actor_experience.guan_yu = 123
+	p.rift_progress.three_kingdoms = {"highest_clear":7,"selected_floor":7,"auto_climb":false,"first_clear_claimed":[1,2,3,4,5,6,7]}
+	p.encounter_counts.chest_mimic = 3; p.camp_inventory.potted_plant = 2; p.collectibles.test_trophy = {"name":"测试战利品","count":1}; p.achievements.party_four = {"claimed":true,"time":1}
+	p.save_to_disk()
+	var reload = ProgressionManagerScript.new(); reload.save_path = p.save_path
+	if not reload.load_from_disk() or reload.roster != p.roster or int(reload.rift_progress.three_kingdoms.highest_clear) != 7 or int(reload.encounter_counts.chest_mimic) != 3 or int(reload.camp_inventory.potted_plant) != 2 or not reload.collectibles.has("test_trophy"):
+		failures.append("V0.7新增字段未完整持久化")
+	var legacy := {"version":"0.6.1","gold":321,"roster":["liu_bei","zhao_yun"],"party":["liu_bei","zhao_yun","",""],"materials":{"three_kingdoms_token":88},"actor_levels":{"zhao_yun":6},"actor_experience":{"zhao_yun":44},"completed_stages":[1,2,3]}
+	var migrated = ProgressionManagerScript.new()
+	if not migrated.apply_payload(legacy) or migrated.roster != legacy.roster or int(migrated.gold) != 321 or int(migrated.actor_levels.zhao_yun) != 6 or not migrated.rift_progress.has("three_kingdoms"):
+		failures.append("V0.6.1存档安全迁移失败")
+	if failures.is_empty(): print("V07_PERSISTENCE_TEST_PASS v061_migration=true legacy_preserved=true roster=true equipment_schema=true rift=true encounters=true camp=true collectibles=true achievements=true")
+	else:
+		for failure in failures: push_error("V07_PERSISTENCE_TEST_FAIL: " + failure)
+	reload.free(); migrated.free(); get_tree().quit(0 if failures.is_empty() else 1)
 
 

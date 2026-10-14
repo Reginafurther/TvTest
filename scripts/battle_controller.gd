@@ -11,6 +11,7 @@ const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 const CombatStatsScript = preload("res://scripts/combat_stats.gd")
 const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
 const ShopManagerScript = preload("res://scripts/shop_manager.gd")
+const AdventureManagerScript = preload("res://scripts/adventure_manager.gd")
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
@@ -34,6 +35,7 @@ var equipment_generator
 var progression
 var crafting
 var shop
+var adventure
 var combat_stats
 var battle_map: Node2D
 var astar := AStarGrid2D.new()
@@ -64,6 +66,7 @@ var damage_anomalies: Array = []
 var suppress_combat_visuals := false
 var party_hud_dirty := false
 var party_hud_timer := 0.0
+var active_rift_context: Dictionary = {}
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -82,7 +85,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var v061_write_test := false
 	for value in args:
-		if str(value).begins_with("--v061-") and str(value) != "--v061-persist-read": v061_write_test = true
+		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read"]: v061_write_test = true
 	if "--equipment-test" in args or "--persistence-write" in args or "--v03-test" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or v061_write_test:
 		inventory.clear_test_save()
 	inventory.load_from_disk()
@@ -100,6 +103,10 @@ func _ready() -> void:
 	crafting.setup(inventory, progression, equipment_config, equipment_generator)
 	shop = ShopManagerScript.new()
 	shop.setup(inventory, progression, equipment_generator, shop_config)
+	adventure = AdventureManagerScript.new()
+	add_child(adventure)
+	adventure.setup(self)
+	adventure.encounter_notice.connect(func(message): log_message.emit("★ " + message))
 	combat_stats = CombatStatsScript.new()
 	combat_stats.reset()
 	battle_map = BattleMapScript.new()
@@ -218,6 +225,7 @@ func _process(delta: float) -> void:
 	if is_paused or game_over:
 		return
 	elapsed += delta
+	adventure.tick(delta)
 	party_hud_timer = maxf(0.0, party_hud_timer - delta)
 	if party_hud_dirty and party_hud_timer <= 0.0:
 		party_hud_dirty = false
@@ -407,6 +415,18 @@ func _on_unit_died(unit) -> void:
 			if leveled_hero != null:
 				leveled_hero.refresh_progression_stats()
 		roll_skill_book_drop(unit)
+		if adventure.on_enemy_defeated(unit):
+			log_message.emit("★ 奇遇完成，奖励已进入同一背包与资源存档。")
+			return
+		if not active_rift_context.is_empty() and unit.actor_data.has("rift_floor"):
+			var completed_world := str(active_rift_context.world)
+			var rift_reward: Dictionary = adventure.resolve_rift_victory()
+			log_message.emit("★ 秘境第%d层完成：%d金币、材料×%d及%s。" % [int(rift_reward.get("floor", 0)), int(rift_reward.get("gold", 0)), int(rift_reward.get("material", 0)), str(rift_reward.get("equipment", {}).get("name", "装备"))])
+			active_rift_context.clear()
+			var state: Dictionary = progression.rift_progress[completed_world]
+			if bool(state.auto_climb): call_deferred("continue_rift_auto", completed_world, int(state.selected_floor))
+			else: call_deferred("return_from_special_combat", true)
+			return
 		if not active_boss_id.is_empty() and unit.actor_data.has("boss_id"):
 			resolve_boss_victory(active_boss_id)
 		else:
@@ -418,8 +438,19 @@ func _on_unit_died(unit) -> void:
 		heroes.erase(unit)
 		party_changed.emit(heroes)
 		if heroes.is_empty():
-			game_over = true
-			battle_state_changed.emit("队伍全灭 · 按 R 重新开始")
+			if not active_rift_context.is_empty():
+				var failed_floor := int(active_rift_context.get("floor", 1))
+				var failed_world := str(active_rift_context.get("world", "three_kingdoms"))
+				progression.rift_progress[failed_world].auto_climb = false
+				progression.rift_progress[failed_world].selected_floor = maxi(1, int(progression.rift_progress[failed_world].highest_clear))
+				progression.save_to_disk()
+				adventure.active_rift.clear()
+				active_rift_context.clear()
+				battle_state_changed.emit("秘境第%d层挑战失败，已暂停爬层并返回主线" % failed_floor)
+				call_deferred("return_from_special_combat", false)
+			else:
+				game_over = true
+				battle_state_changed.emit("队伍全灭 · 按 R 重新开始")
 
 func _on_combat_event(message: String) -> void:
 	log_message.emit(message)
@@ -526,6 +557,34 @@ func start_boss(boss_id: String) -> bool:
 	boss.monster_level = int(boss_data.get("required_stage", 20))
 	log_message.emit("传奇挑战开始：【%s】" % boss_data.name)
 	return true
+
+func start_rift_combat(context: Dictionary, profile: Dictionary) -> void:
+	clear_combatants()
+	active_boss_id = ""
+	active_rift_context = context.duplicate(true)
+	spawn_party()
+	var affixes: Array = profile.get("affixes", [])
+	var overrides := {"name":profile.get("name", "秘境Boss"), "rift_floor":int(context.floor), "rift_world":str(context.world), "rift_affixes":affixes, "boss_id":"rift_" + str(context.world)}
+	var boss = spawn_unit(str(profile.actor), "enemies", Vector2(875, 260), overrides)
+	boss.enemy_type = "boss"; boss.monster_level = int(context.floor)
+	boss.max_hp = float(profile.health); boss.hp = boss.max_hp; boss.attack = float(profile.attack); boss.defense = float(profile.defense)
+	battle_state_changed.emit("大秘境第%d层挑战中" % int(context.floor))
+	log_message.emit("进入%s；词缀：%s" % [profile.name, "、".join(affixes)])
+
+func return_from_special_combat(success: bool) -> void:
+	adventure.active_rift.clear()
+	active_rift_context.clear()
+	clear_combatants()
+	spawn_party()
+	if has_damage_dealer_in_party(): spawn_wave()
+	if success: battle_state_changed.emit("秘境结算完成 · 返回主线挂机")
+
+func continue_rift_auto(world_id: String, floor: int) -> void:
+	clear_combatants()
+	if not adventure.start_rift(world_id, floor):
+		return_from_special_combat(true)
+	else:
+		log_message.emit("自动爬层：继续挑战第%d层。" % floor)
 
 func clear_combatants() -> void:
 	for unit in heroes + enemies:

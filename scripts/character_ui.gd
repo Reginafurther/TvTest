@@ -5,6 +5,7 @@ const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
 const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 
 var battle
+var inventory_ui
 var panel: PanelContainer
 var actor_list: ItemList
 var sort_select: OptionButton
@@ -51,7 +52,7 @@ func build_ui() -> void:
 	var top := HBoxContainer.new()
 	outer.add_child(top)
 	var title := Label.new()
-	title.text = "角色养成 · 装备 · 技能 · Build"
+	title.text = "角色养成 · 编队 · 技能 · Build"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	V035ThemeScript.label(title, 24, Color("#3C3027"))
 	top.add_child(title)
@@ -160,28 +161,6 @@ func build_detail_column(parent: HBoxContainer) -> void:
 	skills_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	skill_scroll.add_child(skills_box)
 	tabs.add_child(skill_scroll)
-	var inventory_box := VBoxContainer.new()
-	inventory_box.name = "背包"
-	quality_filter = OptionButton.new()
-	for value in ["全部品质", "紫色及以上", "橙色", "蓝色及以上"]: quality_filter.add_item(value)
-	quality_filter.item_selected.connect(func(_index): refresh_inventory())
-	inventory_box.add_child(quality_filter)
-	inventory_list = ItemList.new()
-	inventory_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inventory_list.item_selected.connect(_select_item)
-	inventory_box.add_child(inventory_list)
-	item_detail = RichTextLabel.new()
-	item_detail.bbcode_enabled = true
-	item_detail.custom_minimum_size = Vector2(0, 125)
-	inventory_box.add_child(item_detail)
-	var actions := HBoxContainer.new()
-	for spec in [["穿戴/替换", "equip"], ["卸下", "unequip"], ["锁定/解锁", "lock"]]:
-		var button := Button.new()
-		button.text = spec[0]
-		button.pressed.connect(_inventory_action.bind(spec[1]))
-		actions.add_child(button)
-	inventory_box.add_child(actions)
-	tabs.add_child(inventory_box)
 	growth_text = RichTextLabel.new()
 	growth_text.name = "成长与定位"
 	growth_text.bbcode_enabled = true
@@ -189,11 +168,11 @@ func build_detail_column(parent: HBoxContainer) -> void:
 
 func open(tab_name: String = "stats") -> void:
 	panel.visible = true
-	var names := {"stats": 0, "skills": 1, "inventory": 2, "growth": 3}
+	var names := {"stats": 0, "skills": 1, "growth": 2}
 	tabs.current_tab = int(names.get(tab_name, 0))
 	refresh_all()
 
-func toggle(tab_name: String = "inventory") -> void:
+func toggle(tab_name: String = "stats") -> void:
 	if panel.visible:
 		close_panel()
 	else:
@@ -212,7 +191,6 @@ func refresh_all() -> void:
 	refresh_center()
 	refresh_stats()
 	refresh_skills()
-	refresh_inventory()
 	refresh_growth()
 
 func refresh_roster() -> void:
@@ -493,12 +471,10 @@ func _clear_party_slot(index: int) -> void:
 		refresh_all()
 
 func _slot_pressed(slot: String) -> void:
-	tabs.current_tab = 2
 	preferred_equipment_slot = slot
-	var item = battle.inventory.get_equipped_item(selected_actor, slot)
-	selected_item_id = str(item.instance_id) if item != null else ""
-	feedback.text = "%s：选择背包装备穿戴，或选择当前装备后卸下。" % battle.equipment_config.slots[slot]
-	refresh_inventory()
+	feedback.text = "%s：已打开独立背包并筛选可穿戴装备。" % battle.equipment_config.slots[slot]
+	if inventory_ui != null:
+		inventory_ui.open_for_actor_slot(selected_actor, slot)
 
 func _select_item(index: int) -> void:
 	selected_item_id = str(inventory_list.get_item_metadata(index))

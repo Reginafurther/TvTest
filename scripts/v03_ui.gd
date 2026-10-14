@@ -19,6 +19,7 @@ var pending_boss := ""
 var toolbar_buttons: Dictionary = {}
 var inventory_ui
 var character_ui
+var camp_ui
 var toolbar_root: GridContainer
 var aux_root: VBoxContainer
 var log_lines: Array[String] = []
@@ -57,7 +58,7 @@ func build_toolbar() -> void:
 	var backpack_space := Control.new()
 	backpack_space.custom_minimum_size = Vector2(105, 57)
 	toolbar_root.add_child(backpack_space)
-	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["Boss", "boss"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
+	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["大秘境", "rift"], ["营地", "camp"], ["Boss", "boss"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(105, 57)
@@ -65,6 +66,8 @@ func build_toolbar() -> void:
 		V035ThemeScript.button(button, "gold" if spec[1] in ["recruit", "boss"] else "cream")
 		if spec[1] == "pause":
 			button.pressed.connect(_toggle_pause)
+		elif spec[1] == "camp":
+			button.pressed.connect(_open_camp)
 		elif spec[1] in ["party", "strategy"]:
 			button.pressed.connect(_open_character_view.bind("growth" if spec[1] == "party" else "skills"))
 		else:
@@ -74,7 +77,7 @@ func build_toolbar() -> void:
 	aux_root = VBoxContainer.new()
 	aux_root.add_theme_constant_override("separation", 2)
 	add_child(aux_root)
-	for spec in [["商店", "shop"], ["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["统计", "stats"]]:
+	for spec in [["商店", "shop"], ["奇遇", "encounters"], ["成就", "achievements"], ["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["统计", "stats"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(115, 27)
@@ -95,6 +98,10 @@ func apply_layout(_viewport_size: Vector2, factor: float, offset_x: float, foote
 func _toggle_pause() -> void:
 	battle.is_paused = not battle.is_paused
 	battle.battle_state_changed.emit("已暂停" if battle.is_paused else "自动战斗中")
+
+func _open_camp() -> void:
+	if panel.visible: close_panel()
+	if camp_ui != null: camp_ui.open()
 
 func _remember_log(message: String) -> void:
 	log_lines.append(message)
@@ -152,8 +159,8 @@ func open_view(view: String) -> void:
 		inventory_ui.toggle()
 	current_view = view
 	panel.visible = true
-	battle.is_paused = true
-	battle.battle_state_changed.emit("功能界面中")
+	battle.is_paused = view != "encounters"
+	battle.battle_state_changed.emit("奇遇交易中 · 自动战斗继续" if view == "encounters" else "功能界面中")
 	refresh()
 
 func _open_character_view(tab_name: String) -> void:
@@ -195,11 +202,69 @@ func refresh() -> void:
 		"objectives": build_objectives()
 		"logs": build_logs()
 		"shop": build_shop()
+		"rift": build_rift()
+		"encounters": build_encounters()
+		"achievements": build_achievements()
 	call_deferred("_restore_scroll_position", current_view)
 
 func _restore_scroll_position(view: String) -> void:
 	if panel.visible and current_view == view and content_scroll != null:
 		content_scroll.scroll_vertical = int(scroll_positions.get(view, 0))
+
+func build_rift() -> void:
+	title.text = "双世界动态大秘境"
+	var cap: int = battle.adventure.main_stage_cap()
+	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n两个世界共享开放上限，但进度、首通和Boss配置各自独立。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
+	for world_id in battle.adventure.config.rift.worlds:
+		var world: Dictionary = battle.adventure.config.rift.worlds[world_id]
+		var state: Dictionary = battle.progression.rift_progress[world_id]
+		var unlocked: bool = battle.adventure.rift_world_unlocked(str(world_id))
+		var heading := Label.new(); heading.text = "\n%s｜最高通关%d层｜%s" % [world.name, int(state.highest_clear), "已开放" if unlocked else "需通关主线第%d关" % int(world.required_stage)]; heading.add_theme_font_size_override("font_size", 20); content.add_child(heading)
+		var row := HBoxContainer.new(); content.add_child(row)
+		var floor_select := SpinBox.new(); floor_select.min_value = 1; floor_select.max_value = maxi(1, cap); floor_select.value = clampi(int(state.selected_floor), 1, maxi(1, cap)); floor_select.custom_minimum_size = Vector2(130, 36); row.add_child(floor_select)
+		var auto := CheckBox.new(); auto.text = "自动挑战下一层"; auto.button_pressed = bool(state.auto_climb); auto.toggled.connect(_set_rift_auto.bind(str(world_id))); row.add_child(auto)
+		var challenge := Button.new(); challenge.text = "开始挑战"; challenge.disabled = not unlocked or cap <= 0; challenge.pressed.connect(_start_rift_from_selector.bind(str(world_id), floor_select)); row.add_child(challenge)
+		var preview_floor := clampi(int(floor_select.value), 1, maxi(1, cap)); var profile: Dictionary = battle.adventure.rift_profile(str(world_id), preview_floor)
+		var affix_names: Array[String] = []
+		for id in profile.get("affixes", []): affix_names.append(str(battle.adventure.config.rift.affixes[id].name))
+		var detail := Label.new(); detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; detail.text = "预览第%d层：生命%d / 攻击%d / 防御%d｜词缀：%s\n首通奖励仅一次；重复刷层仍掉落金币、世界材料和高品质装备。" % [preview_floor, int(profile.get("health", 0)), int(profile.get("attack", 0)), int(profile.get("defense", 0)), "、".join(affix_names) if not affix_names.is_empty() else "无"]; content.add_child(detail)
+
+func _set_rift_auto(enabled: bool, world_id: String) -> void:
+	battle.progression.rift_progress[world_id].auto_climb = enabled; battle.progression.save_to_disk()
+
+func _start_rift_from_selector(world_id: String, selector: SpinBox) -> void:
+	var floor := int(selector.value)
+	if battle.adventure.start_rift(world_id, floor): close_panel()
+	else:
+		rewards_feedback = "该层未开放：只能挑战主线等级范围内且不超过当前秘境进度+1的层数。"; refresh()
+
+func build_encounters() -> void:
+	title.text = "挂机奇遇 · 自动战斗不会暂停"
+	var active: Dictionary = battle.adventure.active_encounter
+	var status := Label.new(); status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status.text = "当前奇遇：无；系统按最短间隔与权重自动触发。" if active.is_empty() else "当前奇遇：%s｜剩余约%d秒" % [battle.adventure.config.encounters.types[str(active.type)].name, int(active.remaining)]
+	content.add_child(status)
+	if str(active.get("type", "")) == "wandering_merchant":
+		var hint := Label.new(); hint.text = "商人库存由本次奇遇序号固定，反复关闭不会刷新。"; content.add_child(hint)
+		var stock: Array = battle.progression.encounter_state.get("merchant_stock", [])
+		for index in range(stock.size()):
+			var row: Dictionary = stock[index]; var button := Button.new(); button.text = "%s ×%d｜%d金币%s" % [row.name, int(row.amount), int(row.price), "｜已售罄" if bool(row.sold) else ""]; button.disabled = bool(row.sold) or battle.progression.gold < int(row.price); button.pressed.connect(_buy_encounter_item.bind(index)); content.add_child(button)
+	var log_title := Label.new(); log_title.text = "\n奇遇日志（累计与奖励）"; log_title.add_theme_font_size_override("font_size", 19); content.add_child(log_title)
+	for row in battle.progression.encounter_log:
+		var reward: Dictionary = row.get("reward", {}); var line := Label.new(); line.text = "%s｜主线Lv.%d｜%s｜金币%d 材料%d" % [row.name, int(row.stage), "完成" if bool(row.success) else "未完成", int(reward.get("gold", 0)), int(reward.get("material", 0))]; content.add_child(line)
+
+func _buy_encounter_item(index: int) -> void:
+	if not battle.adventure.buy_merchant_item(index): rewards_feedback = "购买失败：金币不足、商品已售罄或商人已离开。"
+	refresh()
+
+func build_achievements() -> void:
+	title.text = "冒险成就与收藏奖励"
+	for id in battle.adventure.config.achievements:
+		var data: Dictionary = battle.adventure.config.achievements[id]; var claimed := bool(battle.progression.achievements.get(id, {}).get("claimed", false)); var ready: bool = battle.adventure.achievement_ready(str(id))
+		var button := Button.new(); button.text = "%s｜%s" % [data.name, "已领取" if claimed else "领取" if ready else "未达成"]; button.disabled = claimed or not ready; button.pressed.connect(_claim_achievement.bind(str(id))); content.add_child(button)
+
+func _claim_achievement(id: String) -> void:
+	battle.adventure.claim_achievement(id); refresh()
 
 func build_rewards() -> void:
 	title.text = "挂机收益"
@@ -427,7 +492,7 @@ func build_recruit() -> void:
 	title.text = "角色招募与四人编队" if current_view == "recruit" else "伙伴与四人编队"
 	var p = battle.progression
 	var info := Label.new()
-	info.text = "虎符：%d　精灵结晶：%d　已招募：%d/10\n新角色统一使用世界材料定向招募。" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
+	info.text = "虎符：%d　精灵结晶：%d　已招募：%d/20\n三国角色使用虎符，宝可梦角色使用精灵结晶。" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
 	content.add_child(info)
 	recruit_detail = Label.new()
 	recruit_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
