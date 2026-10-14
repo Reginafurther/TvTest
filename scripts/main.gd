@@ -10,6 +10,7 @@ const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 const CharacterUIScript = preload("res://scripts/character_ui.gd")
 const CampUIScript = preload("res://scripts/camp_ui.gd")
+const ResetManagerScript = preload("res://scripts/reset_manager.gd")
 
 var battle: Node2D
 var stats_label: Label
@@ -37,7 +38,7 @@ var character_button: Button
 var camp_ui
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.8")
+	DisplayServer.window_set_title("万界冒险团 V0.8.1")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -192,7 +193,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.8"
+	title.text = "万界冒险团  V0.8.1"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -2381,6 +2382,10 @@ func finish_v081_reset_test() -> void:
 	battle.progression.combat_difficulty = 3.0
 	battle.progression.save_to_disk()
 	var item = battle.equipment_generator.generate(8, "V081重开备份", "purple", "main_hand"); battle.inventory.add_item(item)
+	var before_failed_reset := {"gold":battle.progression.gold, "roster":battle.progression.roster.duplicate(), "items":battle.inventory.items.size()}
+	var failing_reset = ResetManagerScript.new(); failing_reset.backup_root = ProgressionManagerScript.TEST_PATH
+	var failed_result: Dictionary = failing_reset.perform_safe_reset(battle.progression, battle.inventory)
+	if bool(failed_result.get("ok", false)) or battle.progression.gold != before_failed_reset.gold or battle.progression.roster != before_failed_reset.roster or battle.inventory.items.size() != int(before_failed_reset.items): failures.append("备份失败时仍执行了重置或修改玩家数据")
 	var result: Dictionary = battle.safe_restart_game()
 	if not bool(result.get("ok", false)): failures.append("安全重开失败：" + str(result.get("error", "")))
 	var backup_path := str(result.get("backup_path", ""))
@@ -2400,7 +2405,7 @@ func finish_v081_reset_test() -> void:
 	blocked_progress.free(); blocked_inventory.free()
 	for path in [ProgressionManagerScript.NORMAL_PATH, ProgressionManagerScript.LEGACY_PATH, ProgressionManagerScript.RESET_MARKER_PATH, InventoryManagerScript.SAVE_PATH, InventoryManagerScript.LEGACY_SAVE_PATH]:
 		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	if failures.is_empty(): print("V081_RESET_TEST_PASS backup_verified=true inventory_empty=true liu_bei_level=1 tokens=150 gold=0 stages=0 difficulty=1.5 marker=true")
+	if failures.is_empty(): print("V081_RESET_TEST_PASS backup_verified=true backup_failure_aborts=true inventory_empty=true liu_bei_level=1 tokens=150 gold=0 stages=0 difficulty=1.5 marker=true")
 	else:
 		for failure in failures: push_error("V081_RESET_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)

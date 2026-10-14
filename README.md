@@ -1,6 +1,8 @@
-# 《万界冒险团》V0.8
+# 《万界冒险团》V0.8.1
 
 Godot 4.7 Windows 单机 2D 挂机刷宝 RPG。本版本以 V0.7 提交 `fa6aa44` 为基线，在独立分支 `codex/v08-dragon-nsh-worlds` 开发；稳定分支 `main` 未被直接修改。
+
+V0.8.1 体验修复分支为 `codex/v081-ui-stats-difficulty-reset`：右侧辅助菜单支持独立滚动，“战斗统计”在战斗继续运行时每0.75秒刷新四人DPS/HPS，赵云正式半身立绘与战斗贴图已经接入；设置页新增0.5×—3.0×敌人难度以及“验证备份后重新开始”。`project.godot` 的应用名继续保持旧值，以便Windows升级后仍能找到同一用户存档目录。
 
 ## V0.8 核心循环
 
@@ -36,6 +38,12 @@ Windows 4.7 完整自动回归：
 powershell -ExecutionPolicy Bypass -File .\verify_v08.ps1 -Godot 'D:\Tools\Godot_v4.7-stable_win64_console.exe'
 ```
 
+V0.8.1 完整自动回归：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\verify_v081.ps1 -Godot 'D:\Tools\Godot_v4.7-stable_win64_console.exe'
+```
+
 常用按键：`B` 打开独立背包，空格暂停/继续，左键设置集结点。主导航可直接进入角色、背包、世界、大秘境、招募、商店、营地和设置。
 
 ## 数据配置
@@ -51,6 +59,10 @@ powershell -ExecutionPolicy Bypass -File .\verify_v08.ps1 -Godot 'D:\Tools\Godot
 - `data/adventure.json`：秘境成长/词缀、四类奇遇、家具与成就。
 
 ## 验收资料
+
+- [V0.8.1开发报告](DEVELOPMENT_REPORT_V081.md)
+- [V0.8.1自动测试报告](TEST_REPORT_V081.md)
+- [Windows Godot 4.7人工验收清单](WINDOWS_GODOT47_CHECKLIST_V081.md)
 
 - [V0.8开发报告](DEVELOPMENT_REPORT_V08.md)
 - [V0.8自动测试报告](TEST_REPORT_V08.md)

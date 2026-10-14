@@ -2,6 +2,7 @@ class_name ResetManager
 extends RefCounted
 
 var last_error := ""
+var backup_root := "user://backups"
 
 func perform_safe_reset(progression, inventory) -> Dictionary:
 	last_error = ""
@@ -27,12 +28,11 @@ func create_verified_backup() -> Dictionary:
 		return {"ok": false}
 	var stamp_data := Time.get_datetime_dict_from_system()
 	var stamp := "%04d%02d%02d_%02d%02d%02d" % [stamp_data.year, stamp_data.month, stamp_data.day, stamp_data.hour, stamp_data.minute, stamp_data.second]
-	var backup_relative := "backups/reset_" + stamp
+	var backup_path := backup_root.trim_suffix("/") + "/reset_" + stamp
 	var suffix := 1
-	while DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("user://" + backup_relative)):
-		backup_relative = "backups/reset_%s_%d" % [stamp, suffix]
+	while DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(backup_path)):
+		backup_path = backup_root.trim_suffix("/") + "/reset_%s_%d" % [stamp, suffix]
 		suffix += 1
-	var backup_path := "user://" + backup_relative
 	var backup_absolute := ProjectSettings.globalize_path(backup_path)
 	if DirAccess.make_dir_recursive_absolute(backup_absolute) != OK:
 		last_error = "无法创建存档备份目录：" + backup_path
