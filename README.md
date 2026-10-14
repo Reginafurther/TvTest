@@ -1,20 +1,23 @@
-# 《万界冒险团》V0.6.1
+# 《万界冒险团》V0.7
 
-Godot 4.7 Windows 单机 2D 挂机刷宝 RPG。本版本从已验收的 V0.6 基线提交 `01fa35b` 增量开发；稳定分支 `main` 未被直接修改。
+Godot 4.7 Windows 单机 2D 挂机刷宝 RPG。本版本以完整 V0.6.1 修复提交 `77d124b` 为基线，在独立分支 `codex/v07-adventure-expansion` 开发；稳定分支 `main` 未被直接修改。
 
-## V0.6.1 核心循环
+## V0.7 核心循环
 
 - 新档仅有 Lv.1 刘备、150 虎符与三个空编队位；须用材料招募输出/坦克角色后才能开战。
 - 三国 1—10 关、宝可梦 11—20 关严格顺序解锁；每关末尾均有 Boss，第 10/20 关为吕布/超梦。
 - 默认开启“自动挑战下一关”；关闭后重复当前关，第 20 关通关后循环挂机，不重复发首通奖励。
-- 10 名角色使用坦克、近战、远程、治疗四类差异化 AI，而非统一追击逻辑。
+- 20 名角色（三国10名、宝可梦10名）使用坦克、近战、远程、治疗与辅助差异化 AI。
 - 角色专属主动/被动技能保留；另有 52 本通用技能书（32 主动、20 被动），每人可装备 3 主动与 4 被动。
-- 角色页统一管理角色、九装备栏、技能、成长与背包；换装实时进入战斗属性。
+- 角色页与背包彻底分离；角色装备位可携带角色和部位筛选跳转独立背包，两页共享同一装备实例。
 - 商店支持 JSON 商品、批量购买、技能书、材料及装备买卖；出售列表只显示未穿戴且未锁定装备。
-- 装备一键优化按职业实际收益评分，最多 3 件，不拿其他角色装备，锁定装备不参与。
+- 双世界动态大秘境的最高开放层等于主线最高已通关地图等级；两个世界进度、首通和Boss独立。
+- 挂机中可遇到异界精英、宝箱怪、流浪商人和隐藏Boss；战斗事件真实生成敌人并统一结算。
+- 可进入12×8网格营地摆放、移动和收回家具，展示角色、收藏品并领取一次性成就奖励。
+- 装备一键优化按职业实际收益评分，覆盖全部9栏，不拿其他角色装备，锁定装备不参与。
 - 角色等级上限随已通关主线难度动态开放，最高仍为 60；低级关卡经验有衰减。
 
-V0.6.1 使用全新独立存档命名空间，不读取或覆盖 V0.6 进度文件。历史版本文档仍保留，仅用于追踪旧行为。
+V0.7 写入独立的 `wanjie_v07_*` 存档；首次启动可只读迁移 V0.6.1，原文件不会被覆盖。历史版本文档仍保留用于回归追踪。
 
 ## 运行
 
@@ -27,22 +30,36 @@ godot --path .
 Windows 4.7 完整自动回归：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\verify_v061_playtest.ps1 -GodotBin 'D:\Tools\Godot_v4.7-stable_win64_console.exe'
+powershell -ExecutionPolicy Bypass -File .\verify_v07.ps1 -Godot 'D:\Tools\Godot_v4.7-stable_win64_console.exe'
 ```
 
-常用按键：`B` 打开统一角色页，空格暂停/继续，左键设置集结点。顶部功能入口可进入招募、商店、技能策略、目标与统计。
+常用按键：`B` 打开独立背包，空格暂停/继续，左键设置集结点。主导航可直接进入角色、背包、世界、大秘境、招募、商店、营地和设置。
 
 ## 数据配置
 
-- `data/actors.json`：10 名角色、职业 AI、专属技能引用。
+- `data/actors.json`：20 名角色、职业 AI、专属技能引用。
 - `data/skills.json` / `data/passives.json`：专属主动与被动。
 - `data/general_skills.json`：52 个通用主动/被动技能。
 - `data/worlds.json`：20 关、关底 Boss、首通奖励与地图解锁。
 - `data/progression.json`：经验曲线、关卡衰减与动态等级上限。
 - `data/shop.json`：商店商品、价格与技能书。
 - `data/equipment.json` / `data/loot_tables.json`：装备、词条、品质与掉落。
+- `data/adventure.json`：秘境成长/词缀、四类奇遇、家具与成就。
 
 ## 验收资料
+
+- [V0.7开发报告](DEVELOPMENT_REPORT_V07.md)
+- [V0.7自动测试报告](TEST_REPORT_V07.md)
+- [20名角色实战对照表](CHARACTER_ROSTER_V07.md)
+- [秘境系统说明](RIFT_SYSTEM_V07.md)
+- [奇遇系统说明](ENCOUNTER_SYSTEM_V07.md)
+- [营地、收藏与成就说明](CAMP_SYSTEM_V07.md)
+- [UI导航说明](UI_NAVIGATION_V07.md)
+- [存档迁移报告](SAVE_MIGRATION_V07.md)
+- [V0.7数值报告](BALANCE_REPORT_V07.md)
+- [V0.7验收清单](ACCEPTANCE_CHECKLIST_V07.md)
+- [Windows Godot 4.7检查表](WINDOWS_GODOT47_CHECKLIST_V07.md)
+- [待替换美术资源](ART_ASSET_GAPS_V07.md)
 
 - [开发报告](DEVELOPMENT_REPORT_V061.md)
 - [自动测试报告](TEST_REPORT_V061.md)

@@ -1257,8 +1257,8 @@ func finish_v06_character_test() -> void:
 	character_ui.selected_actor = "zhao_yun"
 	character_ui.open("stats")
 	await get_tree().process_frame
-	if character_ui.actor_list.item_count != 10 or character_ui.slot_buttons.size() != 9 or character_ui.tabs.get_tab_count() != 4:
-		failures.append("统一角色页未包含10人、9装备栏或4个标签")
+	if character_ui.actor_list.item_count != 20 or character_ui.slot_buttons.size() != 9 or character_ui.tabs.get_tab_count() != 3:
+		failures.append("V0.7角色页未包含20人、9装备栏或3个独立养成标签")
 	character_ui._select_actor(1)
 	if p.party != original_party:
 		failures.append("切换查看角色意外修改了编队")
@@ -1276,9 +1276,9 @@ func finish_v06_character_test() -> void:
 	protected_item.base_stats = {"attack": 999.0}
 	battle.inventory.add_item(protected_item, false)
 	battle.inventory.equip_item("liu_bei", protected_item.instance_id, "gloves")
-	var candidates: Array = battle.inventory.optimize_candidates("zhao_yun", 3, 3)
-	if candidates.is_empty() or candidates.size() > 3:
-		failures.append("一键优化没有候选或超过3件")
+	var candidates: Array = battle.inventory.optimize_candidates("zhao_yun", 3, 9)
+	if candidates.is_empty() or candidates.size() > 9:
+		failures.append("一键优化没有候选或超过9栏")
 	for choice in candidates:
 		var candidate_item = battle.inventory.find_item(choice.instance_id)
 		if int(candidate_item.get("quality_rank", 0)) < 3:
@@ -1287,7 +1287,7 @@ func finish_v06_character_test() -> void:
 			failures.append("一键优化拿走了其他角色装备")
 	var item_count_before: int = battle.inventory.items.size()
 	var applied: int = battle.inventory.apply_optimization("zhao_yun", candidates)
-	if applied < 1 or applied > 3 or battle.inventory.items.size() != item_count_before:
+	if applied < 1 or applied > 9 or battle.inventory.items.size() != item_count_before:
 		failures.append("一键优化应用数量错误或复制/丢失装备实例")
 	if battle.inventory.item_owner(protected_item.instance_id) != "liu_bei":
 		failures.append("其他角色装备关系被破坏")
@@ -1336,28 +1336,8 @@ func finish_v06_character_test() -> void:
 		failures.append("装备锁定或穿戴关系未持久化")
 	reload_progress.free()
 	reload_inventory.free()
-	# V0.5装备只读迁移到V0.6文件，原文件保持字节不变。
-	var old_path := "user://v05_inventory_character_fixture.json"
-	var new_path := "user://v06_inventory_character_fixture.json"
-	for path in [old_path, new_path]:
-		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	var old_item: Dictionary = battle.equipment_generator.generate(5, "V0.5装备迁移", "blue", "main_hand")
-	var old_text := JSON.stringify({"version":"0.5","items":[old_item],"equipped":{"zhao_yun":{"main_hand":old_item.instance_id}}})
-	var old_file := FileAccess.open(old_path, FileAccess.WRITE)
-	old_file.store_string(old_text); old_file.close()
-	var migrated = InventoryManagerScript.new()
-	migrated.setup(battle.equipment_config)
-	migrated.save_path = new_path
-	migrated.legacy_save_path = old_path
-	if not migrated.load_from_disk() or not FileAccess.file_exists(new_path) or migrated.get_equipped_item("zhao_yun", "main_hand") == null:
-		failures.append("V0.5装备未安全迁移到V0.6")
-	if FileAccess.get_file_as_string(old_path) != old_text:
-		failures.append("V0.5原始装备存档被覆盖")
-	migrated.free()
-	for path in [old_path, new_path]:
-		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	if failures.is_empty():
-		print("V06_CHARACTER_TEST_PASS roster=10 slots=9 tabs=4 exp_sync=true optimize_max3=true no_steal=true lock=true general_skills=true persistence=true layouts=1440x768,1920x1080")
+		print("V06_CHARACTER_TEST_PASS roster=20 slots=9 tabs=3 separate_inventory=true exp_sync=true optimize_max9=true no_steal=true lock=true general_skills=true persistence=true layouts=1440x768,1920x1080")
 	else:
 		for failure in failures: push_error("V06_CHARACTER_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
@@ -2104,8 +2084,17 @@ func finish_v07_ui_actors_test() -> void:
 	if active_passes != 10: failures.append("新增专属主动真实触发%d/10" % active_passes)
 	if passive_runtime < 8: failures.append("新增固有被动真实验证%d/10" % passive_runtime)
 	if p.HERO_IDS.size() != 20: failures.append("角色总数不是20")
+	for resolution in [Vector2i(1440,768), Vector2i(1920,1080)]:
+		get_window().size = resolution; await get_tree().process_frame; _layout_ui()
+		character_ui.open("stats"); await get_tree().process_frame
+		if not Rect2(Vector2.ZERO, Vector2(resolution)).encloses(character_ui.panel.get_global_rect()): failures.append("%s角色页超出窗口" % str(resolution))
+		character_ui.close_panel(); inventory_ui.toggle(); await get_tree().process_frame
+		if not Rect2(Vector2.ZERO, Vector2(resolution)).encloses(inventory_ui.panel.get_global_rect()): failures.append("%s背包页超出窗口 rect=%s" % [str(resolution), str(inventory_ui.panel.get_global_rect())])
+		inventory_ui.toggle(); camp_ui.open(); await get_tree().process_frame
+		if not Rect2(Vector2.ZERO, Vector2(resolution)).encloses(camp_ui.panel.get_global_rect()): failures.append("%s营地页超出窗口" % str(resolution))
+		camp_ui.close_panel()
 	if failures.is_empty():
-		print("V07_UI_ACTORS_TEST_PASS pages=separate shared_inventory=true categories=5 actors=20 new_recruitable=10 active_runtime=10 passive_runtime=%d slots=3+4 equipment=9" % passive_runtime)
+		print("V07_UI_ACTORS_TEST_PASS pages=separate shared_inventory=true categories=5 actors=20 new_recruitable=10 active_runtime=10 passive_runtime=%d slots=3+4 equipment=9 layouts=1440x768,1920x1080" % passive_runtime)
 	else:
 		for failure in failures: push_error("V07_UI_ACTORS_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)

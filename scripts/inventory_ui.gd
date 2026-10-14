@@ -74,7 +74,13 @@ func build_ui() -> void:
 	var columns := HBoxContainer.new()
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	columns.add_theme_constant_override("separation", 12)
-	root_box.add_child(columns)
+	var body_scroll := ScrollContainer.new()
+	body_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body_scroll.follow_focus = true
+	root_box.add_child(body_scroll)
+	body_scroll.add_child(columns)
 	build_inventory_column(columns)
 	build_equipment_column(columns)
 	build_detail_column(columns)
