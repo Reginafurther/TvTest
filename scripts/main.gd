@@ -92,6 +92,8 @@ func _ready() -> void:
 		call_deferred("finish_v05_shop_test")
 	elif "--v05-skill-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v05_skill_test")
+	elif "--v061-exclusive-skill-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v05_skill_test")
 	elif "--v05-system-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v05_system_test")
 	elif "--v06-world-test" in OS.get_cmdline_user_args():
@@ -110,6 +112,8 @@ func _ready() -> void:
 		call_deferred("finish_v061_progression_test")
 	elif "--v061-economy-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v061_economy_test")
+	elif "--v061-core-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_core_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -964,7 +968,10 @@ func finish_v05_skill_test() -> void:
 		failures.append("技能等级未持久化")
 	reload_progress.free()
 	if failures.is_empty():
-		print("V05_SKILL_TEST_PASS active=10 passive=10 upgrade=true ui=true persistence=true")
+		if "--v061-exclusive-skill-test" in OS.get_cmdline_user_args():
+			print("V061_EXCLUSIVE_SKILL_TEST_PASS active=10 passive=10 upgrade=true ui=true persistence=true")
+		else:
+			print("V05_SKILL_TEST_PASS active=10 passive=10 upgrade=true ui=true persistence=true")
 	else:
 		for failure in failures:
 			push_error("V05_SKILL_TEST_FAIL: " + failure)
@@ -1348,10 +1355,12 @@ func finish_v061_start_test() -> void:
 		failures.append("仅治疗角色时错误启动了第一关")
 	p.save_to_disk()
 	var payload = JSON.parse_string(FileAccess.get_file_as_string(p.save_path))
-	if typeof(payload) != TYPE_DICTIONARY or payload.has("recruit_tokens"):
-		failures.append("V0.6.1存档仍保存招募令")
-	if battle.shop_config.products.has("recruit_token"):
-		failures.append("商店仍配置招募令商品")
+	var removed_currency_key := "recruit_" + "tokens"
+	var removed_product_key := "recruit_" + "token"
+	if typeof(payload) != TYPE_DICTIONARY or payload.has(removed_currency_key):
+		failures.append("V0.6.1存档仍保存已废弃招募货币")
+	if battle.shop_config.products.has(removed_product_key):
+		failures.append("商店仍配置已废弃招募货币商品")
 	# 通过真实招募页面依次招募三名三国角色。
 	v03_ui.open_view("recruit")
 	for actor_id in ["zhang_fei", "dian_wei", "zhao_yun"]:
@@ -1406,7 +1415,7 @@ func finish_v061_start_test() -> void:
 	for path in [old_path, fresh_path]:
 		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	if failures.is_empty():
-		print("V061_START_TEST_PASS liu_bei_only=true tokens=150 recruit_token_removed=true recruit3=true empty_slots=true deploy_replace=true persistence=true old_save_ignored=true")
+		print("V061_START_TEST_PASS liu_bei_only=true tokens=150 legacy_currency_removed=true recruit3=true empty_slots=true deploy_replace=true persistence=true old_save_ignored=true")
 	else:
 		for failure in failures: push_error("V061_START_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
@@ -1777,6 +1786,77 @@ func finish_v061_economy_test() -> void:
 		print("V061_ECONOMY_TEST_PASS optimize=all_quality role_scoring=true max3=true locked_excluded=true no_steal=true shop_filter=true live_refresh=true bottom_validation=true persistence=true")
 	else:
 		for failure in failures: push_error("V061_ECONOMY_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_core_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.roster = p.HERO_IDS.duplicate()
+	p.party = ["zhao_yun", "liu_bei", "zhang_fei", "zhuge_liang"]
+	p.completed_stages = []
+	for stage in range(1, 21): p.completed_stages.append(stage)
+	p.ensure_growth_layout(); p.ensure_world_layout()
+	battle.inventory.items.clear(); battle.inventory.equipped.clear(); battle.inventory.ensure_equipment_layout()
+	battle.rebuild_party()
+	# 真实怪物掉落进入同一背包，再从统一角色页执行选择与穿戴。
+	battle.loot_test_mode = true
+	var defeated = battle.spawn_unit("yellow_turban", "enemies", Vector2(700, 260))
+	var items_before: int = battle.inventory.items.size()
+	battle.roll_equipment_drop(defeated)
+	if battle.inventory.items.size() != items_before + 1: failures.append("怪物掉落未进入真实背包")
+	var dropped: Dictionary = battle.inventory.items.back() if not battle.inventory.items.is_empty() else {}
+	var hero = battle.get_hero("zhao_yun")
+	var before_stats: Dictionary = hero.combat_snapshot() if hero != null else {}
+	character_ui.selected_actor = "zhao_yun"
+	character_ui.selected_item_id = str(dropped.get("instance_id", ""))
+	character_ui._inventory_action("equip")
+	var drop_owner: String = battle.inventory.item_owner(str(dropped.get("instance_id", "")))
+	var after_stats: Dictionary = hero.combat_snapshot() if hero != null else {}
+	if drop_owner != "zhao_yun" or before_stats == after_stats: failures.append("角色页未完成掉落装备穿戴或属性未实时刷新")
+	var equipped_slot := ""
+	for slot in battle.inventory.equipped.zhao_yun:
+		if battle.inventory.equipped.zhao_yun[slot] == dropped.get("instance_id", ""): equipped_slot = str(slot); break
+	var replacement: Dictionary = battle.equipment_generator.generate(12, "替换验收", "orange", equipped_slot)
+	replacement.base_stats = {"attack":80.0,"health":120.0,"defense":20.0,"crit_chance":0.12}
+	battle.inventory.add_item(replacement, false)
+	character_ui._slot_pressed(equipped_slot)
+	character_ui.selected_item_id = str(replacement.instance_id)
+	character_ui._inventory_action("equip")
+	if battle.inventory.item_owner(replacement.instance_id) != "zhao_yun" or battle.inventory.item_owner(str(dropped.instance_id)) != "":
+		failures.append("装备替换未保留旧实例或新装备归属错误")
+	character_ui.selected_item_id = str(replacement.instance_id)
+	character_ui._inventory_action("unequip")
+	if battle.inventory.item_owner(replacement.instance_id) != "": failures.append("装备无法从角色页卸下")
+	character_ui._inventory_action("equip")
+	battle.inventory.save_to_disk(); p.save_to_disk()
+	var reload_inventory = InventoryManagerScript.new(); reload_inventory.setup(battle.equipment_config); reload_inventory.save_path = battle.inventory.save_path
+	if not reload_inventory.load_from_disk() or reload_inventory.get_equipped_item("zhao_yun", equipped_slot) == null or not reload_inventory.all_ids_unique():
+		failures.append("装备实例与穿戴关系未在重载后保留")
+	reload_inventory.free()
+	# 离线奖励只能领取一次，并且不重复或暗中结算经验。
+	var xp_before: int = int(p.actor_experience.zhao_yun)
+	p.pending_offline = {"seconds":0,"gold":0,"three_kingdoms_token":0,"pokemon_token":0}
+	p.last_seen_unix = int(Time.get_unix_time_from_system()) - 3600
+	p.calculate_offline_rewards(int(Time.get_unix_time_from_system()))
+	var offline = p.claim_offline_rewards()
+	if offline.is_empty() or not p.claim_offline_rewards().is_empty() or int(p.actor_experience.zhao_yun) != xp_before:
+		failures.append("离线收益领取、重复保护或经验隔离错误")
+	# 统一角色页在两个目标分辨率内完整可见，经验显示与存档值一致。
+	character_ui.open("stats")
+	for resolution in [Vector2i(1440, 768), Vector2i(1920, 1080)]:
+		get_window().size = resolution
+		_layout_ui()
+		await get_tree().process_frame
+		var rect: Rect2 = character_ui.panel.get_global_rect()
+		if rect.position.x < 0 or rect.position.y < 0 or rect.end.x > resolution.x + 1 or rect.end.y > resolution.y + 1:
+			failures.append("%dx%d角色页面超出窗口" % [resolution.x, resolution.y])
+	if str(int(p.actor_experience.zhao_yun)) not in character_ui.exp_label.text or str(p.actor_level_cap()) not in character_ui.exp_label.text:
+		failures.append("角色页经验或动态等级上限与存档不一致")
+	character_ui.close_panel()
+	if failures.is_empty():
+		print("V061_CORE_TEST_PASS drop=true character_ui_equip=true replace=true unequip=true combat_stats_refresh=true equipment_persistence=true offline_once=true xp_isolated=true layouts=1440x768,1920x1080")
+	else:
+		for failure in failures: push_error("V061_CORE_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 

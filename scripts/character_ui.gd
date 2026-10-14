@@ -24,6 +24,7 @@ var item_detail: RichTextLabel
 var growth_text: RichTextLabel
 var feedback: Label
 var selected_item_id := ""
+var preferred_equipment_slot := ""
 var pending_optimization: Array = []
 var optimize_dialog: ConfirmationDialog
 var party_box: VBoxContainer
@@ -399,8 +400,8 @@ func refresh_item_detail() -> void:
 		item_detail.text = "选择装备查看与当前角色的真实属性对比。"
 		return
 	var slots: Array = item.get("compatible_slots", [item.get("slot", "")])
-	var target_slot: String = str(slots[0])
-	if "ring_1" in slots and battle.inventory.get_equipped_item(selected_actor, "ring_1") != null: target_slot = "ring_2"
+	var target_slot: String = preferred_equipment_slot if preferred_equipment_slot in slots else str(slots[0])
+	if preferred_equipment_slot.is_empty() and "ring_1" in slots and battle.inventory.get_equipped_item(selected_actor, "ring_1") != null: target_slot = "ring_2"
 	var old = battle.inventory.get_equipped_item(selected_actor, target_slot)
 	var gain: float = battle.inventory.item_score(item) - (battle.inventory.item_score(old) if old != null else 0.0)
 	item_detail.text = "[b]%s[/b]　%s\n%s\n当前角色目标栏：%s　综合属性变化：[color=%s]%+.1f[/color]" % [item.name, "已锁定" if item.get("locked", false) else "未锁定", item_summary(item), battle.equipment_config.slots.get(target_slot, target_slot), "#3C9B58" if gain >= 0 else "#C84B45", gain]
@@ -416,6 +417,7 @@ func refresh_growth() -> void:
 func _select_actor(index: int) -> void:
 	selected_actor = str(actor_list.get_item_metadata(index))
 	selected_item_id = ""
+	preferred_equipment_slot = ""
 	feedback.text = "正在查看%s；编队未改变。" % battle.actors[selected_actor].name
 	refresh_all()
 
@@ -433,6 +435,7 @@ func _clear_party_slot(index: int) -> void:
 
 func _slot_pressed(slot: String) -> void:
 	tabs.current_tab = 2
+	preferred_equipment_slot = slot
 	var item = battle.inventory.get_equipped_item(selected_actor, slot)
 	selected_item_id = str(item.instance_id) if item != null else ""
 	feedback.text = "%s：选择背包装备穿戴，或选择当前装备后卸下。" % battle.equipment_config.slots[slot]
@@ -454,10 +457,13 @@ func _inventory_action(action: String) -> void:
 				feedback.text = "该装备正由%s穿戴；请先在其角色页卸下。" % battle.actors[owner].name
 				return
 			var slots: Array = item.get("compatible_slots", [item.get("slot", "")])
-			var slot: String = str(slots[0])
-			for candidate in slots:
-				if battle.inventory.get_equipped_item(selected_actor, candidate) == null: slot = str(candidate); break
-			if battle.inventory.equip_item(selected_actor, selected_item_id, slot): feedback.text = "已为%s穿戴%s，战斗属性已刷新。" % [battle.actors[selected_actor].name, item.name]
+			var slot: String = preferred_equipment_slot if preferred_equipment_slot in slots else str(slots[0])
+			if preferred_equipment_slot.is_empty() or preferred_equipment_slot not in slots:
+				for candidate in slots:
+					if battle.inventory.get_equipped_item(selected_actor, candidate) == null: slot = str(candidate); break
+			if battle.inventory.equip_item(selected_actor, selected_item_id, slot):
+				feedback.text = "已为%s穿戴%s，战斗属性已刷新。" % [battle.actors[selected_actor].name, item.name]
+				preferred_equipment_slot = ""
 		"unequip":
 			var owner: String = battle.inventory.item_owner(selected_item_id)
 			if owner != selected_actor: feedback.text = "这不是当前角色穿戴的装备。"; return
