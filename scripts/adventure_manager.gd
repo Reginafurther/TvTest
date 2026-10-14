@@ -99,10 +99,13 @@ func resolve_rift_victory() -> Dictionary:
 	var item: Dictionary = battle.equipment_generator.generate(maxi(1, floor), "%s第%d层" % [config.rift.worlds[world_id].name, floor], quality)
 	item["rift_floor"] = floor
 	item["rift_world"] = world_id
+	item["auto_process_protected"] = first
 	if floor >= 5 and item.get("special_effects", []).is_empty():
 		var special_ids: Array = battle.special_config.get("effects", {}).keys()
 		if not special_ids.is_empty(): item.special_effects = [special_ids[floor % special_ids.size()]]
-	if battle.inventory.add_item(item): battle.combat_stats.resources.equipment += 1
+	var auto_result: Dictionary = battle.auto_process_new_equipment(item, not first)
+	if not auto_result.is_empty() or battle.inventory.add_item(item):
+		battle.combat_stats.resources.equipment += 1
 	if first and floor % 5 == 0: grant_furniture("rift_beacon", 1)
 	battle.progression.record_transaction("秘境结算", "%s第%d层%s" % [config.rift.worlds[world_id].name, floor, "首通" if first else "重复"], gold)
 	if bool(state.auto_climb) and floor < main_stage_cap(): state.selected_floor = floor + 1
@@ -171,7 +174,9 @@ func reward_for_encounter(event_id: String) -> Dictionary:
 	if event_id in ["rare_elite", "chest_mimic", "hidden_boss"]:
 		var quality := "orange" if event_id == "hidden_boss" else "purple" if event_id == "chest_mimic" else "blue"
 		var item: Dictionary = battle.equipment_generator.generate(stage, "奇遇·%s" % config.encounters.types[event_id].name, quality)
-		if battle.inventory.add_item(item):
+		item["auto_process_protected"] = event_id == "hidden_boss"
+		var auto_result: Dictionary = battle.auto_process_new_equipment(item, event_id != "hidden_boss")
+		if not auto_result.is_empty() or battle.inventory.add_item(item):
 			battle.combat_stats.resources.equipment += 1
 			reward.equipment = item
 	if event_id == "chest_mimic":

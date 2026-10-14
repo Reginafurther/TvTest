@@ -572,7 +572,12 @@ func roll_equipment_drop(defeated_unit) -> void:
 	var quality: String = equipment_generator.roll_quality(loot_test_mode)
 	var source := "%s · 第%d波" % [defeated_unit._name(), maxi(1, wave - 1)]
 	var item: Dictionary = equipment_generator.generate(level, source, quality)
-	if inventory.add_item(item):
+	var auto_result := auto_process_new_equipment(item, true)
+	if not auto_result.is_empty():
+		combat_stats.resources.equipment += 1
+		var auto_quality_info: Dictionary = equipment_config.get("qualities", {}).get(quality, {})
+		spawn_ring(defeated_unit.position, Color(auto_quality_info.get("color", "FFFFFF")))
+	elif inventory.add_item(item):
 		combat_stats.resources.equipment += 1
 		var quality_info: Dictionary = equipment_config.get("qualities", {}).get(quality, {})
 		var important := int(quality_info.get("rank", 0)) >= 2
@@ -581,6 +586,51 @@ func roll_equipment_drop(defeated_unit) -> void:
 		loot_obtained.emit(item)
 	else:
 		log_message.emit("背包已满，未能拾取装备")
+
+func auto_process_new_equipment(item: Dictionary, eligible: bool = true) -> Dictionary:
+	# This function is called only for a newly generated ordinary reward and runs
+	# before InventoryManager.add_item(), so eligible drops still convert at 120/120.
+	if not eligible or item.is_empty() or bool(item.get("_auto_processed", false)) or bool(item.get("locked", false)) or bool(item.get("auto_process_protected", false)):
+		return {}
+	if str(item.get("instance_id", "")).is_empty() or str(item.get("slot", "")).is_empty():
+		return {}
+	if shop.is_equipped(str(item.get("instance_id", ""))):
+		return {}
+	var settings: Dictionary = progression.auto_equipment_settings
+	if bool(settings.get("keep_special_effects", true)) and not item.get("special_effects", []).is_empty():
+		return {}
+	var rank := int(item.get("quality_rank", equipment_config.get("qualities", {}).get(item.get("quality", "white"), {}).get("rank", 0)))
+	var quality_ranks := {"white":0, "green":1, "blue":2, "purple":3, "orange":4}
+	var sell_match := bool(settings.get("sell_enabled", false)) and rank <= int(quality_ranks.get(str(settings.get("sell_max_quality", "white")), 0))
+	var dismantle_match := bool(settings.get("dismantle_enabled", false)) and rank <= int(quality_ranks.get(str(settings.get("dismantle_max_quality", "white")), 0))
+	if not sell_match and not dismantle_match:
+		return {}
+	var action := "dismantle" if dismantle_match and (not sell_match or str(settings.get("priority", "dismantle")) == "dismantle") else "sell"
+	var quality_name := str(equipment_config.get("qualities", {}).get(item.get("quality", "white"), {}).get("name", item.get("quality", "white")))
+	if action == "sell":
+		item["_auto_processed"] = true
+		var gold_gain: int = shop.sell_price(item)
+		progression.gold += gold_gain
+		progression.record_transaction("自动出售装备", item.get("name", item.instance_id), gold_gain)
+		combat_stats.resources.auto_sold_count += 1
+		combat_stats.resources.auto_sold_gold += gold_gain
+		progression.changed.emit()
+		progression.save_to_disk()
+		log_message.emit("自动出售：%s装备×1，获得金币%d" % [quality_name, gold_gain])
+		return {"action":"sell", "gold":gold_gain, "count":1}
+	var material_gain: int = crafting.dismantle_value(item)
+	if material_gain <= 0:
+		return {}
+	item["_auto_processed"] = true
+	progression.materials.salvage_dust = int(progression.materials.get("salvage_dust", 0)) + material_gain
+	progression.record_transaction("自动分解装备", "%s，重铸材料+%d" % [item.get("name", item.instance_id), material_gain], 0)
+	combat_stats.resources.auto_dismantled_count += 1
+	combat_stats.resources.auto_dismantled_material += material_gain
+	combat_stats.resources.materials += material_gain
+	progression.changed.emit()
+	progression.save_to_disk()
+	log_message.emit("自动分解：%s装备×1，获得重铸材料%d" % [quality_name, material_gain])
+	return {"action":"dismantle", "material":material_gain, "count":1}
 
 func get_hero(actor_id: String):
 	for hero in heroes:

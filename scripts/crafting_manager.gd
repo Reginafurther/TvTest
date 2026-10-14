@@ -24,7 +24,7 @@ func dismantle(instance_id: String) -> int:
 	var item = inventory.find_item(instance_id)
 	if item == null or is_equipped(instance_id) or bool(item.get("locked", false)):
 		return 0
-	var reward := maxi(1, (int(item.quality_rank) + 1) * 4 + int(item.level) * 2)
+	var reward := dismantle_value(item)
 	var index: int = inventory.items.find(item)
 	if index < 0:
 		return 0
@@ -33,6 +33,13 @@ func dismantle(instance_id: String) -> int:
 	inventory.inventory_changed.emit()
 	inventory.save_to_disk()
 	return reward
+
+func dismantle_value(item: Dictionary) -> int:
+	# Single source of truth shared by manual dismantling and pre-inventory
+	# automatic processing (which must also work while the backpack is full).
+	if item.is_empty():
+		return 0
+	return maxi(1, (int(item.get("quality_rank", 0)) + 1) * 4 + int(item.get("level", 1)) * 2)
 
 func begin_reroll(instance_id: String, affix_index: int) -> Dictionary:
 	var item = inventory.find_item(instance_id)

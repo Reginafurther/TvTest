@@ -3,12 +3,12 @@ extends RefCounted
 
 var started_at := 0.0
 var actors: Dictionary = {}
-var resources := {"equipment": 0, "materials": 0}
+var resources := {"equipment": 0, "materials": 0, "auto_sold_count": 0, "auto_sold_gold": 0, "auto_dismantled_count": 0, "auto_dismantled_material": 0}
 
 func reset(elapsed: float = 0.0) -> void:
 	started_at = elapsed
 	actors.clear()
-	resources = {"equipment": 0, "materials": 0}
+	resources = {"equipment": 0, "materials": 0, "auto_sold_count": 0, "auto_sold_gold": 0, "auto_dismantled_count": 0, "auto_dismantled_material": 0}
 
 func ensure_actor(id: String) -> Dictionary:
 	if not actors.has(id):

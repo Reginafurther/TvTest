@@ -53,6 +53,8 @@ var stats_actor_rows: Dictionary = {}
 var stats_sort_mode := "DPS"
 var difficulty_preview := 1.0
 var settings_feedback := ""
+var auto_equipment_warning_dialog: ConfirmationDialog
+var pending_auto_equipment_setting: Dictionary = {}
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -184,6 +186,13 @@ func build_panel() -> void:
 	reset_dialog.cancel_button_text = "取消"
 	reset_dialog.confirmed.connect(_confirm_safe_reset)
 	add_child(reset_dialog)
+	auto_equipment_warning_dialog = ConfirmationDialog.new()
+	auto_equipment_warning_dialog.title = "确认自动处理稀有装备"
+	auto_equipment_warning_dialog.ok_button_text = "我了解风险，继续"
+	auto_equipment_warning_dialog.cancel_button_text = "取消"
+	auto_equipment_warning_dialog.confirmed.connect(_confirm_auto_equipment_setting)
+	auto_equipment_warning_dialog.canceled.connect(_cancel_auto_equipment_setting)
+	add_child(auto_equipment_warning_dialog)
 
 func open_view(view: String) -> void:
 	if character_ui != null and character_ui.panel.visible:
@@ -318,7 +327,7 @@ func build_rewards() -> void:
 	var snap: Dictionary = battle.stats_snapshot()
 	var info := Label.new()
 	var pending: Dictionary = battle.progression.pending_offline
-	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募材料：%d 个　累计金币：%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0)), int(pending.get("dragon_blood_crystal", 0)), int(pending.get("jianghu_token", 0))]
+	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募/重铸材料：%d 个　累计金币：%d\n自动出售：%d件 / 金币%d　自动分解：%d件 / 材料%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, int(snap.resources.get("auto_sold_count", 0)), int(snap.resources.get("auto_sold_gold", 0)), int(snap.resources.get("auto_dismantled_count", 0)), int(snap.resources.get("auto_dismantled_material", 0)), snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0)), int(pending.get("dragon_blood_crystal", 0)), int(pending.get("jianghu_token", 0))]
 	info.add_theme_font_size_override("font_size", 20)
 	content.add_child(info)
 	var claim := Button.new()
@@ -912,7 +921,7 @@ func update_stats_view() -> void:
 		var key := "hps" if stats_sort_mode == "HPS" else "dps"
 		return float(snap.actors.get(a, {}).get(key, 0.0)) > float(snap.actors.get(b, {}).get(key, 0.0)))
 	var team: Dictionary = snap.get("team", {})
-	stats_summary.text = "[b]统计时长[/b] %.1f秒　[b][color=#FFB86B]队伍伤害[/color][/b] %s　[b]DPS[/b] %s\n[b][color=#77E89A]队伍治疗[/color][/b] %s　[b]HPS[/b] %s　累计击杀 %d\n装备 %d件　材料 %d个　装备收益 %.2f件/分钟" % [snap.duration, compact_number(float(team.get("damage", 0))), compact_number(float(team.get("dps", 0))), compact_number(float(team.get("healing", 0))), compact_number(float(team.get("hps", 0))), int(team.get("kills", 0)), int(snap.resources.equipment), int(snap.resources.materials), float(snap.get("equipment_per_minute", 0.0))]
+	stats_summary.text = "[b]统计时长[/b] %.1f秒　[b][color=#FFB86B]队伍伤害[/color][/b] %s　[b]DPS[/b] %s\n[b][color=#77E89A]队伍治疗[/color][/b] %s　[b]HPS[/b] %s　累计击杀 %d\n装备 %d件　材料 %d个　装备收益 %.2f件/分钟\n自动出售 %d件 / 金币%d　自动分解 %d件 / 材料%d" % [snap.duration, compact_number(float(team.get("damage", 0))), compact_number(float(team.get("dps", 0))), compact_number(float(team.get("healing", 0))), compact_number(float(team.get("hps", 0))), int(team.get("kills", 0)), int(snap.resources.equipment), int(snap.resources.materials), float(snap.get("equipment_per_minute", 0.0)), int(snap.resources.get("auto_sold_count", 0)), int(snap.resources.get("auto_sold_gold", 0)), int(snap.resources.get("auto_dismantled_count", 0)), int(snap.resources.get("auto_dismantled_material", 0))]
 	var total_damage := maxf(1.0, float(team.get("damage", 0.0)))
 	for index in range(ids.size()):
 		var actor_id := ids[index]
@@ -942,10 +951,74 @@ func build_settings() -> void:
 	var apply := Button.new(); apply.text = "应用难度（下一波开始生效）"; apply.pressed.connect(_apply_difficulty); V035ThemeScript.button(apply, "gold"); content.add_child(apply)
 	var formula := Label.new(); formula.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; formula.text = "新版1.0× = 原2.5×难度，调整后下一波敌人生效。敌人生命、攻击、防御沿用原有非线性映射；玩家属性与奖励不变。"; content.add_child(formula)
 	content.add_child(HSeparator.new())
+	var auto_heading := Label.new(); auto_heading.text = "自动装备处理（仅处理开启后新掉落的普通装备）"; auto_heading.add_theme_font_size_override("font_size", 21); content.add_child(auto_heading)
+	var auto_settings: Dictionary = battle.progression.auto_equipment_settings
+	var sell_row := HBoxContainer.new(); content.add_child(sell_row)
+	var sell_toggle := CheckButton.new(); sell_toggle.text = "自动出售装备"; sell_toggle.button_pressed = bool(auto_settings.get("sell_enabled", false)); sell_toggle.toggled.connect(_set_auto_equipment_setting.bind("sell_enabled")); sell_row.add_child(sell_toggle)
+	var sell_quality := OptionButton.new(); _populate_auto_quality_select(sell_quality, str(auto_settings.get("sell_max_quality", "white"))); sell_quality.item_selected.connect(_auto_quality_selected.bind(sell_quality, "sell_max_quality")); sell_row.add_child(sell_quality)
+	var dismantle_row := HBoxContainer.new(); content.add_child(dismantle_row)
+	var dismantle_toggle := CheckButton.new(); dismantle_toggle.text = "自动分解装备"; dismantle_toggle.button_pressed = bool(auto_settings.get("dismantle_enabled", false)); dismantle_toggle.toggled.connect(_set_auto_equipment_setting.bind("dismantle_enabled")); dismantle_row.add_child(dismantle_toggle)
+	var dismantle_quality := OptionButton.new(); _populate_auto_quality_select(dismantle_quality, str(auto_settings.get("dismantle_max_quality", "white"))); dismantle_quality.item_selected.connect(_auto_quality_selected.bind(dismantle_quality, "dismantle_max_quality")); dismantle_row.add_child(dismantle_quality)
+	var priority_row := HBoxContainer.new(); content.add_child(priority_row)
+	var priority_label := Label.new(); priority_label.text = "同时符合时："; priority_row.add_child(priority_label)
+	var priority := OptionButton.new(); priority.add_item("优先分解"); priority.set_item_metadata(0, "dismantle"); priority.add_item("优先出售"); priority.set_item_metadata(1, "sell"); priority.selected = 0 if str(auto_settings.get("priority", "dismantle")) == "dismantle" else 1; priority.item_selected.connect(_auto_priority_selected.bind(priority)); priority_row.add_child(priority)
+	var protect_special := CheckButton.new(); protect_special.text = "保留带特殊效果装备（推荐）"; protect_special.button_pressed = bool(auto_settings.get("keep_special_effects", true)); protect_special.toggled.connect(_set_auto_equipment_setting.bind("keep_special_effects")); content.add_child(protect_special)
+	var auto_preview := Label.new(); auto_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; auto_preview.text = _auto_equipment_preview(); auto_preview.add_theme_color_override("font_color", Color("#FFD27A")); content.add_child(auto_preview)
+	var auto_hint := Label.new(); auto_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; auto_hint.text = "已穿戴、已锁定、旧背包装备、商店购买、首通/特殊奖励均不自动处理。符合规则的新掉落会在背包容量检查前直接换成金币或重铸材料，且每件只结算一次。"; content.add_child(auto_hint)
+	content.add_child(HSeparator.new())
 	var guide := Button.new(); guide.text = "重新查看新手引导（不重置存档）"; guide.pressed.connect(func(): battle.progression.restart_guide(); settings_feedback = "新手引导已重新开启。"; refresh()); content.add_child(guide)
 	var reset := Button.new(); reset.text = "重新开始游戏（先自动备份）"; reset.tooltip_text = "备份并逐字节校验成功后才会重置全部进度"; reset.pressed.connect(func(): reset_dialog.popup_centered()); V035ThemeScript.button(reset, "blue"); content.add_child(reset)
 	var feedback := Label.new(); feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; feedback.text = settings_feedback if not settings_feedback.is_empty() else "重新开始后：仅刘备Lv.1、虎符150、金币0、主线第1关、默认难度1.0×，并恢复完整新手引导。"; feedback.add_theme_color_override("font_color", Color("#FFD27A")); content.add_child(feedback)
 	_update_difficulty_preview(preview_label)
+
+func _populate_auto_quality_select(select: OptionButton, selected_quality: String) -> void:
+	var labels := {"white":"白色及以下", "green":"绿色及以下", "blue":"蓝色及以下", "purple":"紫色及以下", "orange":"橙色及以下"}
+	for quality in ["white", "green", "blue", "purple", "orange"]:
+		select.add_item(labels[quality])
+		select.set_item_metadata(select.item_count - 1, quality)
+		if quality == selected_quality:
+			select.selected = select.item_count - 1
+
+func _auto_quality_selected(index: int, select: OptionButton, key: String) -> void:
+	var quality := str(select.get_item_metadata(index))
+	if quality in ["purple", "orange"]:
+		pending_auto_equipment_setting = {"key":key, "value":quality}
+		auto_equipment_warning_dialog.dialog_text = "选择%s可能让今后新掉落的稀有装备被不可撤销地自动处理。\n\n已穿戴、锁定、旧装备、特殊效果及特殊奖励仍会受到保护。" % ("紫色及以下" if quality == "purple" else "橙色及以下")
+		auto_equipment_warning_dialog.popup_centered()
+		return
+	_set_auto_equipment_setting(quality, key)
+
+func _auto_priority_selected(index: int, select: OptionButton) -> void:
+	_set_auto_equipment_setting(str(select.get_item_metadata(index)), "priority")
+
+func _set_auto_equipment_setting(value, key: String) -> void:
+	if battle.progression.set_auto_equipment_setting(key, value):
+		settings_feedback = "自动装备处理设置已保存，只对之后获得的新普通掉落生效。"
+		refresh()
+
+func _confirm_auto_equipment_setting() -> void:
+	if pending_auto_equipment_setting.is_empty():
+		return
+	_set_auto_equipment_setting(pending_auto_equipment_setting.value, str(pending_auto_equipment_setting.key))
+	pending_auto_equipment_setting.clear()
+
+func _cancel_auto_equipment_setting() -> void:
+	pending_auto_equipment_setting.clear()
+	refresh()
+
+func _auto_equipment_preview() -> String:
+	var settings: Dictionary = battle.progression.auto_equipment_settings
+	var ranks := {"white":0, "green":1, "blue":2, "purple":3, "orange":4}
+	var labels := {"white":"白", "green":"绿", "blue":"蓝", "purple":"紫", "orange":"橙"}
+	var outcomes: Array[String] = []
+	for quality in ["white", "green", "blue", "purple", "orange"]:
+		var sell_match := bool(settings.get("sell_enabled", false)) and int(ranks[quality]) <= int(ranks.get(str(settings.get("sell_max_quality", "white")), 0))
+		var dismantle_match := bool(settings.get("dismantle_enabled", false)) and int(ranks[quality]) <= int(ranks.get(str(settings.get("dismantle_max_quality", "white")), 0))
+		var result := "保留"
+		if sell_match or dismantle_match:
+			result = "分解" if dismantle_match and (not sell_match or str(settings.get("priority", "dismantle")) == "dismantle") else "出售"
+		outcomes.append("%s装：%s" % [labels[quality], result])
+	return "处理预览｜" + "　".join(outcomes)
 
 func _update_difficulty_preview(label: Label) -> void:
 	var profile: Dictionary = battle.custom_difficulty_profile(difficulty_preview)

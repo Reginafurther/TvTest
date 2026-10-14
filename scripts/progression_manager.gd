@@ -61,7 +61,31 @@ var achievements: Dictionary = {}
 var auto_push := true
 var combat_difficulty := 1.0
 var difficulty_config_version := DIFFICULTY_CONFIG_VERSION
+var auto_equipment_settings: Dictionary = default_auto_equipment_settings()
 var progression_config: Dictionary = {}
+
+static func default_auto_equipment_settings() -> Dictionary:
+	return {
+		"sell_enabled": false,
+		"sell_max_quality": "white",
+		"dismantle_enabled": false,
+		"dismantle_max_quality": "white",
+		"priority": "dismantle",
+		"keep_special_effects": true
+	}
+
+func set_auto_equipment_setting(key: String, value, autosave: bool = true) -> bool:
+	if key not in default_auto_equipment_settings():
+		return false
+	if key in ["sell_max_quality", "dismantle_max_quality"] and str(value) not in ["white", "green", "blue", "purple", "orange"]:
+		return false
+	if key == "priority" and str(value) not in ["dismantle", "sell"]:
+		return false
+	auto_equipment_settings[key] = value
+	changed.emit()
+	if autosave:
+		save_to_disk()
+	return true
 
 func setup() -> void:
 	progression_config = JSON.parse_string(FileAccess.get_file_as_string("res://data/progression.json"))
@@ -570,6 +594,7 @@ func reset_to_new_game() -> bool:
 	auto_push = true
 	combat_difficulty = 1.0
 	difficulty_config_version = DIFFICULTY_CONFIG_VERSION
+	auto_equipment_settings = default_auto_equipment_settings()
 	ensure_growth_layout()
 	ensure_world_layout()
 	ensure_adventure_layout()
@@ -578,7 +603,7 @@ func reset_to_new_game() -> bool:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -635,6 +660,19 @@ func apply_payload(parsed) -> bool:
 	camp_layout = parsed.get("camp_layout", [])
 	achievements = parsed.get("achievements", {})
 	auto_push = bool(parsed.get("auto_push", true))
+	auto_equipment_settings = default_auto_equipment_settings()
+	var stored_auto_settings = parsed.get("auto_equipment_settings", {})
+	if typeof(stored_auto_settings) == TYPE_DICTIONARY:
+		for key in auto_equipment_settings:
+			if stored_auto_settings.has(key):
+				auto_equipment_settings[key] = stored_auto_settings[key]
+	for bool_key in ["sell_enabled", "dismantle_enabled", "keep_special_effects"]:
+		auto_equipment_settings[bool_key] = bool(auto_equipment_settings[bool_key])
+	for quality_key in ["sell_max_quality", "dismantle_max_quality"]:
+		if str(auto_equipment_settings[quality_key]) not in ["white", "green", "blue", "purple", "orange"]:
+			auto_equipment_settings[quality_key] = "white"
+	if str(auto_equipment_settings.priority) not in ["dismantle", "sell"]:
+		auto_equipment_settings.priority = "dismantle"
 	transaction_log = parsed.get("transaction_log", [])
 	var stored_difficulty_version := int(parsed.get("difficulty_config_version", 1))
 	if stored_difficulty_version < DIFFICULTY_CONFIG_VERSION:

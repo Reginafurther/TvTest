@@ -20,6 +20,7 @@ var portrait_placeholder: Label
 var slot_buttons: Dictionary = {}
 var tabs: TabContainer
 var stats_text: RichTextLabel
+var skill_scroll: ScrollContainer
 var skills_box: VBoxContainer
 var inventory_list: ItemList
 var quality_filter: OptionButton
@@ -33,6 +34,9 @@ var optimize_dialog: ConfirmationDialog
 var party_box: VBoxContainer
 var skill_world_filter := "全部"
 var skill_category_filter := "全部"
+var skills_dirty := true
+var skills_rendered_actor := ""
+var skill_scroll_restore_token := 0
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -41,9 +45,9 @@ func setup(owner_battle) -> void:
 	build_ui()
 	# Hidden character UI used to rebuild the 76-skill list on every kill/save.
 	# That was the primary source of periodic battle hitches in long sessions.
-	battle.progression.changed.connect(refresh_if_open)
-	battle.inventory.inventory_changed.connect(refresh_if_open)
-	battle.inventory.equipment_changed.connect(func(_actor_id): refresh_if_open())
+	battle.progression.changed.connect(_on_progression_changed)
+	battle.inventory.inventory_changed.connect(_on_inventory_changed)
+	battle.inventory.equipment_changed.connect(_on_equipment_changed)
 	selected_actor = str(battle.progression.roster[0]) if not battle.progression.roster.is_empty() else ""
 	refresh_all()
 	panel.visible = false
@@ -51,6 +55,30 @@ func setup(owner_battle) -> void:
 func refresh_if_open() -> void:
 	if panel != null and panel.visible:
 		refresh_all()
+
+func _on_progression_changed() -> void:
+	# Kills, experience, gold and autosaves are frequent. Keep the skill tree in
+	# place and only update the lightweight character values that actually changed.
+	skills_dirty = true
+	if panel == null or not panel.visible:
+		return
+	refresh_roster()
+	refresh_party_controls()
+	refresh_center()
+	if tabs.current_tab == 0:
+		refresh_stats()
+	elif tabs.current_tab == 2:
+		refresh_growth()
+
+func _on_inventory_changed() -> void:
+	if panel == null or not panel.visible:
+		return
+	refresh_center()
+	if tabs.current_tab == 0:
+		refresh_stats()
+
+func _on_equipment_changed(_actor_id: String) -> void:
+	_on_inventory_changed()
 
 func build_ui() -> void:
 	panel = PanelContainer.new()
@@ -179,8 +207,10 @@ func build_detail_column(parent: HBoxContainer) -> void:
 	stats_text.name = "人物属性"
 	stats_text.bbcode_enabled = true
 	tabs.add_child(stats_text)
-	var skill_scroll := ScrollContainer.new()
+	skill_scroll = ScrollContainer.new()
 	skill_scroll.name = "角色技能"
+	skill_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	skill_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	skills_box = VBoxContainer.new()
 	skills_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	skill_scroll.add_child(skills_box)
@@ -194,7 +224,7 @@ func open(tab_name: String = "stats") -> void:
 	panel.visible = true
 	var names := {"stats": 0, "skills": 1, "growth": 2}
 	tabs.current_tab = int(names.get(tab_name, 0))
-	refresh_all()
+	refresh_all(skills_dirty)
 
 func toggle(tab_name: String = "stats") -> void:
 	if panel.visible:
@@ -205,7 +235,7 @@ func toggle(tab_name: String = "stats") -> void:
 func close_panel() -> void:
 	panel.visible = false
 
-func refresh_all() -> void:
+func refresh_all(rebuild_skills: bool = true, reset_skill_scroll: bool = false) -> void:
 	if battle == null or panel == null:
 		return
 	if selected_actor.is_empty() or selected_actor not in battle.progression.roster:
@@ -213,13 +243,19 @@ func refresh_all() -> void:
 	refresh_roster()
 	refresh_party_controls()
 	refresh_center()
-	_refresh_visible_detail_tab(tabs.current_tab)
+	if tabs.current_tab == 1:
+		if rebuild_skills:
+			refresh_skills(not reset_skill_scroll)
+	else:
+		_refresh_visible_detail_tab(tabs.current_tab)
 
 func _refresh_visible_detail_tab(tab_index: int) -> void:
 	if battle == null or selected_actor.is_empty(): return
 	match tab_index:
 		0: refresh_stats()
-		1: refresh_skills()
+		1:
+			if skills_dirty or skills_rendered_actor != selected_actor:
+				refresh_skills(true)
 		2: refresh_growth()
 
 func refresh_roster() -> void:
@@ -315,8 +351,13 @@ func stat_rows(base: Dictionary, gear: Dictionary, final: Dictionary) -> String:
 		rows.append("%s　　%.1f%s　　+%.1f%s　　[b]%.1f%s[/b]" % [labels[key], float(base.get(key, 0)) * scale, suffix, float(gear.get(key, 0)) * scale, suffix, float(final.get(key, 0)) * scale, suffix])
 	return "\n".join(rows)
 
-func refresh_skills() -> void:
-	for child in skills_box.get_children(): child.queue_free()
+func refresh_skills(preserve_scroll: bool = true) -> void:
+	var previous_scroll := skill_scroll.scroll_vertical if preserve_scroll else 0
+	skill_scroll_restore_token += 1
+	var restore_token := skill_scroll_restore_token
+	for child in skills_box.get_children():
+		skills_box.remove_child(child)
+		child.queue_free()
 	if selected_actor.is_empty(): return
 	var p = battle.progression
 	var actor: Dictionary = battle.actors[selected_actor]
@@ -388,14 +429,31 @@ func refresh_skills() -> void:
 				recycle.pressed.connect(_recycle_general_book.bind(skill_id))
 				row.add_child(recycle)
 		skills_box.add_child(row)
+	_disable_skill_button_focus(skills_box)
+	skills_dirty = false
+	skills_rendered_actor = selected_actor
+	call_deferred("_restore_skill_scroll", previous_scroll, restore_token)
+
+func _disable_skill_button_focus(root: Node) -> void:
+	for child in root.get_children():
+		if child is Button:
+			child.focus_mode = Control.FOCUS_NONE
+		_disable_skill_button_focus(child)
+
+func _restore_skill_scroll(value: int, token: int) -> void:
+	if token != skill_scroll_restore_token or skill_scroll == null:
+		return
+	var bar := skill_scroll.get_v_scroll_bar()
+	var maximum := int(maxf(0.0, bar.max_value - bar.page))
+	skill_scroll.scroll_vertical = clampi(value, 0, maximum)
 
 func _set_skill_world_filter(value: String) -> void:
 	skill_world_filter = value
-	refresh_skills()
+	refresh_skills(false)
 
 func _set_skill_category_filter(value: String) -> void:
 	skill_category_filter = value
-	refresh_skills()
+	refresh_skills(false)
 
 func skill_function_name(value: String) -> String:
 	return {"damage":"输出", "healing":"治疗", "defense":"防御", "support":"辅助", "control":"控制/减益", "mobility":"位移/闪避"}.get(value, "输出")
@@ -504,19 +562,20 @@ func _select_actor(index: int) -> void:
 	selected_item_id = ""
 	preferred_equipment_slot = ""
 	feedback.text = "正在查看%s；编队未改变。" % battle.actors[selected_actor].name
-	refresh_all()
+	skills_dirty = true
+	refresh_all(true, true)
 
 func _assign_selected_actor(index: int) -> void:
 	if battle.progression.set_party_member(index, selected_actor):
 		feedback.text = "%s已上阵到位置%d；战场立即重建。" % [battle.actors[selected_actor].name, index + 1]
 		battle.rebuild_party()
-		refresh_all()
+		refresh_all(false)
 
 func _clear_party_slot(index: int) -> void:
 	if battle.progression.set_party_member(index, ""):
 		feedback.text = "位置%d已清空，角色培养数据保持不变。" % (index + 1)
 		battle.rebuild_party()
-		refresh_all()
+		refresh_all(false)
 
 func _slot_pressed(slot: String) -> void:
 	preferred_equipment_slot = slot
@@ -556,7 +615,7 @@ func _inventory_action(action: String) -> void:
 		"lock":
 			battle.inventory.set_item_locked(selected_item_id, not bool(item.get("locked", false)))
 			feedback.text = "装备已%s。" % ("锁定" if item.get("locked", false) else "解锁")
-	refresh_all()
+	refresh_all(false)
 
 func _preview_optimization() -> void:
 	var role := str(battle.actors.get(selected_actor, {}).get("combat_role", ""))
@@ -573,14 +632,14 @@ func _apply_optimization() -> void:
 	var count: int = battle.inventory.apply_optimization(selected_actor, pending_optimization)
 	feedback.text = ("一键优化完成：已更换%d件装备。" % count) if count > 0 else (battle.inventory.last_error if not battle.inventory.last_error.is_empty() else "当前装备已是最优配置。")
 	pending_optimization.clear()
-	refresh_all()
+	refresh_all(false)
 
 func _upgrade_exclusive(kind: String) -> void:
 	if battle.progression.upgrade_skill(selected_actor, kind):
 		feedback.text = "专属%s升级成功并已进入战斗计算。" % ("主动" if kind == "active" else "被动")
 		battle.rebuild_party()
 	else: feedback.text = "升级失败：资源不足或已满级。"
-	refresh_all()
+	refresh_skills(true)
 
 func _general_skill_action(skill_id: String, category: String, learned: bool) -> void:
 	if learned:
@@ -591,25 +650,25 @@ func _general_skill_action(skill_id: String, category: String, learned: bool) ->
 			feedback.text = "通用技能学习并装备成功。"
 		else: feedback.text = "学习失败：需要对应技能书×1。技能书来自怪物、Boss与商店。"
 	battle.rebuild_party()
-	refresh_all()
+	refresh_skills(true)
 
 func _unequip_general(category: String, slot_index: int) -> void:
 	if battle.progression.unequip_general_skill(selected_actor, category, slot_index):
 		feedback.text = "已卸下通用技能，学习记录不会丢失。"
 		battle.rebuild_party()
-	refresh_all()
+	refresh_skills(true)
 
 func _upgrade_general(skill_id: String) -> void:
 	var cost: int = battle.progression.general_skill_upgrade_cost(selected_actor, skill_id)
 	if battle.progression.upgrade_general_skill(selected_actor, skill_id): feedback.text = "通用技能升级成功，仅扣除%d金币。" % cost
 	else: feedback.text = "通用技能升级失败：金币不足或已满级。"
 	battle.rebuild_party()
-	refresh_all()
+	refresh_skills(true)
 
 func _recycle_general_book(skill_id: String) -> void:
 	var earned: int = battle.progression.recycle_skill_book(skill_id, 1)
 	feedback.text = "多余技能书已回收，获得%d金币。" % earned if earned > 0 else "没有可回收的技能书。"
-	refresh_all()
+	refresh_skills(true)
 
 func actor_power(actor_id: String) -> float:
 	var data: Dictionary = battle.actors[actor_id]
