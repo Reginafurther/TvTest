@@ -25,8 +25,31 @@
     "diao_chan": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
     "zhou_yu": {"scale": 1.0, "offset_x": 0, "offset_y": 0}
   },
-  "units": {"zhao_yun": "res://assets/units/zhao_yun_battle_v1.png", "liu_bei": "res://assets/units/liu_bei_v035.png"},
-  "units_layouts": {"zhao_yun": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.92]}},
+  "units": {
+    "zhao_yun": "res://assets/units/zhao_yun_battle_v1.png",
+    "liu_bei": "res://assets/units/liu_bei_battle_v1.png",
+    "zhang_fei": "res://assets/units/zhang_fei_battle_v1.png",
+    "guan_yu": "res://assets/units/guan_yu_battle_v1.png",
+    "lu_bu": "res://assets/units/lu_bu_battle_v1.png",
+    "zhuge_liang": "res://assets/units/zhuge_liang_battle_v1.png",
+    "huang_zhong": "res://assets/units/huang_zhong_battle_v1.png",
+    "dian_wei": "res://assets/units/dian_wei_battle_v1.png",
+    "diao_chan": "res://assets/units/diao_chan_battle_v1.png",
+    "zhou_yu": "res://assets/units/zhou_yu_battle_v1.png"
+  },
+  "unit_backups": {"liu_bei": "res://assets/units/liu_bei_v035.png"},
+  "units_layouts": {
+    "zhao_yun": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.92]},
+    "liu_bei": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "zhang_fei": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "guan_yu": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "lu_bu": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "zhuge_liang": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "huang_zhong": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "dian_wei": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "diao_chan": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]},
+    "zhou_yu": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.86]}
+  },
   "equipment_icons": {},
   "function_icons": {},
   "maps_ground": {"hulao_pass": "res://assets/maps/ground/hulao_pass_v035.png"},

@@ -472,7 +472,8 @@ func refresh_inventory() -> void:
 	for item in battle.inventory.items:
 		if int(item.get("quality_rank", 0)) < minimum_rank: continue
 		var owner: String = battle.inventory.item_owner(str(item.instance_id))
-		var owner_name: String = str(battle.actors.get(owner, {}).get("name", "")) if not owner.is_empty() else "未穿戴"
+		if not owner.is_empty() and owner != selected_actor: continue
+		var owner_name: String = ("当前角色·%s" % battle.equipment_config.slots.get(battle.inventory.item_equipped_slot(str(item.instance_id), selected_actor), "已穿戴")) if owner == selected_actor else "未穿戴"
 		inventory_list.add_item("%s%s  Lv.%d  [%s]\n%s" % ["🔒" if item.get("locked", false) else "", item.name, int(item.level), battle.equipment_config.qualities[item.quality].name, owner_name])
 		inventory_list.set_item_metadata(inventory_list.item_count - 1, item.instance_id)
 		if item.instance_id == selected_item_id: inventory_list.select(inventory_list.item_count - 1)
@@ -561,7 +562,7 @@ func _preview_optimization() -> void:
 	var role := str(battle.actors.get(selected_actor, {}).get("combat_role", ""))
 	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 9, role)
 	if pending_optimization.is_empty():
-		feedback.text = "没有未锁定且能按当前职业定位提升属性的装备。"
+		feedback.text = "当前装备已是最优配置。"
 		return
 	var lines: Array[String] = []
 	for choice in pending_optimization: lines.append("%s → %s（评分 %+.1f）" % [choice.name, battle.equipment_config.slots[choice.slot], float(choice.gain)])
@@ -570,7 +571,7 @@ func _preview_optimization() -> void:
 
 func _apply_optimization() -> void:
 	var count: int = battle.inventory.apply_optimization(selected_actor, pending_optimization)
-	feedback.text = "一键优化完成：已更换%d件装备。" % count
+	feedback.text = ("一键优化完成：已更换%d件装备。" % count) if count > 0 else (battle.inventory.last_error if not battle.inventory.last_error.is_empty() else "当前装备已是最优配置。")
 	pending_optimization.clear()
 	refresh_all()
 

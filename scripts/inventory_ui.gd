@@ -14,6 +14,7 @@ var slot_filter: OptionButton
 var quality_filter: OptionButton
 var category_filter: OptionButton
 var sort_filter: OptionButton
+var show_all_equipment: CheckButton
 var detail: RichTextLabel
 var comparison: RichTextLabel
 var capacity_label: Label
@@ -95,7 +96,7 @@ func build_inventory_column(parent: HBoxContainer) -> void:
 	column.custom_minimum_size = Vector2(355, 485)
 	parent.add_child(column)
 	var heading := Label.new()
-	heading.text = "所有装备"
+	heading.text = "当前角色可用装备"
 	heading.add_theme_font_size_override("font_size", 18)
 	column.add_child(heading)
 	var filters := HBoxContainer.new()
@@ -131,6 +132,12 @@ func build_inventory_column(parent: HBoxContainer) -> void:
 		sort_filter.add_item(value)
 	sort_filter.item_selected.connect(_on_filter_changed)
 	column.add_child(sort_filter)
+	show_all_equipment = CheckButton.new()
+	show_all_equipment.text = "显示全部（其他角色装备只读）"
+	show_all_equipment.tooltip_text = "默认隐藏其他角色已穿戴装备；开启后仅供查看，不能直接转移。"
+	show_all_equipment.set_pressed_no_signal(false)
+	show_all_equipment.toggled.connect(_on_show_all_toggled)
+	column.add_child(show_all_equipment)
 	item_list = ItemList.new()
 	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_list.select_mode = ItemList.SELECT_SINGLE
@@ -213,6 +220,7 @@ func open_for_actor_slot(actor_id: String, slot: String) -> void:
 			slot_filter.select(index)
 			break
 	selected_equipment_slot = slot
+	show_all_equipment.set_pressed_no_signal(false)
 	refresh_all()
 	set_status("从角色页进入：只显示可用于%s的装备；换装后角色属性会立即刷新。" % slot_name(slot))
 
@@ -235,13 +243,15 @@ func refresh_all() -> void:
 	refresh_equipment()
 	capacity_label.text = "容量  %d / %d" % [inventory.items.size(), inventory.capacity]
 	var selected = inventory.find_item(selected_item_id)
-	equip_button.disabled = selected == null or actor_select.item_count <= 0
+	var owner: String = inventory.item_owner(selected_item_id) if selected != null else ""
+	equip_button.disabled = selected == null or actor_select.item_count <= 0 or (not owner.is_empty() and owner != current_actor_id())
 
 func refresh_inventory() -> void:
 	item_list.clear()
 	var category := category_filter.get_item_text(category_filter.selected) if category_filter != null else "装备"
 	slot_filter.visible = category == "装备"
 	quality_filter.visible = category == "装备"
+	show_all_equipment.visible = category == "装备"
 	equip_button.visible = category == "装备"
 	comparison.visible = category == "装备"
 	if category != "装备":
@@ -250,7 +260,7 @@ func refresh_inventory() -> void:
 	var slot_value: String = slot_filter.get_item_metadata(slot_filter.selected) if slot_filter != null else ""
 	var quality_value: String = quality_filter.get_item_metadata(quality_filter.selected) if quality_filter != null else ""
 	var visible_items: Array = []
-	for item in inventory.items:
+	for item in inventory.available_items_for_actor(current_actor_id(), show_all_equipment.button_pressed):
 		if not slot_value.is_empty() and slot_value not in item.get("compatible_slots", [item.get("slot", "")]):
 			continue
 		if not quality_value.is_empty() and item.get("quality", "") != quality_value:
@@ -262,7 +272,13 @@ func refresh_inventory() -> void:
 		2: visible_items.sort_custom(func(a, b): return int(a.get("level", 0)) > int(b.get("level", 0)))
 		3: visible_items.sort_custom(func(a, b): return str(a.get("slot", "")) < str(b.get("slot", "")))
 	for item in visible_items:
-		var label := "Lv.%d  %s  [%s]" % [item.level, item.name, slot_name(item.slot)]
+		var owner: String = inventory.item_owner(str(item.instance_id))
+		var ownership := ""
+		if owner == current_actor_id():
+			ownership = " · 当前角色%s" % slot_name(inventory.item_equipped_slot(str(item.instance_id), owner))
+		elif not owner.is_empty():
+			ownership = " · %s已穿戴（不可抢用）" % battle.actors.get(owner, {}).get("name", owner)
+		var label := "Lv.%d  %s  [%s]%s" % [item.level, item.name, slot_name(item.slot), ownership]
 		var icon: Texture2D = ArtCatalogScript.texture("equipment_icons", str(item.get("template_id", item.get("slot", ""))))
 		var index := item_list.add_item(label, icon)
 		item_list.set_item_metadata(index, item.instance_id)
@@ -366,7 +382,11 @@ func _on_inventory_selected(index: int) -> void:
 	var item = inventory.find_item(selected_item_id)
 	if item != null:
 		show_item(item)
-		equip_button.disabled = false
+		var owner: String = inventory.item_owner(selected_item_id)
+		equip_button.disabled = not owner.is_empty() and owner != current_actor_id()
+		if equip_button.disabled:
+			set_status("该装备正由%s穿戴；这里只能查看，请先从原角色卸下。" % battle.actors.get(owner, {}).get("name", owner), true)
+			return
 		var slot := preferred_slot_for_item(item)
 		set_status("将为%s穿戴到%s；点击按钮确认，或双击装备。" % [actor_names[actor_select.selected], slot_name(slot)])
 
@@ -409,11 +429,20 @@ func _on_unequip_pressed() -> void:
 
 func _on_actor_changed(_index: int) -> void:
 	selected_equipment_slot = ""
-	refresh_equipment()
+	selected_item_id = ""
+	refresh_all()
 	var item = inventory.find_item(selected_item_id)
 	if item != null:
 		show_item(item)
 		set_status("当前角色：%s；所选装备将穿戴给该角色。" % actor_names[actor_select.selected])
+	else:
+		set_status("当前角色：%s；列表已隐藏其他角色正在穿戴的装备。" % actor_names[actor_select.selected])
+
+func _on_show_all_toggled(show_all: bool) -> void:
+	selected_item_id = ""
+	refresh_inventory()
+	equip_button.disabled = true
+	set_status("已显示全部装备；其他角色穿戴中的装备只能查看。" if show_all else "已恢复筛选：只显示未穿戴和当前角色自己的装备。")
 
 func _on_filter_changed(_index: int) -> void:
 	refresh_inventory()

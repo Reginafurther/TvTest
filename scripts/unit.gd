@@ -1114,6 +1114,8 @@ func _draw() -> void:
 	# Soft shadow, oversized head and compact body form the placeholder chibi silhouette.
 	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
 	var artwork: Texture2D = ArtCatalogScript.texture("units", actor_id)
+	var health_bar_y := -47.0
+	var faction_marker_y := -36.0
 	if artwork != null:
 		var draw_rect := Rect2(-38, -58, 76, 83)
 		var layout := ArtCatalogScript.layout("units", actor_id)
@@ -1125,6 +1127,8 @@ func _draw() -> void:
 			var offset := Vector2(float(layout.get("offset_x", 0.0)), float(layout.get("offset_y", 0.0)))
 			draw_rect = Rect2(offset - draw_size * anchor, draw_size)
 		draw_texture_rect(artwork, draw_rect, false)
+		health_bar_y = minf(health_bar_y, draw_rect.position.y - 8.0)
+		faction_marker_y = health_bar_y - 7.0
 	else:
 		draw_circle(Vector2(0, 5), 16, base.darkened(0.16))
 		draw_rect(Rect2(-12, -2, 24, 26), base, true)
@@ -1134,12 +1138,12 @@ func _draw() -> void:
 		draw_arc(Vector2(0, -9), 5, 0.2, PI - 0.2, 12, accent, 2)
 	draw_arc(Vector2.ZERO, 17, 0, TAU, 24, accent, 3)
 	if faction == "heroes":
-		draw_circle(Vector2(0, -36), 4, Color("#68D6FF"))
+		draw_circle(Vector2(0, faction_marker_y), 4, Color("#68D6FF"))
 	else:
-		draw_circle(Vector2(0, -36), 4, Color("#FF6B60"))
+		draw_circle(Vector2(0, faction_marker_y), 4, Color("#FF6B60"))
 	# HP bar
-	draw_rect(Rect2(-24, -47, 48, 6), Color(0.08, 0.09, 0.1, 0.85), true)
-	draw_rect(Rect2(-23, -46, 46 * (hp / max_hp), 4), Color("#65D97B") if faction == "heroes" else Color("#EE6158"), true)
+	draw_rect(Rect2(-24, health_bar_y, 48, 6), Color(0.08, 0.09, 0.1, 0.85), true)
+	draw_rect(Rect2(-23, health_bar_y + 1.0, 46 * (hp / max_hp), 4), Color("#65D97B") if faction == "heroes" else Color("#EE6158"), true)
 	if shield > 0:
 		draw_arc(Vector2.ZERO, 28, 0, TAU, 24, Color("#80C8FF"), 3)
 	if poison_time > 0:

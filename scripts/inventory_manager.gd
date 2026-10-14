@@ -62,10 +62,13 @@ func find_item(instance_id: String):
 			return item
 	return null
 
-func equip_item(actor_id: String, instance_id: String, target_slot: String = "") -> bool:
+func equip_item(actor_id: String, instance_id: String, target_slot: String = "", autosave: bool = true) -> bool:
 	last_error = ""
 	if not equipped.has(actor_id):
 		last_error = "角色不存在或尚未初始化装备栏。"
+		return false
+	if _item_instance_count(instance_id) != 1:
+		last_error = "装备实例ID无效或不唯一，已拒绝穿戴。"
 		return false
 	var item = find_item(instance_id)
 	if item == null:
@@ -78,17 +81,40 @@ func equip_item(actor_id: String, instance_id: String, target_slot: String = "")
 	if slot not in item.get("compatible_slots", [item.get("slot", "")]):
 		last_error = "%s不能穿戴到%s。" % [item.get("name", "该装备"), config.get("slots", {}).get(slot, slot)]
 		return false
-	# One unique instance may be equipped by only one actor and one slot.
+	var occupied_locations: Array = []
 	for owner_id in equipped:
 		for occupied_slot in equipped[owner_id]:
 			if equipped[owner_id][occupied_slot] == instance_id:
-				equipped[owner_id][occupied_slot] = ""
-				equipment_changed.emit(owner_id)
+				occupied_locations.append({"actor_id": str(owner_id), "slot": str(occupied_slot)})
+	if occupied_locations.size() > 1:
+		last_error = "装备实例已出现在多个穿戴位置，已拒绝修改。"
+		return false
+	if not occupied_locations.is_empty() and str(occupied_locations[0].actor_id) != actor_id:
+		last_error = "该装备正由其他角色穿戴，请先从原角色卸下。"
+		return false
+	if not occupied_locations.is_empty() and str(occupied_locations[0].slot) == slot:
+		return true
+	# All validation happens before mutation. Moving an item between the same
+	# actor's compatible slots is allowed, but cross-actor transfer is not.
+	if not occupied_locations.is_empty():
+		equipped[actor_id][str(occupied_locations[0].slot)] = ""
 	equipped[actor_id][slot] = instance_id
 	equipment_changed.emit(actor_id)
 	inventory_changed.emit()
-	save_to_disk()
+	if autosave: save_to_disk()
 	return true
+
+func available_items_for_actor(actor_id: String, include_other_equipped: bool = false, compatible_slot: String = "") -> Array:
+	var result: Array = []
+	for item in items:
+		var instance_id := str(item.get("instance_id", ""))
+		var owner := item_owner(instance_id)
+		if not include_other_equipped and not owner.is_empty() and owner != actor_id:
+			continue
+		if not compatible_slot.is_empty() and compatible_slot not in item.get("compatible_slots", [item.get("slot", "")]):
+			continue
+		result.append(item)
+	return result
 
 func unequip_slot(actor_id: String, slot: String) -> bool:
 	last_error = ""
@@ -114,6 +140,22 @@ func item_owner(instance_id: String) -> String:
 		if instance_id in equipped[actor_id].values():
 			return actor_id
 	return ""
+
+func item_equipped_slot(instance_id: String, actor_id: String = "") -> String:
+	for owner_id in equipped:
+		if not actor_id.is_empty() and str(owner_id) != actor_id:
+			continue
+		for slot in equipped[owner_id]:
+			if str(equipped[owner_id][slot]) == instance_id:
+				return str(slot)
+	return ""
+
+func _item_instance_count(instance_id: String) -> int:
+	var count := 0
+	for item in items:
+		if str(item.get("instance_id", "")) == instance_id:
+			count += 1
+	return count
 
 func set_item_locked(instance_id: String, locked: bool) -> bool:
 	var item = find_item(instance_id)
@@ -143,7 +185,11 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: i
 	if not equipped.has(actor_id):
 		return choices
 	for slot in equipped[actor_id]:
+		if slot in ["ring_1", "ring_2"]:
+			continue
 		var current = get_equipped_item(actor_id, slot)
+		if current != null and bool(current.get("locked", false)):
+			continue
 		var current_score := item_score(current, combat_role) if current != null else 0.0
 		var best_item
 		var best_gain := 0.0
@@ -164,24 +210,163 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: i
 				best_gain = gain
 				best_item = item
 		if best_item != null:
-			choices.append({"instance_id": best_item.instance_id, "slot": slot, "gain": best_gain, "name": best_item.get("name", "装备")})
+			choices.append({"instance_id": best_item.instance_id, "slot": slot, "gain": best_gain, "name": best_item.get("name", "装备"), "combat_role": combat_role})
 			chosen_ids.append(str(best_item.instance_id))
+	choices.append_array(_optimize_ring_pair(actor_id, min_quality_rank, combat_role))
 	choices.sort_custom(func(a, b): return float(a.gain) > float(b.gain))
 	if choices.size() > maximum:
 		choices.resize(maximum)
 	return choices
 
+func _optimize_ring_pair(actor_id: String, min_quality_rank: int, combat_role: String) -> Array:
+	var slots := ["ring_1", "ring_2"]
+	var current_ids := [str(equipped[actor_id].get("ring_1", "")), str(equipped[actor_id].get("ring_2", ""))]
+	var current_items := [find_item(current_ids[0]), find_item(current_ids[1])]
+	var options: Array = [null]
+	for item in available_items_for_actor(actor_id):
+		var compatible: Array = item.get("compatible_slots", [item.get("slot", "")])
+		if "ring_1" not in compatible and "ring_2" not in compatible:
+			continue
+		var instance_id := str(item.get("instance_id", ""))
+		var is_current := instance_id in current_ids
+		if int(item.get("quality_rank", 0)) < min_quality_rank and not is_current:
+			continue
+		if bool(item.get("locked", false)) and not is_current:
+			continue
+		options.append(item)
+	var best_items: Array = current_items.duplicate()
+	var best_score := _pair_score(best_items, combat_role)
+	var best_stability := 2
+	for left in options:
+		if not _ring_option_valid(left, "ring_1", current_items[0]):
+			continue
+		for right in options:
+			if not _ring_option_valid(right, "ring_2", current_items[1]):
+				continue
+			if left != null and right != null and str(left.get("instance_id", "")) == str(right.get("instance_id", "")):
+				continue
+			var proposal := [left, right]
+			var score := _pair_score(proposal, combat_role)
+			var stability := int(_item_id(left) == current_ids[0]) + int(_item_id(right) == current_ids[1])
+			if score > best_score + 0.0001 or (is_equal_approx(score, best_score) and stability > best_stability):
+				best_items = proposal
+				best_score = score
+				best_stability = stability
+	var old_score := _pair_score(current_items, combat_role)
+	if best_score <= old_score + 0.0001:
+		return []
+	var result: Array = []
+	for index in range(2):
+		var next_item = best_items[index]
+		var next_id := _item_id(next_item)
+		if next_id.is_empty() or next_id == current_ids[index]:
+			continue
+		var replaced_score := item_score(current_items[index], combat_role) if current_items[index] != null else 0.0
+		result.append({"instance_id": next_id, "slot": slots[index], "gain": item_score(next_item, combat_role) - replaced_score, "name": next_item.get("name", "戒指"), "pair_gain": best_score - old_score, "combat_role": combat_role})
+	return result
+
+func _ring_option_valid(item, slot: String, current) -> bool:
+	if current != null and bool(current.get("locked", false)):
+		return _item_id(item) == _item_id(current)
+	if item == null:
+		return true
+	return slot in item.get("compatible_slots", [item.get("slot", "")])
+
+func _item_id(item) -> String:
+	return "" if item == null else str(item.get("instance_id", ""))
+
+func _pair_score(pair: Array, combat_role: String) -> float:
+	var score := 0.0
+	for item in pair:
+		if item != null:
+			score += item_score(item, combat_role)
+	return score
+
 func apply_optimization(actor_id: String, choices: Array) -> int:
-	var applied := 0
+	last_error = ""
+	if not equipped.has(actor_id) or choices.is_empty():
+		return 0
+	var original: Dictionary = equipped[actor_id].duplicate(true)
+	var final_mapping: Dictionary = original.duplicate(true)
+	var choice_ids: Dictionary = {}
+	var choice_slots: Dictionary = {}
 	for choice in choices:
-		var item = find_item(str(choice.instance_id))
-		if item == null or bool(item.get("locked", false)):
+		var instance_id := str(choice.get("instance_id", ""))
+		var target_slot := str(choice.get("slot", ""))
+		var item = find_item(instance_id)
+		if item == null or _item_instance_count(instance_id) != 1 or bool(item.get("locked", false)):
+			last_error = "优化方案包含不存在、重复或已锁定的装备。"
+			return 0
+		if target_slot in choice_slots or instance_id in choice_ids or not final_mapping.has(target_slot):
+			last_error = "优化方案包含重复装备或重复栏位。"
+			return 0
+		if target_slot not in item.get("compatible_slots", [item.get("slot", "")]):
+			last_error = "优化方案包含不兼容的装备栏。"
+			return 0
+		if item_owner(instance_id) not in ["", actor_id]:
+			last_error = "优化方案引用了其他角色正在穿戴的装备。"
+			return 0
+		var target_item = find_item(str(original.get(target_slot, "")))
+		if target_item != null and bool(target_item.get("locked", false)) and str(target_item.get("instance_id", "")) != instance_id:
+			last_error = "优化方案试图替换已锁定装备。"
+			return 0
+		choice_ids[instance_id] = true
+		choice_slots[target_slot] = true
+	for slot in final_mapping:
+		if str(final_mapping[slot]) in choice_ids:
+			final_mapping[slot] = ""
+	for choice in choices:
+		final_mapping[str(choice.slot)] = str(choice.instance_id)
+	if not _mapping_is_unique(final_mapping):
+		last_error = "优化后的装备映射存在重复实例。"
+		return 0
+	if not _all_equipped_instances_unique_with(actor_id, final_mapping):
+		last_error = "优化后的全局装备映射存在重复实例。"
+		return 0
+	var combat_role := str(choices[0].get("combat_role", ""))
+	if _mapping_score(final_mapping, combat_role) + 0.0001 < _mapping_score(original, combat_role):
+		last_error = "优化方案会降低综合装备评分，已取消。"
+		return 0
+	equipped[actor_id] = final_mapping
+	equipment_changed.emit(actor_id)
+	inventory_changed.emit()
+	save_to_disk()
+	return choices.size()
+
+func _mapping_is_unique(mapping: Dictionary) -> bool:
+	var seen: Dictionary = {}
+	for slot in mapping:
+		var instance_id := str(mapping[slot])
+		if instance_id.is_empty():
 			continue
-		if item_owner(str(choice.instance_id)) not in ["", actor_id]:
-			continue
-		if equip_item(actor_id, str(choice.instance_id), str(choice.slot)):
-			applied += 1
-	return applied
+		if seen.has(instance_id):
+			return false
+		seen[instance_id] = true
+	return true
+
+func _mapping_score(mapping: Dictionary, combat_role: String) -> float:
+	var score := 0.0
+	for slot in mapping:
+		var item = find_item(str(mapping[slot]))
+		if item != null:
+			score += item_score(item, combat_role)
+	return score
+
+func _all_equipped_instances_unique_with(replaced_actor: String = "", replacement: Dictionary = {}) -> bool:
+	var seen: Dictionary = {}
+	for actor_id in equipped:
+		var mapping: Dictionary = replacement if str(actor_id) == replaced_actor else equipped[actor_id]
+		for slot in mapping:
+			var instance_id := str(mapping[slot])
+			if instance_id.is_empty():
+				continue
+			if seen.has(instance_id):
+				return false
+			seen[instance_id] = true
+	return true
+
+func equipped_instances_unique() -> bool:
+	return _all_equipped_instances_unique_with()
 
 func get_actor_stats(actor_id: String, excluding_slot: String = "") -> Dictionary:
 	var totals: Dictionary = {}
@@ -276,6 +461,7 @@ func load_from_disk() -> bool:
 
 func remove_broken_references() -> void:
 	var known: Dictionary = {}
+	var worn: Dictionary = {}
 	for item in items:
 		known[item.get("instance_id", "")] = true
 	for actor_id in equipped:
@@ -285,6 +471,12 @@ func remove_broken_references() -> void:
 			var id: String = equipped[actor_id][slot]
 			if not id.is_empty() and not known.has(id):
 				equipped[actor_id][slot] = ""
+			elif not id.is_empty() and worn.has(id):
+				# Repair legacy/corrupt saves deterministically so one instance can
+				# never remain equipped in two positions after loading.
+				equipped[actor_id][slot] = ""
+			elif not id.is_empty():
+				worn[id] = true
 
 func all_ids_unique() -> bool:
 	var seen: Dictionary = {}
