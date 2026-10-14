@@ -14,6 +14,9 @@ func setup(owner_battle) -> void:
 	battle = owner_battle
 	config = JSON.parse_string(FileAccess.get_file_as_string("res://data/adventure.json"))
 	if typeof(config) != TYPE_DICTIONARY: config = {}
+	var v08 = JSON.parse_string(FileAccess.get_file_as_string("res://data/v08_content.json"))
+	if typeof(v08) == TYPE_DICTIONARY:
+		config.rift.worlds.merge(v08.get("rift_worlds", {}), true)
 	active_encounter = battle.progression.encounter_state.get("active", {}).duplicate(true)
 	if not active_encounter.is_empty():
 		if str(active_encounter.get("type", "")) == "wandering_merchant":
@@ -45,10 +48,11 @@ func can_challenge_rift(world_id: String, floor: int) -> bool:
 	var state: Dictionary = battle.progression.rift_progress.get(world_id, {})
 	return floor <= int(state.get("highest_clear", 0)) + 1
 
-func rift_affix_ids(floor: int) -> Array[String]:
+func rift_affix_ids(floor: int, world_id: String = "") -> Array[String]:
 	var available: Array[String] = []
+	var pool: Array = config.rift.worlds.get(world_id, {}).get("affix_pool", [])
 	for id in config.get("rift", {}).get("affixes", {}):
-		if floor >= int(config.rift.affixes[id].get("unlock_floor", 1)): available.append(str(id))
+		if (pool.is_empty() or id in pool) and floor >= int(config.rift.affixes[id].get("unlock_floor", 1)): available.append(str(id))
 	var count := mini(3, 1 + floor / 7)
 	var result: Array[String] = []
 	for index in range(mini(count, available.size())):
@@ -64,7 +68,7 @@ func rift_profile(world_id: String, floor: int) -> Dictionary:
 	var health_scale := 1.0 + n * float(growth.health_linear) + n * n * float(growth.health_quadratic)
 	var attack_scale := 1.0 + n * float(growth.attack_linear) + n * n * float(growth.attack_quadratic)
 	var defense_scale := 1.0 + n * float(growth.defense_linear) + n * n * float(growth.defense_quadratic)
-	return {"name":"%s · 第%d层" % [world.boss_name, floor], "health":float(base.get("max_hp", 1000)) * health_scale, "attack":float(base.get("attack", 50)) * attack_scale, "defense":float(base.get("defense", 20)) * defense_scale, "affixes":rift_affix_ids(floor), "actor":world.boss_actor}
+	return {"name":"%s · 第%d层" % [world.boss_name, floor], "health":float(base.get("max_hp", 1000)) * health_scale, "attack":float(base.get("attack", 50)) * attack_scale, "defense":float(base.get("defense", 20)) * defense_scale, "affixes":rift_affix_ids(floor, world_id), "actor":world.boss_actor}
 
 func start_rift(world_id: String, floor: int) -> bool:
 	if not can_challenge_rift(world_id, floor): return false
@@ -158,7 +162,7 @@ func reward_for_encounter(event_id: String) -> Dictionary:
 	var stage := maxi(1, battle.progression.completed_stages.size())
 	var reward := {"gold":20 + stage * 5,"material":2 + stage / 5}
 	battle.progression.gold += int(reward.gold)
-	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token"
+	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token" if stage <= 20 else "dragon_blood_crystal" if stage <= 30 else "jianghu_token"
 	battle.progression.materials[material_id] = int(battle.progression.materials.get(material_id, 0)) + int(reward.material)
 	if event_id in ["rare_elite", "chest_mimic", "hidden_boss"]:
 		var quality := "orange" if event_id == "hidden_boss" else "purple" if event_id == "chest_mimic" else "blue"

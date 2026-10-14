@@ -29,17 +29,25 @@ var preferred_equipment_slot := ""
 var pending_optimization: Array = []
 var optimize_dialog: ConfirmationDialog
 var party_box: VBoxContainer
+var skill_world_filter := "全部"
+var skill_category_filter := "全部"
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
 	layer = 40
 	build_ui()
-	battle.progression.changed.connect(refresh_all)
-	battle.inventory.inventory_changed.connect(refresh_all)
-	battle.inventory.equipment_changed.connect(func(_actor_id): refresh_all())
+	# Hidden character UI used to rebuild the 76-skill list on every kill/save.
+	# That was the primary source of periodic battle hitches in long sessions.
+	battle.progression.changed.connect(refresh_if_open)
+	battle.inventory.inventory_changed.connect(refresh_if_open)
+	battle.inventory.equipment_changed.connect(func(_actor_id): refresh_if_open())
 	selected_actor = str(battle.progression.roster[0]) if not battle.progression.roster.is_empty() else ""
 	refresh_all()
 	panel.visible = false
+
+func refresh_if_open() -> void:
+	if panel != null and panel.visible:
+		refresh_all()
 
 func build_ui() -> void:
 	panel = PanelContainer.new()
@@ -150,6 +158,7 @@ func build_detail_column(parent: HBoxContainer) -> void:
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tabs.custom_minimum_size = Vector2(610, 620)
+	tabs.tab_changed.connect(_refresh_visible_detail_tab)
 	parent.add_child(tabs)
 	stats_text = RichTextLabel.new()
 	stats_text.name = "人物属性"
@@ -189,9 +198,14 @@ func refresh_all() -> void:
 	refresh_roster()
 	refresh_party_controls()
 	refresh_center()
-	refresh_stats()
-	refresh_skills()
-	refresh_growth()
+	_refresh_visible_detail_tab(tabs.current_tab)
+
+func _refresh_visible_detail_tab(tab_index: int) -> void:
+	if battle == null or selected_actor.is_empty(): return
+	match tab_index:
+		0: refresh_stats()
+		1: refresh_skills()
+		2: refresh_growth()
 
 func refresh_roster() -> void:
 	actor_list.clear()
@@ -278,19 +292,19 @@ func refresh_stats() -> void:
 	if selected_actor.is_empty(): return
 	var data: Dictionary = battle.actors[selected_actor]
 	var level: int = battle.progression.actor_level(selected_actor)
-	var base: Dictionary = {"health": float(data.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(data.attack) * (1.0 + (level - 1) * 0.06), "defense": float(data.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0}
+	var base: Dictionary = {"health": float(data.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(data.attack) * (1.0 + (level - 1) * 0.06), "defense": float(data.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0, "physical_damage":0.0, "elemental_damage":0.0, "life_regen":0.0}
 	var gear: Dictionary = battle.inventory.get_actor_stats(selected_actor)
 	var final: Dictionary = base.duplicate(true)
 	for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
 	var live = battle.get_hero(selected_actor)
 	if live != null: final = live.combat_snapshot()
-	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n等级 Lv.%d / 当前上限 Lv.%d　当前经验 %d / %d\n\n[b]属性　　　　　 基础　　 装备加成　　 最终[/b]\n%s\n\n装备变更会即时刷新战场单位；通关更高主线可提高当前等级上限。" % [data.name, level, battle.progression.actor_level_cap(), int(battle.progression.actor_experience[selected_actor]), battle.progression.experience_to_next(level), stat_rows(base, gear, final)]
+	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n等级 Lv.%d / 当前上限 Lv.%d　当前经验 %d / %d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [data.name, level, battle.progression.actor_level_cap(), int(battle.progression.actor_experience[selected_actor]), battle.progression.experience_to_next(level), stat_rows(base, gear, final)]
 
 func stat_rows(base: Dictionary, gear: Dictionary, final: Dictionary) -> String:
-	var labels := {"health":"生命", "attack":"攻击", "defense":"防御", "crit_chance":"暴击率", "crit_damage":"暴击伤害", "attack_speed":"攻击速度", "cooldown_reduction":"冷却缩减"}
+	var labels := {"health":"[基础] 生命", "attack":"[基础] 攻击", "defense":"[基础] 防御", "crit_chance":"[攻击] 暴击率", "crit_damage":"[攻击] 暴击伤害", "attack_speed":"[攻击] 攻击速度", "physical_damage":"[攻击] 物理增伤", "elemental_damage":"[攻击] 元素增伤", "cooldown_reduction":"[特殊] 冷却缩减", "life_regen":"[防御] 生命恢复"}
 	var rows: Array[String] = []
 	for key in labels:
-		var percent: bool = key in ["crit_chance", "crit_damage", "attack_speed", "cooldown_reduction"]
+		var percent: bool = key in ["crit_chance", "crit_damage", "attack_speed", "cooldown_reduction", "physical_damage", "elemental_damage"]
 		var scale: float = 100.0 if percent else 1.0
 		var suffix: String = "%" if percent else ""
 		rows.append("%s　　%.1f%s　　+%.1f%s　　[b]%.1f%s[/b]" % [labels[key], float(base.get(key, 0)) * scale, suffix, float(gear.get(key, 0)) * scale, suffix, float(final.get(key, 0)) * scale, suffix])
@@ -301,6 +315,12 @@ func refresh_skills() -> void:
 	if selected_actor.is_empty(): return
 	var p = battle.progression
 	var actor: Dictionary = battle.actors[selected_actor]
+	var filter_row := HBoxContainer.new(); skills_box.add_child(filter_row)
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒"]:
+		var button := Button.new(); button.text = world; button.disabled = skill_world_filter == world; button.pressed.connect(_set_skill_world_filter.bind(world)); filter_row.add_child(button)
+	var category_row := HBoxContainer.new(); skills_box.add_child(category_row)
+	for category_name in ["全部", "主动", "被动"]:
+		var button := Button.new(); button.text = category_name; button.disabled = skill_category_filter == category_name; button.pressed.connect(_set_skill_category_filter.bind(category_name)); category_row.add_child(button)
 	var exclusive_active: Dictionary = battle.skills[actor.skill]
 	var exclusive_active_level: int = p.skill_level(selected_actor, "active")
 	add_skill_heading("专属主动 · %s Lv.%d" % [exclusive_active.name, exclusive_active_level], skill_numeric_description(exclusive_active, exclusive_active_level, "active", true))
@@ -329,12 +349,17 @@ func refresh_skills() -> void:
 	skills_box.add_child(priority)
 	for skill_id in battle.general_skills_config:
 		var skill: Dictionary = battle.general_skills_config[skill_id]
+		if skill_world_filter != "全部" and str(skill.get("world", "")) != skill_world_filter: continue
+		if skill_category_filter == "主动" and str(skill.category) != "active": continue
+		if skill_category_filter == "被动" and str(skill.category) != "passive": continue
 		var learned: bool = skill_id in p.learned_general_skills[selected_actor]
 		var row := HBoxContainer.new()
 		var label := Label.new()
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var general_level: int = p.general_skill_level(selected_actor, skill_id)
-		label.text = "%s【%s】Lv.%d\n%s" % ["主动" if skill.category == "active" else "被动", skill.name, general_level, skill_numeric_description(skill, general_level, str(skill.category), false)]
+		var function_name := skill_function_name(str(skill.get("function_type", "damage")))
+		label.text = "%s【%s】· %s · %s · Lv.%d\n%s" % [skill_function_icon(str(skill.get("function_type", "damage"))), skill.name, str(skill.get("world", "未知")), function_name, general_level, skill_numeric_description(skill, general_level, str(skill.category), false)]
+		label.add_theme_color_override("font_color", skill_function_color(str(skill.get("function_type", "damage"))))
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
 		var action := Button.new()
@@ -358,6 +383,23 @@ func refresh_skills() -> void:
 				recycle.pressed.connect(_recycle_general_book.bind(skill_id))
 				row.add_child(recycle)
 		skills_box.add_child(row)
+
+func _set_skill_world_filter(value: String) -> void:
+	skill_world_filter = value
+	refresh_skills()
+
+func _set_skill_category_filter(value: String) -> void:
+	skill_category_filter = value
+	refresh_skills()
+
+func skill_function_name(value: String) -> String:
+	return {"damage":"输出", "healing":"治疗", "defense":"防御", "support":"辅助", "control":"控制/减益", "mobility":"位移/闪避"}.get(value, "输出")
+
+func skill_function_icon(value: String) -> String:
+	return {"damage":"◆", "healing":"✚", "defense":"⬟", "support":"★", "control":"◈", "mobility":"➤"}.get(value, "◆")
+
+func skill_function_color(value: String) -> Color:
+	return Color({"damage":"#B73D36", "healing":"#26834A", "defense":"#346AA3", "support":"#A66718", "control":"#78469B", "mobility":"#1D8190"}.get(value, "#493520"))
 
 func skill_numeric_description(data: Dictionary, level: int, category: String, exclusive: bool) -> String:
 	var lines: Array[String] = [str(data.get("description", ""))]

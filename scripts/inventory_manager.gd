@@ -5,11 +5,13 @@ signal inventory_changed
 signal equipment_changed(actor_id: String)
 signal save_completed(path: String)
 
-const SAVE_VERSION := "0.7"
-const SAVE_PATH := "user://wanjie_v07_inventory.json"
-const LEGACY_SAVE_PATH := "user://wanjie_v061_inventory.json"
-const TEST_SAVE_PATH := "user://wanjie_v07_test_inventory.json"
-const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite"]
+const SAVE_VERSION := "0.8"
+const SAVE_PATH := "user://wanjie_v08_inventory.json"
+const LEGACY_SAVE_PATH := "user://wanjie_v07_inventory.json"
+const LEGACY_V061_SAVE_PATH := "user://wanjie_v061_inventory.json"
+const MIGRATION_BACKUP_PATH := "user://wanjie_v07_inventory.pre_v08_backup.json"
+const TEST_SAVE_PATH := "user://wanjie_v08_test_inventory.json"
+const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits"]
 
 var config: Dictionary
 var items: Array = []
@@ -22,7 +24,7 @@ func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
 	for value in OS.get_cmdline_user_args():
-		if str(value).begins_with("--v061-"):
+		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-"):
 			save_path = TEST_SAVE_PATH
 			break
 	ensure_equipment_layout()
@@ -241,13 +243,17 @@ func save_to_disk() -> bool:
 func load_from_disk() -> bool:
 	var source_path := save_path
 	if not FileAccess.file_exists(source_path) and save_path == SAVE_PATH and FileAccess.file_exists(LEGACY_SAVE_PATH):
+		if not FileAccess.file_exists(MIGRATION_BACKUP_PATH):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(LEGACY_SAVE_PATH), ProjectSettings.globalize_path(MIGRATION_BACKUP_PATH))
 		source_path = LEGACY_SAVE_PATH
+	elif not FileAccess.file_exists(source_path) and save_path == SAVE_PATH and FileAccess.file_exists(LEGACY_V061_SAVE_PATH):
+		source_path = LEGACY_V061_SAVE_PATH
 	if not FileAccess.file_exists(source_path):
 		ensure_equipment_layout()
 		return false
 	var file := FileAccess.open(source_path, FileAccess.READ)
 	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY or str(parsed.get("version", "")) not in [SAVE_VERSION, "0.6.1"]:
+	if typeof(parsed) != TYPE_DICTIONARY or str(parsed.get("version", "")) not in [SAVE_VERSION, "0.7", "0.6.1"]:
 		push_warning("存档格式无效，已忽略")
 		return false
 	items = parsed.get("items", [])

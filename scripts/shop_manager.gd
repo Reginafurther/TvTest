@@ -94,3 +94,39 @@ func is_equipped(instance_id: String) -> bool:
 		if instance_id in inventory.equipped[actor_id].values():
 			return true
 	return false
+
+func bulk_sell_preview(min_quality_rank: int = 0) -> Dictionary:
+	var ids: Array[String] = []
+	var total := 0
+	var quality_counts: Dictionary = {}
+	var has_orange := false
+	for item in inventory.items:
+		var instance_id := str(item.get("instance_id", ""))
+		var rank := int(item.get("quality_rank", 0))
+		if instance_id.is_empty() or rank < min_quality_rank or bool(item.get("locked", false)) or is_equipped(instance_id): continue
+		ids.append(instance_id)
+		total += sell_price(item)
+		var quality := str(item.get("quality", "white"))
+		quality_counts[quality] = int(quality_counts.get(quality, 0)) + 1
+		has_orange = has_orange or rank >= 4 or quality == "orange"
+	return {"ids":ids, "count":ids.size(), "gold":total, "qualities":quality_counts, "has_orange":has_orange}
+
+func bulk_sell(min_quality_rank: int = 0) -> Dictionary:
+	# Rebuild the candidate set at commit time. This is the transaction boundary:
+	# UI state can never bypass the equipped/locked/identity checks above.
+	var preview := bulk_sell_preview(min_quality_rank)
+	if int(preview.count) <= 0: last_error = "没有符合条件的未穿戴、未锁定装备。"; return {}
+	var sold := 0
+	var gold_gain := 0
+	for instance_id in preview.ids:
+		var item = inventory.find_item(instance_id)
+		if item == null or bool(item.get("locked", false)) or is_equipped(instance_id): continue
+		gold_gain += sell_price(item)
+		inventory.items.erase(item)
+		sold += 1
+	if sold <= 0: last_error = "交易提交前装备状态已变化，未出售任何物品。"; return {}
+	progression.gold += gold_gain
+	progression.record_transaction("一键出售装备", "%d件，品质下限%d" % [sold, min_quality_rank], gold_gain)
+	inventory.inventory_changed.emit(); inventory.save_to_disk()
+	progression.changed.emit(); progression.save_to_disk()
+	return {"count":sold, "gold":gold_gain, "qualities":preview.qualities}

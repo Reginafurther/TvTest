@@ -39,6 +39,11 @@ var recruit_list: ItemList
 var recruit_detail: Label
 var recruit_button: Button
 var recruit_list_scroll := 0.0
+var recruit_world_filter := "全部"
+var challenge_tab := "world_boss"
+var bulk_sell_min_rank := 0
+var bulk_sell_dialog: ConfirmationDialog
+var shop_world_filter := "全部"
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -58,7 +63,7 @@ func build_toolbar() -> void:
 	var backpack_space := Control.new()
 	backpack_space.custom_minimum_size = Vector2(105, 57)
 	toolbar_root.add_child(backpack_space)
-	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["大秘境", "rift"], ["营地", "camp"], ["Boss", "boss"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
+	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["挑战", "challenge"], ["营地", "camp"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(105, 57)
@@ -151,13 +156,19 @@ func build_panel() -> void:
 	boss_dialog.title = "传奇 Boss 挑战前确认"
 	boss_dialog.confirmed.connect(_confirm_boss)
 	add_child(boss_dialog)
+	bulk_sell_dialog = ConfirmationDialog.new()
+	bulk_sell_dialog.title = "确认一键出售未穿戴装备"
+	bulk_sell_dialog.confirmed.connect(_confirm_bulk_sell)
+	add_child(bulk_sell_dialog)
 
 func open_view(view: String) -> void:
 	if character_ui != null and character_ui.panel.visible:
 		character_ui.close_panel()
 	if inventory_ui != null and inventory_ui.panel.visible:
 		inventory_ui.toggle()
-	current_view = view
+	if view == "rift": challenge_tab = "rift"
+	elif view == "boss": challenge_tab = "world_boss"
+	current_view = "challenge" if view in ["rift", "boss"] else view
 	panel.visible = true
 	battle.is_paused = view != "encounters"
 	battle.battle_state_changed.emit("奇遇交易中 · 自动战斗继续" if view == "encounters" else "功能界面中")
@@ -194,7 +205,7 @@ func refresh() -> void:
 	match current_view:
 		"world": build_world()
 		"recruit", "party": build_recruit()
-		"boss": build_boss()
+		"boss", "rift", "challenge": build_challenge()
 		"craft": build_craft()
 		"strategy": build_strategy()
 		"stats": build_stats()
@@ -212,9 +223,9 @@ func _restore_scroll_position(view: String) -> void:
 		content_scroll.scroll_vertical = int(scroll_positions.get(view, 0))
 
 func build_rift() -> void:
-	title.text = "双世界动态大秘境"
+	title.text = "四世界动态大秘境"
 	var cap: int = battle.adventure.main_stage_cap()
-	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n两个世界共享开放上限，但进度、首通和Boss配置各自独立。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
+	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n四个世界共享动态开放上限，但进度、首通、词缀池和Boss配置各自独立。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
 	for world_id in battle.adventure.config.rift.worlds:
 		var world: Dictionary = battle.adventure.config.rift.worlds[world_id]
 		var state: Dictionary = battle.progression.rift_progress[world_id]
@@ -271,7 +282,7 @@ func build_rewards() -> void:
 	var snap: Dictionary = battle.stats_snapshot()
 	var info := Label.new()
 	var pending: Dictionary = battle.progression.pending_offline
-	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募材料：%d 个　累计金币：%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0))]
+	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募材料：%d 个　累计金币：%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0)), int(pending.get("dragon_blood_crystal", 0)), int(pending.get("jianghu_token", 0))]
 	info.add_theme_font_size_override("font_size", 20)
 	content.add_child(info)
 	var claim := Button.new()
@@ -289,7 +300,7 @@ func _claim_offline_rewards() -> void:
 	if result.is_empty():
 		rewards_feedback = "当前没有可领取的离线收益。"
 	else:
-		rewards_feedback = "领取成功：金币%d、虎符%d、精灵结晶%d。" % [int(result.gold), int(result.three_kingdoms_token), int(result.pokemon_token)]
+		rewards_feedback = "领取成功：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d。" % [int(result.gold), int(result.three_kingdoms_token), int(result.pokemon_token), int(result.get("dragon_blood_crystal", 0)), int(result.get("jianghu_token", 0))]
 		battle.log_message.emit(rewards_feedback)
 	refresh()
 
@@ -297,24 +308,32 @@ func build_objectives() -> void:
 	title.text = "关卡目标"
 	var info := Label.new()
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—20关推进；通关三国第10关后永久开放宝可梦世界。" % battle.worlds_config.maps[battle.current_map_id].name
+	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—40关推进；第10/20/30关依次开放后续世界。" % battle.worlds_config.maps[battle.current_map_id].name
 	if not battle.progression.guide_finished:
 		var step: int = clampi(battle.progression.guide_step, 0, 5)
 		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["用虎符定向招募", "将输出角色上阵", "观察职业自动战斗", "等待装备掉落", "穿戴一件装备", "补齐四人编队"][step]]
 	info.add_theme_font_size_override("font_size", 19)
 	content.add_child(info)
 	var auto_push := CheckButton.new()
-	auto_push.text = "通关后自动进入下一关（第20关后持续重复）"
+	auto_push.text = "通关后自动进入下一关（第40关后持续重复）"
 	auto_push.button_pressed = battle.progression.auto_push
 	auto_push.toggled.connect(func(enabled: bool): battle.set_auto_push(enabled))
 	content.add_child(auto_push)
 
 func build_logs() -> void:
 	title.text = "战斗日志"
+	log_lines.assign(battle.combat_log)
 	var text_view := RichTextLabel.new()
 	text_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	text_view.custom_minimum_size = Vector2(0, 410)
 	text_view.text = "\n".join(log_lines)
 	content.add_child(text_view)
+	var clear := Button.new(); clear.text = "清空日志（不影响战斗统计）"; clear.pressed.connect(_clear_battle_log); content.add_child(clear)
+
+func _clear_battle_log() -> void:
+	battle.clear_combat_log()
+	log_lines.assign(battle.combat_log)
+	refresh()
 
 func build_shop() -> void:
 	title.text = "万界行商 · 买入与出售"
@@ -322,10 +341,18 @@ func build_shop() -> void:
 	summary.text = "金币：%d　背包：%d/%d　%s" % [battle.progression.gold, battle.inventory.items.size(), battle.inventory.capacity, battle.shop_config.get("rules", {}).get("sell_ratio_hint", "")]
 	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(summary)
+	var world_filters := HBoxContainer.new(); content.add_child(world_filters)
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒"]:
+		var filter := Button.new(); filter.text = world; filter.disabled = shop_world_filter == world; filter.pressed.connect(_set_shop_world.bind(world)); world_filters.add_child(filter)
 	var products := ItemList.new()
 	products.custom_minimum_size = Vector2(0, 145)
 	for product_id in battle.shop_config.get("products", {}):
 		var product: Dictionary = battle.shop_config.products[product_id]
+		var product_world := str(product.get("world", ""))
+		if product_world.is_empty():
+			if str(product_id).begins_with("three_") or str(product_id).begins_with("book_triple") or str(product_id).begins_with("book_iron"): product_world = "三国"
+			elif str(product_id).begins_with("pokemon") or str(product_id).begins_with("book_thunder") or str(product_id).begins_with("book_regenerator"): product_world = "宝可梦"
+		if shop_world_filter != "全部" and product_world != shop_world_filter: continue
 		var quality_name := ""
 		if product.get("type", "") == "equipment":
 			quality_name = " · %s" % battle.equipment_config.qualities.get(product.get("quality", "white"), {}).get("name", "")
@@ -356,6 +383,13 @@ func build_shop() -> void:
 		content.add_child(detail)
 	var separator := HSeparator.new()
 	content.add_child(separator)
+	var bulk_row := HBoxContainer.new(); content.add_child(bulk_row)
+	var bulk_quality := OptionButton.new()
+	for value in ["全部品质", "绿色及以上", "蓝色及以上", "紫色及以上", "橙色"]: bulk_quality.add_item(value)
+	bulk_quality.selected = clampi(bulk_sell_min_rank, 0, 4)
+	bulk_quality.item_selected.connect(func(index): bulk_sell_min_rank = index)
+	bulk_row.add_child(bulk_quality)
+	var bulk := Button.new(); bulk.text = "一键出售未穿戴装备"; bulk.pressed.connect(_preview_bulk_sell); bulk_row.add_child(bulk)
 	var sell_title := Label.new()
 	sell_title.text = "出售背包装备（仅显示未穿戴且未锁定装备）"
 	content.add_child(sell_title)
@@ -392,6 +426,10 @@ func build_shop() -> void:
 		history.text = "\n".join(lines)
 		history.add_theme_font_size_override("font_size", 12)
 		content.add_child(history)
+
+func _set_shop_world(world: String) -> void:
+	shop_world_filter = world
+	refresh()
 
 func _select_shop_product(index: int, list: ItemList) -> void:
 	selected_shop_product = list.get_item_metadata(index)
@@ -442,10 +480,24 @@ func _sell_selected_shop_item() -> void:
 		selected_shop_item = ""
 	refresh()
 
+func _preview_bulk_sell() -> void:
+	var preview: Dictionary = battle.shop.bulk_sell_preview(bulk_sell_min_rank)
+	if int(preview.count) <= 0:
+		shop_feedback = "没有符合品质条件的未穿戴、未锁定装备。"; refresh(); return
+	var warning := "\n\n警告：包含橙色高品质装备！" if bool(preview.has_orange) else ""
+	bulk_sell_dialog.dialog_text = "将出售%d件装备，预计获得%d金币。\n品质统计：%s%s\n\n提交时会再次校验所有角色的穿戴、锁定与物品实例。" % [int(preview.count), int(preview.gold), str(preview.qualities), warning]
+	bulk_sell_dialog.popup_centered()
+
+func _confirm_bulk_sell() -> void:
+	var result: Dictionary = battle.shop.bulk_sell(bulk_sell_min_rank)
+	shop_feedback = battle.shop.last_error if result.is_empty() else "一键出售成功：%d件，获得%d金币。" % [int(result.count), int(result.gold)]
+	if not result.is_empty(): battle.log_message.emit(shop_feedback)
+	refresh()
+
 func build_world() -> void:
-	title.text = "20关主线 · 双世界冒险"
+	title.text = "40关主线 · 四世界冒险"
 	var info := Label.new()
-	info.text = "当前：%s　%s" % [battle.worlds_config.maps[battle.current_map_id].name, "宝可梦世界已开放" if battle.progression.pokemon_world_unlocked else "宝可梦世界可预览，通关三国第10关后开放"]
+	info.text = "当前：%s　｜世界解锁：三国%s 宝可梦%s 龙族%s 逆水寒%s" % [battle.worlds_config.maps[battle.current_map_id].name, "✓", "✓" if battle.progression.world_unlocked("宝可梦") else "🔒", "✓" if battle.progression.world_unlocked("龙族") else "🔒", "✓" if battle.progression.world_unlocked("逆水寒") else "🔒"]
 	content.add_child(info)
 	for map_id in battle.worlds_config.maps:
 		var data: Dictionary = battle.worlds_config.maps[map_id]
@@ -453,16 +505,37 @@ func build_world() -> void:
 		var complete: bool = battle.progression.is_stage_complete(stage)
 		var available: bool = battle.progression.can_enter_stage(stage)
 		var button := Button.new()
-		var state := "已通关" if complete else "可挑战" if available else "世界锁定" if stage >= 11 and not battle.progression.pokemon_world_unlocked else "前置未通关"
+		var state := "已通关" if complete else "可挑战" if available else "世界锁定" if not battle.progression.world_unlocked(str(data.world)) else "前置未通关"
 		button.text = "%s · 全局第%d关 · %s（难度Lv.%d） · %s" % [data.world, stage, data.name, int(data.get("difficulty_level", stage)), state]
 		button.disabled = (map_id == battle.current_map_id and battle.active_boss_id.is_empty() and not battle.stage_cleared) or not available
-		button.tooltip_text = "按全局1—20关顺序推进；角色等级上限仍为60级。"
+		button.tooltip_text = "按全局1—40关顺序推进；角色等级上限随最高已通关主线开放。"
 		button.pressed.connect(_enter_stage.bind(map_id))
 		content.add_child(button)
 
 func _enter_stage(map_id: String) -> void:
 	if battle.switch_map(map_id):
 		close_panel()
+
+func build_challenge() -> void:
+	title.text = "挑战 · Boss与大秘境"
+	var tabs := HBoxContainer.new(); content.add_child(tabs)
+	for spec in [["世界Boss", "world_boss"], ["主线Boss重战", "story_boss"], ["大秘境", "rift"]]:
+		var button := Button.new(); button.text = spec[0]; button.disabled = challenge_tab == spec[1]; button.pressed.connect(_set_challenge_tab.bind(spec[1])); tabs.add_child(button)
+	if challenge_tab == "rift":
+		build_rift()
+	elif challenge_tab == "story_boss":
+		var hint := Label.new(); hint.text = "选择已通关主线关卡重战；不会重复发放首通奖励。"; content.add_child(hint)
+		for map_id in battle.worlds_config.maps:
+			var data: Dictionary = battle.worlds_config.maps[map_id]
+			var stage := int(data.get("global_stage", 1))
+			if not battle.progression.is_stage_complete(stage): continue
+			var button := Button.new(); button.text = "%s · 第%d关 · %s" % [data.world, stage, data.get("boss_name", "关底Boss")]; button.pressed.connect(_enter_stage.bind(map_id)); content.add_child(button)
+	else:
+		build_boss()
+
+func _set_challenge_tab(value: String) -> void:
+	challenge_tab = value
+	refresh()
 
 func build_boss() -> void:
 	title.text = "传奇 Boss 挑战"
@@ -492,8 +565,11 @@ func build_recruit() -> void:
 	title.text = "角色招募与四人编队" if current_view == "recruit" else "伙伴与四人编队"
 	var p = battle.progression
 	var info := Label.new()
-	info.text = "虎符：%d　精灵结晶：%d　已招募：%d/20\n三国角色使用虎符，宝可梦角色使用精灵结晶。" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
+	info.text = "虎符%d　精灵结晶%d　龙血结晶%d　江湖令%d　已招募%d/36" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.materials.dragon_blood_crystal, p.materials.jianghu_token, p.roster.size()]
 	content.add_child(info)
+	var filters := HBoxContainer.new(); content.add_child(filters)
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒"]:
+		var filter := Button.new(); filter.text = world; filter.disabled = recruit_world_filter == world; filter.pressed.connect(_set_recruit_world.bind(world)); filters.add_child(filter)
 	recruit_detail = Label.new()
 	recruit_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	recruit_detail.text = recruit_feedback if not recruit_feedback.is_empty() else "单击角色查看详情，再点击明确的招募按钮；选择不会刷新或跳回顶部。"
@@ -502,9 +578,11 @@ func build_recruit() -> void:
 	recruit_list = ItemList.new()
 	recruit_list.custom_minimum_size = Vector2(0, 185)
 	for actor_id in battle.worlds_config.recruitment.costs:
+		if recruit_world_filter != "全部" and str(battle.actors.get(actor_id, {}).get("world", "")) != recruit_world_filter: continue
 		var cost: Array = battle.worlds_config.recruitment.costs[actor_id]
 		var owned: bool = actor_id in p.roster
-		var legendary_locked: bool = actor_id in ["lu_bu", "mewtwo"] and not bool(p.boss_first_clear.get("lu_bu" if actor_id == "lu_bu" else "mewtwo", false))
+		var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen"}
+		var legendary_locked: bool = legendary_gate.has(actor_id) and not bool(p.boss_first_clear.get(legendary_gate[actor_id], false))
 		var state: String = "已招募" if owned else "需先击败对应Boss" if legendary_locked else "%s ×%d" % [material_name(cost[0]), cost[1]]
 		var idx := recruit_list.add_item("%s · %s" % [battle.actors[actor_id].name, state])
 		recruit_list.set_item_metadata(idx, actor_id)
@@ -543,6 +621,10 @@ func build_recruit() -> void:
 		row.add_child(clear)
 		grid.add_child(row)
 
+func _set_recruit_world(world: String) -> void:
+	recruit_world_filter = world
+	refresh()
+
 func _select_recruit_actor(index: int, list: ItemList) -> void:
 	recruit_list_scroll = list.get_v_scroll_bar().value
 	selected_party_actor = str(list.get_item_metadata(index))
@@ -556,7 +638,8 @@ func _update_recruit_selection_ui() -> void:
 	var actor: Dictionary = battle.actors[selected_party_actor]
 	var cost: Array = battle.worlds_config.recruitment.costs[selected_party_actor]
 	var owned: bool = selected_party_actor in p.roster
-	var legendary_locked: bool = selected_party_actor in ["lu_bu", "mewtwo"] and not bool(p.boss_first_clear.get("lu_bu" if selected_party_actor == "lu_bu" else "mewtwo", false))
+	var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen"}
+	var legendary_locked: bool = legendary_gate.has(selected_party_actor) and not bool(p.boss_first_clear.get(legendary_gate[selected_party_actor], false))
 	var current_amount: int = int(p.materials.get(str(cost[0]), 0))
 	recruit_detail.text = "%s｜%s｜%s\n消耗：%s ×%d　当前持有：%d\n%s" % [actor.name, actor.get("role", "冒险者"), actor.get("world", ""), material_name(str(cost[0])), int(cost[1]), current_amount, recruit_feedback]
 	if owned:
@@ -777,4 +860,4 @@ func add_separator(text_value: String) -> void:
 	var label := Label.new(); label.text = text_value; label.add_theme_font_size_override("font_size", 18); content.add_child(label)
 
 func material_name(id: String) -> String:
-	return {"three_kingdoms_token": "虎符", "pokemon_token": "精灵结晶"}.get(id, id)
+	return {"three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "salvage_dust":"重铸材料"}.get(id, id)

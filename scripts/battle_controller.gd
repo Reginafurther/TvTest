@@ -67,6 +67,10 @@ var suppress_combat_visuals := false
 var party_hud_dirty := false
 var party_hud_timer := 0.0
 var active_rift_context: Dictionary = {}
+var combat_log: Array[String] = []
+var retry_timer := -1.0
+var consecutive_defeats := 0
+var auto_retry_enabled := true
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -78,6 +82,18 @@ func _ready() -> void:
 	shop_config = DataLoaderScript.load_json("res://data/shop.json")
 	passives_config = DataLoaderScript.load_json("res://data/passives.json")
 	general_skills_config = DataLoaderScript.load_json("res://data/general_skills.json")
+	var v08: Dictionary = DataLoaderScript.load_json("res://data/v08_content.json")
+	actors.merge(v08.get("actors", {}), true)
+	skills.merge(v08.get("skills", {}), true)
+	passives_config.merge(v08.get("passives", {}), true)
+	general_skills_config.merge(v08.get("general_skills", {}), true)
+	worlds_config.maps.merge(v08.get("maps", {}), true)
+	worlds_config.bosses.merge(v08.get("bosses", {}), true)
+	worlds_config.recruitment.costs.merge(v08.get("recruitment", {}), true)
+	for skill_id in general_skills_config:
+		if not general_skills_config[skill_id].has("function_type"):
+			general_skills_config[skill_id].function_type = infer_skill_function(str(general_skills_config[skill_id].get("effect", "")))
+	log_message.connect(_store_combat_log)
 	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args()
 	inventory = InventoryManagerScript.new()
 	inventory.setup(equipment_config)
@@ -85,7 +101,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var v061_write_test := false
 	for value in args:
-		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read"]: v061_write_test = true
+		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read"]: v061_write_test = true
 	if "--equipment-test" in args or "--persistence-write" in args or "--v03-test" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or v061_write_test:
 		inventory.clear_test_save()
 	inventory.load_from_disk()
@@ -203,8 +219,14 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 	var data: Dictionary = actors.get(id, {}).duplicate(true)
 	data.merge(overrides, true)
 	var skill: Dictionary = skills.get(data.get("skill", ""), {})
+	if skill.is_empty() and faction == "enemies" and data.has("boss_id"):
+		skill = {"name":data.get("name", "首领技能"), "type":"boss_area", "power":0.82, "cooldown":7.0, "range":230.0}
 	unit.setup(id, data, skill, faction, self)
 	if faction == "enemies":
+		var v08_scales: Dictionary = progression.progression_config.get("combat_difficulty", {}).get("v08_applied_scales", {})
+		unit.max_hp *= float(v08_scales.get("health", 1.0)); unit.hp = unit.max_hp
+		unit.attack *= float(v08_scales.get("attack", 1.0))
+		unit.defense *= float(v08_scales.get("defense", 1.0))
 		unit.monster_level = int(worlds_config.maps.get(current_map_id, {}).get("difficulty_level", 1))
 		unit.enemy_type = str(data.get("enemy_type", "normal"))
 	unit.position = pos
@@ -222,7 +244,12 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 	return unit
 
 func _process(delta: float) -> void:
-	if is_paused or game_over:
+	if is_paused:
+		return
+	if game_over:
+		if auto_retry_enabled and retry_timer >= 0.0:
+			retry_timer -= delta
+			if retry_timer <= 0.0: retry_after_defeat()
 		return
 	elapsed += delta
 	adventure.tick(delta)
@@ -249,6 +276,22 @@ func _process(delta: float) -> void:
 			spawn_timer = 0.0
 			spawn_wave()
 	stats_changed.emit(kills, elapsed, wave - 1)
+
+func _store_combat_log(message: String) -> void:
+	combat_log.append("[%s] %s" % [Time.get_time_string_from_system(), message])
+	if combat_log.size() > 160: combat_log.pop_front()
+
+func clear_combat_log() -> void:
+	combat_log.clear()
+	log_message.emit("战斗日志已由玩家手动清空。")
+
+func infer_skill_function(effect: String) -> String:
+	if effect in ["heal", "hot", "team_hot", "cleanse", "regeneration"]: return "healing"
+	if effect in ["shield", "damage_reduction", "damage_share", "stat_guard", "counter"]: return "defense"
+	if effect in ["stun", "freeze", "poison", "armor_break", "shock", "status_mastery", "status_amplifier"]: return "control"
+	if effect in ["evasion", "move_speed"]: return "mobility"
+	if effect in ["cooldown", "stat_attack", "attack_speed", "critical", "friend_guard"]: return "support"
+	return "damage"
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause_battle"):
@@ -450,7 +493,30 @@ func _on_unit_died(unit) -> void:
 				call_deferred("return_from_special_combat", false)
 			else:
 				game_over = true
-				battle_state_changed.emit("队伍全灭 · 按 R 重新开始")
+				consecutive_defeats += 1
+				retry_timer = 3.0
+				log_message.emit("队伍全灭：3秒后自动重试；连续失败将回退安全关卡。")
+				battle_state_changed.emit("战斗失败 · 3秒后自动重试")
+
+func retry_after_defeat() -> void:
+	if is_paused: return
+	var stage := int(worlds_config.maps.get(current_map_id, {}).get("global_stage", 1))
+	if consecutive_defeats >= 3 and stage > 1:
+		var safe_stage := clampi(mini(stage - 1, progression.completed_stages.size()), 1, 40)
+		var safe_map := stage_id_for_number(safe_stage)
+		if not safe_map.is_empty():
+			current_map_id = safe_map
+			progression.set_last_stage(safe_map, safe_stage)
+			battle_map.map_id = safe_map
+			battle_map.queue_redraw()
+			log_message.emit("连续失败，已回退全局第%d关继续挂机。" % safe_stage)
+			consecutive_defeats = 0
+	clear_combatants()
+	wave = 1
+	stage_cleared = false
+	spawn_party()
+	if has_damage_dealer_in_party(): spawn_wave()
+	battle_state_changed.emit("自动重试完成 · 继续挂机")
 
 func _on_combat_event(message: String) -> void:
 	log_message.emit(message)
@@ -509,7 +575,7 @@ func roll_skill_book_drop(defeated_unit) -> void:
 	if defeated_unit.enemy_type == "boss" or defeated_unit.actor_data.has("boss_id"): chance = 1.0
 	if randf() > chance: return
 	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
-	var world_name := "三国" if int(map_data.get("global_stage", 1)) <= 10 else "宝可梦"
+	var world_name := str(map_data.get("world", "三国"))
 	var candidates: Array[String] = []
 	for skill_id in general_skills_config:
 		if str(general_skills_config[skill_id].get("world", "")) == world_name: candidates.append(str(skill_id))
@@ -523,10 +589,8 @@ func switch_map(map_id: String) -> bool:
 		return false
 	var stage := int(worlds_config.maps[map_id].get("global_stage", 1))
 	if not progression.can_enter_stage(stage):
-		if stage >= 11 and not progression.pokemon_world_unlocked:
-			log_message.emit("宝可梦世界尚未开放：请先通关三国第10关。")
-		else:
-			log_message.emit("该关卡尚未解锁：请按主线顺序通关前一关。")
+		var world_name := str(worlds_config.maps[map_id].get("world", "未知世界"))
+		log_message.emit("%s尚未开放或关卡未解锁：请按主线顺序通关前一关。" % world_name)
 		return false
 	clear_combatants()
 	current_map_id = map_id
@@ -635,7 +699,11 @@ func resolve_stage_wave(defeated_unit) -> void:
 		if stage == 10:
 			log_message.emit("★ 三国第10关通关！宝可梦世界已永久开放。")
 		elif stage == 20:
-			log_message.emit("★ 全20关主线通关！可继续挑战世界Boss与刷宝。")
+			log_message.emit("★ 宝可梦第20关通关！龙族世界已永久开放。")
+		elif stage == 30:
+			log_message.emit("★ 龙族第30关通关！逆水寒世界已永久开放。")
+		elif stage == 40:
+			log_message.emit("★ 全40关主线通关！四世界秘境上限已开放至40层。")
 		else:
 			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
 		battle_state_changed.emit("主线第%d关已通关" % stage)
@@ -647,7 +715,7 @@ func resolve_stage_wave(defeated_unit) -> void:
 
 func continue_after_stage() -> void:
 	var stage := int(worlds_config.maps.get(current_map_id, {}).get("global_stage", 1))
-	if progression.auto_push and stage < 20:
+	if progression.auto_push and stage < 40:
 		var next_id := stage_id_for_number(stage + 1)
 		if not next_id.is_empty() and progression.can_enter_stage(stage + 1):
 			switch_map(next_id)

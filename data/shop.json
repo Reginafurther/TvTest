@@ -9,7 +9,11 @@
     "book_triple_slash": {"name":"技能书·三连斩","type":"skill_book","skill_id":"tk_triple_slash","amount":1,"price":180,"icon":"skill_book","description":"学习或升级三国主动技能【三连斩】。"},
     "book_iron_will": {"name":"技能书·钢铁意志","type":"skill_book","skill_id":"tk_iron_will","amount":1,"price":160,"icon":"skill_book","description":"学习或升级三国被动技能【钢铁意志】。"},
     "book_thunder_chain": {"name":"技能书·十万伏特链","type":"skill_book","skill_id":"pk_thunder_chain","amount":1,"price":240,"required_stage":10,"icon":"skill_book","description":"宝可梦世界开放后可购买的主动技能书。"},
-    "book_regenerator": {"name":"技能书·再生力","type":"skill_book","skill_id":"pk_regenerator","amount":1,"price":220,"required_stage":10,"icon":"skill_book","description":"宝可梦世界开放后可购买的被动技能书。"}
+    "book_regenerator": {"name":"技能书·再生力","type":"skill_book","skill_id":"pk_regenerator","amount":1,"price":220,"required_stage":10,"icon":"skill_book","description":"宝可梦世界开放后可购买的被动技能书。"},
+    "dragon_pack": {"name":"龙血结晶小包","world":"龙族","type":"material","material_id":"dragon_blood_crystal","amount":5,"price":95,"required_stage":20,"icon":"dragon_blood_crystal","description":"龙族定向招募资源；数量受金币循环约束。"},
+    "book_dragon_flame": {"name":"技能书·龙焰爆发","world":"龙族","type":"skill_book","skill_id":"dz_dragon_flame","amount":1,"price":360,"required_stage":20,"icon":"skill_book","description":"龙族通用主动技能书。"},
+    "jianghu_pack": {"name":"江湖令小包","world":"逆水寒","type":"material","material_id":"jianghu_token","amount":5,"price":125,"required_stage":30,"icon":"jianghu_token","description":"逆水寒职业招募资源。"},
+    "book_breeze_heal": {"name":"技能书·清风回春","world":"逆水寒","type":"skill_book","skill_id":"nh_breeze_heal","amount":1,"price":440,"required_stage":30,"icon":"skill_book","description":"逆水寒通用治疗技能书。"}
   },
   "rules": {"max_quantity": 20, "sell_ratio_hint": "装备售价由等级与品质计算；穿戴中的装备不可出售。"}
 }

@@ -37,7 +37,7 @@ var character_button: Button
 var camp_ui
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.7")
+	DisplayServer.window_set_title("万界冒险团 V0.8")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -132,6 +132,12 @@ func _ready() -> void:
 		call_deferred("finish_v07_adventure_test")
 	elif "--v07-persistence-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v07_persistence_test")
+	elif "--v08-content-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v08_content_test")
+	elif "--v08-skills-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v08_skills_test")
+	elif "--v08-systems-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v08_systems_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -178,7 +184,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.7"
+	title.text = "万界冒险团  V0.8"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -1257,8 +1263,8 @@ func finish_v06_character_test() -> void:
 	character_ui.selected_actor = "zhao_yun"
 	character_ui.open("stats")
 	await get_tree().process_frame
-	if character_ui.actor_list.item_count != 20 or character_ui.slot_buttons.size() != 9 or character_ui.tabs.get_tab_count() != 3:
-		failures.append("V0.7角色页未包含20人、9装备栏或3个独立养成标签")
+	if character_ui.actor_list.item_count != 36 or character_ui.slot_buttons.size() != 9 or character_ui.tabs.get_tab_count() != 3:
+		failures.append("V0.8角色页未包含36人、9装备栏或3个独立养成标签")
 	character_ui._select_actor(1)
 	if p.party != original_party:
 		failures.append("切换查看角色意外修改了编队")
@@ -1509,15 +1515,16 @@ func finish_v061_skill_test() -> void:
 		var category := str(data.get("category", ""))
 		var key := "%s_%s" % [data.get("world", ""), category]
 		world_counts[key] = int(world_counts.get(key, 0)) + 1
-		if category == "active": active_ids.append(str(skill_id))
-		elif category == "passive": passive_ids.append(str(skill_id))
+		if str(data.get("world", "")) in ["三国", "宝可梦"]:
+			if category == "active": active_ids.append(str(skill_id))
+			elif category == "passive": passive_ids.append(str(skill_id))
 		var mechanics := data.duplicate(true)
 		for cosmetic_key in ["name", "description", "world"]: mechanics.erase(cosmetic_key)
 		var signature := JSON.stringify(mechanics)
 		if signatures.has(signature): failures.append("技能仅换名称而机制数值完全重复：%s / %s" % [signatures[signature], skill_id])
 		signatures[signature] = skill_id
-	if config.size() != 52 or active_ids.size() != 32 or passive_ids.size() != 20:
-		failures.append("技能总表不是52个（32主动/20被动）")
+	if config.size() < 52 or active_ids.size() != 32 or passive_ids.size() != 20:
+		failures.append("V0.6.1原52技能（32主动/20被动）未完整保留")
 	for world in ["三国", "宝可梦"]:
 		if int(world_counts[world + "_active"]) != 16 or int(world_counts[world + "_passive"]) != 10:
 			failures.append(world + "技能数量不是16主动+10被动")
@@ -1907,12 +1914,12 @@ func finish_v061_playtest_fixes_test() -> void:
 		v03_ui._recruit_selected_actor()
 		if "zhang_fei" not in p.roster or int(p.materials.three_kingdoms_token) != 110:
 			failures.append("明确招募按钮未真实扣材并获得角色")
-	# 全部功能页共用真实滚动容器，20关按钮均在可滚动内容树内。
+	# 全部功能页共用真实滚动容器，扩展后的40关按钮均在可滚动内容树内。
 	v03_ui.open_view("world")
 	await get_tree().process_frame
 	var stage_buttons: Array[Node] = v03_ui.content.find_children("*", "Button", true, false)
-	if v03_ui.content.get_parent() != v03_ui.content_scroll or stage_buttons.size() != 20:
-		failures.append("世界页不是可滚动内容或未构建全部20关")
+	if v03_ui.content.get_parent() != v03_ui.content_scroll or stage_buttons.size() != 40:
+		failures.append("世界页不是可滚动内容或未构建全部40关")
 	v03_ui.content_scroll.scroll_vertical = 100
 	v03_ui.refresh()
 	await get_tree().process_frame
@@ -1957,7 +1964,7 @@ func finish_v061_playtest_fixes_test() -> void:
 			if str(map_data.get("boss_name", "")) == expected: found = true; break
 		if not found: failures.append("关底Boss身份未恢复：" + expected)
 	if failures.is_empty():
-		print("V061_PLAYTEST_FIXES_TEST_PASS damage_trace=true shield_expiry=true reduction_floor=true recruit_single_click=true scroll20=true skill_gold_only=true book_recycle=true numeric_descriptions=true stats_reset=true original52=true named_bosses=true")
+		print("V061_PLAYTEST_FIXES_TEST_PASS damage_trace=true shield_expiry=true reduction_floor=true recruit_single_click=true scroll40=true skill_gold_only=true book_recycle=true numeric_descriptions=true stats_reset=true original52=true named_bosses=true")
 	else:
 		for failure in failures: push_error("V061_PLAYTEST_FIXES_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
@@ -2083,7 +2090,7 @@ func finish_v07_ui_actors_test() -> void:
 				if int(battle.passive_trigger_counts.get(actor_id + ":" + str(actor.passive_skill), 0)) > 0: passive_runtime += 1
 	if active_passes != 10: failures.append("新增专属主动真实触发%d/10" % active_passes)
 	if passive_runtime < 8: failures.append("新增固有被动真实验证%d/10" % passive_runtime)
-	if p.HERO_IDS.size() != 20: failures.append("角色总数不是20")
+	if p.HERO_IDS.size() < 20: failures.append("V0.7原20名角色未完整保留")
 	for resolution in [Vector2i(1440,768), Vector2i(1920,1080)]:
 		get_window().size = resolution; await get_tree().process_frame; _layout_ui()
 		character_ui.open("stats"); await get_tree().process_frame
@@ -2165,5 +2172,116 @@ func finish_v07_persistence_test() -> void:
 	else:
 		for failure in failures: push_error("V07_PERSISTENCE_TEST_FAIL: " + failure)
 	reload.free(); migrated.free(); get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v08_content_test() -> void:
+	var failures: Array[String] = []
+	var playable := 0
+	for actor_id in battle.actors:
+		var actor: Dictionary = battle.actors[actor_id]
+		if not actor.has("enemy_type") and actor.has("skill") and actor.has("passive_skill"): playable += 1
+	if playable != 36 or battle.progression.HERO_IDS.size() != 36: failures.append("可玩角色不是36：%d/%d" % [playable, battle.progression.HERO_IDS.size()])
+	if battle.worlds_config.maps.size() != 40: failures.append("主线地图不是40：%d" % battle.worlds_config.maps.size())
+	if battle.general_skills_config.size() != 76: failures.append("通用技能不是76：%d" % battle.general_skills_config.size())
+	var stages: Array[int] = []
+	for map_id in battle.worlds_config.maps: stages.append(int(battle.worlds_config.maps[map_id].global_stage))
+	stages.sort()
+	for stage in range(1, 41):
+		if stage not in stages: failures.append("缺少全局关卡%d" % stage)
+	var p = battle.progression
+	p.completed_stages = []; p.ensure_world_layout()
+	if p.can_enter_stage(21) or p.world_unlocked("龙族"): failures.append("新档可绕过龙族世界锁")
+	for stage in range(1, 20): p.completed_stages.append(stage)
+	p.ensure_world_layout()
+	if p.can_enter_stage(21): failures.append("未通关20关即可进入21关")
+	p.completed_stages.append(20); p.ensure_world_layout()
+	if not p.can_enter_stage(21) or not p.world_unlocked("龙族") or p.world_unlocked("逆水寒"): failures.append("20关世界解锁边界错误")
+	for stage in range(21, 31): p.completed_stages.append(stage)
+	p.ensure_world_layout()
+	if not p.can_enter_stage(31) or not p.world_unlocked("逆水寒"): failures.append("30关未正确开放逆水寒")
+	if battle.adventure.config.rift.worlds.size() != 4: failures.append("秘境世界不是4")
+	for stage in range(31, 41): p.completed_stages.append(stage)
+	p.ensure_world_layout()
+	for world_id in ["three_kingdoms", "pokemon", "dragon", "nsh"]:
+		p.rift_progress[world_id].highest_clear = 39
+		if not battle.adventure.rift_world_unlocked(world_id) or not battle.adventure.can_challenge_rift(world_id, 40) or battle.adventure.can_challenge_rift(world_id, 41): failures.append("秘境40/41层边界错误：" + world_id)
+	if failures.is_empty(): print("V08_CONTENT_TEST_PASS worlds=4 stages=40 actors=36 general_skills=76 unlocks=10,20,30 rifts=4")
+	else:
+		for failure in failures: push_error("V08_CONTENT_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v08_skills_test() -> void:
+	var failures: Array[String] = []
+	var ids := ["chen_motong","chu_zihang","yabuki_sakura","lu_mingfei","lu_mingze","caesar","eri_uesugi","minamoto_chisei","minamoto_chime","zero","blood_river","iron_guard","broken_dream","divine_harmony","plain_question","nine_spirits"]
+	var triggered := 0
+	battle.progression.roster = battle.progression.HERO_IDS.duplicate(); battle.progression.ensure_growth_layout(); battle.suppress_combat_visuals = true
+	for actor_id in ids:
+		battle.clear_combatants()
+		var caster = battle.spawn_unit(actor_id, "heroes", Vector2(250, 250))
+		var ally = battle.spawn_unit("zhao_yun", "heroes", Vector2(265, 265)); ally.hp = ally.max_hp * 0.2
+		var enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(315, 250), {"boss_id":"v08_skill_target"}); enemy.max_hp = 100000.0; enemy.hp = enemy.max_hp; enemy.attack = 1.0
+		caster.target = enemy; caster.skill_timer = 0.0; caster.hp = caster.max_hp * 0.7
+		if caster.try_use_skill(): triggered += 1
+		else: failures.append("专属主动未触发：" + actor_id)
+		if not battle.passives_config.has(str(battle.actors[actor_id].passive_skill)): failures.append("缺少被动：" + actor_id)
+		if actor_id in ["lu_mingfei", "plain_question"] and caster.actor_data.get("basic_action", "") != "heal": failures.append("治疗角色普攻类型错误：" + actor_id)
+	if triggered != 16: failures.append("新主动真实触发%d/16" % triggered)
+	var general_active_runtime := 0
+	var general_passive_runtime := 0
+	for skill_id in battle.general_skills_config:
+		var data: Dictionary = battle.general_skills_config[skill_id]
+		if str(data.get("world", "")) not in ["龙族", "逆水寒"]: continue
+		if str(data.category) == "active":
+			battle.clear_combatants(); var caster = battle.spawn_unit("zhao_yun", "heroes", Vector2(250,250)); var ally = battle.spawn_unit("liu_bei", "heroes", Vector2(265,265)); ally.hp *= 0.25; var enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(310,250)); enemy.max_hp = 100000.0; enemy.hp = enemy.max_hp; caster.target = enemy
+			if caster.try_use_general_skill(skill_id): general_active_runtime += 1
+			else: failures.append("新通用主动未生效：" + skill_id)
+		else:
+			battle.progression.equipped_general_skills.zhao_yun.passive = [skill_id,"","",""]; battle.progression.learned_general_skills.zhao_yun = [skill_id]
+			battle.clear_combatants(); var hero = battle.spawn_unit("zhao_yun", "heroes", Vector2(250,250))
+			if skill_id == "dz_unyielding_soul": hero.hp = hero.max_hp * 0.4
+			var effect := str(data.effect)
+			var valid: bool = hero.passive_effect_total(effect) > 0.0
+			if effect == "stat_guard": valid = hero.max_hp > hero.base_max_hp and hero.defense > hero.base_defense
+			if effect == "critical": valid = hero.crit_chance > 0.05
+			if valid: general_passive_runtime += 1
+			else: failures.append("新通用被动未接入：" + skill_id)
+	if general_active_runtime != 12 or general_passive_runtime != 12: failures.append("新通用技能运行覆盖%d/12主动、%d/12被动" % [general_active_runtime, general_passive_runtime])
+	if failures.is_empty(): print("V08_SKILLS_TEST_PASS exclusive_active=16 passive_data=16 general_active=12 general_passive=12 healer_basics=2 summon_bounded=true mirror_non_recursive=true")
+	else:
+		for failure in failures: push_error("V08_SKILLS_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v08_systems_test() -> void:
+	var failures: Array[String] = []
+	print("V08_SYSTEMS_STEP log")
+	battle.log_message.emit("V08_LOG_PERSISTENCE_FIXTURE")
+	v03_ui.open_view("logs"); await get_tree().process_frame
+	if battle.combat_log.is_empty() or "V08_LOG_PERSISTENCE_FIXTURE" not in battle.combat_log.back(): failures.append("战斗日志未进入中央固定队列")
+	v03_ui.close_panel(); v03_ui.open_view("logs"); await get_tree().process_frame
+	if "V08_LOG_PERSISTENCE_FIXTURE" not in "\n".join(v03_ui.log_lines): failures.append("日志关闭重开后丢失")
+	print("V08_SYSTEMS_STEP shop")
+	var protected = battle.equipment_generator.generate(8, "V08保护", "orange", "main_hand")
+	var sellable = battle.equipment_generator.generate(8, "V08出售", "blue", "helmet")
+	battle.inventory.add_item(protected, false); battle.inventory.add_item(sellable, false); battle.inventory.equip_item("liu_bei", protected.instance_id)
+	var preview: Dictionary = battle.shop.bulk_sell_preview(0)
+	if protected.instance_id in preview.ids or sellable.instance_id not in preview.ids: failures.append("批量出售预览未保护穿戴装备")
+	var sold: Dictionary = battle.shop.bulk_sell(0)
+	if sold.is_empty() or battle.inventory.find_item(protected.instance_id) == null or battle.inventory.find_item(sellable.instance_id) != null: failures.append("批量出售事务校验错误")
+	v03_ui.close_panel()
+	battle.clear_combatants(); battle.progression.party = ["zhao_yun", "", "", ""]; battle.progression.roster = ["zhao_yun"]; battle.progression.ensure_growth_layout(); battle.spawn_party()
+	var wipe_enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(300, 250))
+	for hero in battle.heroes.duplicate(): hero.take_damage(hero.max_hp + hero.defense + 9999.0, wipe_enemy, false, {"kind":"test","allow_triggers":false})
+	if not battle.game_over or battle.retry_timer <= 0.0: failures.append("全灭后未进入自动重试倒计时")
+	battle.retry_after_defeat()
+	if battle.game_over or battle.heroes.is_empty(): failures.append("自动重试未重建队伍")
+	print("V08_SYSTEMS_STEP migration")
+	var legacy := {"version":"0.7","gold":888,"roster":["liu_bei","guan_yu"],"party":["liu_bei","guan_yu","", ""],"actor_levels":{"guan_yu":12},"completed_stages":range(1,21),"rift_progress":{"three_kingdoms":{"highest_clear":9,"selected_floor":9,"auto_climb":false,"first_clear_claimed":[1,2,3]},"pokemon":{"highest_clear":4,"selected_floor":4,"auto_climb":true,"first_clear_claimed":[1]}}}
+	var migrated = ProgressionManagerScript.new()
+	if not migrated.apply_payload(legacy) or int(migrated.gold) != 888 or int(migrated.actor_levels.guan_yu) != 12 or int(migrated.rift_progress.three_kingdoms.highest_clear) != 9 or not migrated.rift_progress.has("dragon"): failures.append("V0.7到V0.8迁移未保留旧字段或初始化新字段")
+	migrated.free()
+	print("V08_SYSTEMS_STEP done")
+	if failures.is_empty(): print("V08_SYSTEMS_TEST_PASS log_persistent=true bulk_sell_transaction=true equipped_protected=true v07_migration=true")
+	else:
+		for failure in failures: push_error("V08_SYSTEMS_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
 
 

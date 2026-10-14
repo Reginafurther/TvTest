@@ -99,6 +99,9 @@ var home_position := Vector2.ZERO
 var current_action := "idle"
 var target_refresh_timer := 0.0
 var rift_affixes: Array = []
+var is_summon := false
+var summon_owner_id := ""
+var summon_lifetime := 0.0
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
 	actor_id = id
@@ -109,7 +112,7 @@ func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_
 	# Allies must not body-block their own formation; opposing factions still collide.
 	collision_layer = 1 if team == "heroes" else 2
 	collision_mask = 2 if team == "heroes" else 1
-	if team == "heroes" and battle.progression != null:
+	if team == "heroes" and battle.progression != null and not bool(info.get("summoned", false)):
 		actor_level = battle.progression.actor_level(id)
 		active_skill_level = battle.progression.skill_level(id, "active")
 		passive_skill_level = battle.progression.skill_level(id, "passive")
@@ -155,6 +158,10 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		current_action = "paused"
 		return
+	if is_summon:
+		summon_lifetime -= delta
+		if summon_lifetime <= 0.0:
+			dead = true; battle.heroes.erase(self); queue_free(); return
 	attack_timer = maxf(0.0, attack_timer - delta)
 	skill_timer = maxf(0.0, skill_timer - delta)
 	for general_id in general_active_timers:
@@ -353,7 +360,8 @@ func basic_attack() -> void:
 	var critical := randf() < crit_chance
 	if critical:
 		amount *= crit_damage
-	if target.has_negative_status(): amount *= 1.0 + passive_effect_total("status_amplifier")
+	if target.has_negative_status(): amount *= 1.0 + passive_effect_total("status_amplifier") + (passive_value() if passive_data.get("effect", "") == "status_amplifier" else 0.0)
+	if basic_attack_count % 3 == 0: amount *= 1.0 + passive_effect_total("combo")
 	target.take_damage(amount, self, critical, {"kind": "basic", "critical": critical, "allow_triggers": true})
 	match str(actor_data.get("boss_mechanic", "")):
 		"venom_strike": target.apply_poison(attack * 0.12, 4.0, self, 0)
@@ -461,7 +469,8 @@ func try_use_general_skill(skill_id: String) -> bool:
 				for victim in victims: victim.target = self; victim.taunt_timer = float(data.get("duration", 3.5))
 				add_shield(max_hp * power); used = true
 		"shield":
-			for member in allied_units(int(data.get("targets", 4))): member.add_shield(max_hp * power)
+			var shield_bonus := 1.0 + passive_effect_total("shield_power")
+			for member in allied_units(int(data.get("targets", 4))): member.add_shield(max_hp * power * shield_bonus)
 			used = true
 		"damage_reduction":
 			var members := allied_units(int(data.get("targets", 1)))
@@ -479,7 +488,14 @@ func try_use_general_skill(skill_id: String) -> bool:
 		"cooldown":
 			for member in allied_units(int(data.get("targets", 4))): member.reduce_current_cooldowns(power)
 			used = true
+		"blood_boost":
+			var cost := max_hp * float(data.get("health_cost", 0.08))
+			hp = maxf(1.0, hp - cost)
+			haste_power = power; haste_time = float(data.get("duration", 6.0)); used = true
 	if not used: return false
+	var echo_chance := passive_effect_total("skill_echo")
+	if echo_chance > 0.0 and randf() < echo_chance and is_instance_valid(enemy):
+		enemy.take_damage(attack * 0.35, self, false, {"kind":"effect","allow_triggers":false,"skill_echo":true})
 	general_active_timers[skill_id] = effective_general_cooldown(float(data.get("cooldown", 8.0)))
 	combat_event.emit("%s 施放通用技能【%s】" % [_name(), data.get("name", skill_id)])
 	battle.on_skill(self)
@@ -559,6 +575,11 @@ func try_use_skill() -> bool:
 			if not victims.is_empty():
 				for victim in victims:
 					var damage := attack * power * (1.0 + elemental_damage)
+					if actor_data.get("boss_mechanic", "") == "dragon_king_phases":
+						if hp / maxf(1.0, max_hp) <= 0.65: damage *= 1.18; add_shield(max_hp * 0.06, 4.0)
+						if hp / maxf(1.0, max_hp) <= 0.30: damage *= 1.28; haste_power = 0.25; haste_time = 6.0
+					elif actor_data.get("boss_mechanic", "") == "star_sword_phases" and hp / maxf(1.0, max_hp) <= 0.5:
+						damage *= 1.24; victim.apply_slow(0.22, 3.0)
 					if passive_data.get("effect", "") == "boss_slayer" and victim.actor_data.has("boss_id"):
 						damage *= 1.0 + passive_value()
 						battle.note_passive(actor_id, passive_skill_id)
@@ -566,6 +587,7 @@ func try_use_skill() -> bool:
 				if actor_data.get("boss_id", "") == "mewtwo":
 					add_shield(max_hp * 0.12)
 				skill_timer = cooldown
+				if actor_data.has("boss_id"): on_boss_skill_cast()
 				battle.on_skill(self)
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
 				return true
@@ -656,6 +678,63 @@ func try_use_skill() -> bool:
 				for victim in battle.enemies_near(position, faction, 105.0, 6): victim.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				apply_damage_reduction(0.22, float(skill_data.get("duration", 4.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
+		"multi_hit_slow":
+			if valid_enemy_in_range(target, float(skill_data.get("range", 190.0))):
+				for _hit in range(int(skill_data.get("hits", 4))): target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
+				target.apply_slow(float(skill_data.get("slow", 0.25)), float(skill_data.get("duration", 4.0)))
+				skill_timer = cooldown; battle.on_skill(self); return true
+		"multi_hit":
+			if valid_enemy_in_range(target, float(skill_data.get("range", attack_range))):
+				for hit in range(int(skill_data.get("hits", 3))):
+					var hit_power := power * (1.35 if hit == int(skill_data.get("hits", 3)) - 1 else 1.0)
+					target.take_damage(attack * hit_power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
+				skill_timer = cooldown; battle.on_skill(self); return true
+		"emergency_heal":
+			var wounded = battle.lowest_health_ally(self, 9999.0)
+			if wounded != null and wounded.hp / maxf(1.0, wounded.max_hp) <= float(skill_data.get("threshold", 0.42)):
+				wounded.heal(attack * power * (1.0 + (passive_value() if passive_data.get("effect", "") == "healing" else 0.0)), self)
+				wounded.apply_damage_reduction(0.28, 4.0); skill_timer = cooldown; battle.on_skill(self); return true
+		"blood_bargain":
+			if hp > max_hp * 0.3:
+				hp = maxf(1.0, hp - max_hp * float(skill_data.get("health_cost", 0.12)))
+				for member in allied_units(4): member.reduce_current_cooldowns(power); member.haste_power = power; member.haste_time = float(skill_data.get("duration", 6.0))
+				skill_timer = cooldown; battle.on_skill(self); return true
+		"capped_execute_area":
+			if valid_enemy_in_range(target, float(skill_data.get("range", 245.0))):
+				for victim in battle.enemies_near(target.position, faction, 145.0, 8):
+					var damage := attack * power * (1.0 + elemental_damage)
+					if victim.hp / maxf(1.0, victim.max_hp) <= 0.35: damage *= 1.0 + float(skill_data.get("execute_bonus", 0.45))
+					if victim.actor_data.has("boss_id"): damage = minf(damage, victim.max_hp * float(skill_data.get("boss_cap", 0.12)))
+					victim.take_damage(damage, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
+				skill_timer = cooldown; battle.on_skill(self); return true
+		"gravity_taunt":
+			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 210.0)), 12)
+			if not victims.is_empty():
+				for victim in victims: victim.apply_slow(float(skill_data.get("slow", 0.55)), float(skill_data.get("duration", 3.0))); victim.apply_hard_control(0.8); victim.target = self
+				add_shield(max_hp * power); skill_timer = cooldown; battle.on_skill(self); return true
+		"nightmare":
+			if valid_enemy_in_range(target, float(skill_data.get("range", 245.0))):
+				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true}); target.apply_hard_control(float(skill_data.get("duration", 5.0)) * 0.35); target.apply_damage_reduction(-0.0, 0.0); target.apply_slow(0.3, float(skill_data.get("duration", 5.0)))
+				skill_timer = cooldown; battle.on_skill(self); return true
+		"mirror_safe":
+			if valid_enemy_in_range(target, float(skill_data.get("range", 250.0))):
+				# Safe whitelist implementation: mirror resolves as a bounded direct strike;
+				# it never invokes another skill and therefore cannot recurse.
+				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"mirrored":true})
+				skill_timer = cooldown; battle.on_skill(self); return true
+		"team_hot":
+			var applied := false
+			for member in allied_units(int(skill_data.get("targets", 4))):
+				if member.hp < member.max_hp: member.apply_hot(attack * power, float(skill_data.get("duration", 7.0)), self); applied = true
+			if applied: skill_timer = cooldown; battle.on_skill(self); return true
+		"hero_summon":
+			var summon_count := 0
+			for member in battle.heroes:
+				if is_instance_valid(member) and member.is_summon and member.summon_owner_id == actor_id: summon_count += 1
+			if summon_count < int(skill_data.get("summon_cap", 2)):
+				var minion = battle.spawn_unit("stage_guardian_pk", "heroes", position + Vector2(35 + summon_count * 24, 25), {"summoned":true})
+				minion.is_summon = true; minion.summon_owner_id = actor_id; minion.summon_lifetime = float(skill_data.get("duration", 9.0)); minion.actor_data.name = "药人"; minion.max_hp = max_hp * 0.3; minion.hp = minion.max_hp; minion.attack = attack * power * (1.0 + (passive_value() if passive_data.get("effect", "") == "summon_damage" else 0.0)); minion.defense = defense * 0.5
+				skill_timer = cooldown; battle.on_skill(self); return true
 	return false
 
 func take_damage(raw_amount: float, source, critical: bool = false, context: Dictionary = {}) -> Dictionary:
@@ -668,7 +747,7 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		result.reason = "invalid_raw_damage"
 		battle.record_damage_resolution(source, self, result, context)
 		return result
-	var evasion := passive_effect_total("evasion") + (temporary_evasion if temporary_evasion_time > 0.0 else 0.0)
+	var evasion := passive_effect_total("evasion") + (passive_value() if passive_data.get("effect", "") == "evasion" else 0.0) + (temporary_evasion if temporary_evasion_time > 0.0 else 0.0)
 	if randf() < minf(0.75, evasion):
 		show_number("闪避", Color("#D4F4FF"))
 		result.reason = "evaded"
@@ -850,6 +929,21 @@ func on_boss_skill_cast() -> void:
 			for ally in allied_units(8): ally.add_shield(max_hp * 0.04)
 		"burning_aura":
 			for victim in battle.enemies_near(position, faction, 210.0, 8): victim.apply_burn(attack * 0.1, 4.0, self)
+		"charge_burn":
+			for victim in battle.enemies_near(position, faction, 230.0, 4): victim.apply_burn(attack * 0.13, 5.0, self)
+		"summon", "poison_summon": summon_boss_minion(str(actor_data.get("boss_mechanic", "")) == "poison_summon")
+		"alchemy_burst": add_shield(max_hp * 0.12, 4.0); apply_damage_reduction(0.12, 4.0)
+		"iron_wall": add_shield(max_hp * 0.16, 5.0); apply_damage_reduction(0.18, 5.0)
+		"gravity_field":
+			for victim in battle.enemies_near(position, faction, 260.0, 8): victim.apply_slow(0.45, 4.0); victim.apply_hard_control(0.6)
+		"phase_control":
+			for victim in battle.enemies_near(position, faction, 250.0, 6): victim.apply_shock(3.0)
+		"charge_slash", "combo_charge": haste_power = 0.2; haste_time = 5.0
+		"moving_area": temporary_evasion = 0.18; temporary_evasion_time = 4.0
+		"periodic_burst":
+			for victim in battle.enemies_near(position, faction, 280.0, 8): victim.apply_shock(2.5)
+		"illusion_decoy": add_shield(max_hp * 0.1, 4.0); temporary_evasion = 0.2; temporary_evasion_time = 4.0
+		"dual_phase": temporary_counter = 0.3; temporary_counter_time = 5.0; add_shield(max_hp * 0.06, 4.0)
 	if "elemental" in rift_affixes:
 		for victim in battle.enemies_near(position, faction, 260.0, 8): victim.take_damage(attack * 0.18, self, false, {"kind":"effect","allow_triggers":false})
 	if "summon" in rift_affixes:
@@ -860,6 +954,16 @@ func on_boss_skill_cast() -> void:
 			var summon_id := "yellow_turban" if str(actor_data.get("world", "")) == "三国" else "zubat"
 			var minion = battle.spawn_unit(summon_id, "enemies", position + Vector2(randf_range(-65, 65), randf_range(-55, 55)))
 			minion.monster_level = monster_level; minion.max_hp *= 1.0 + monster_level * 0.08; minion.hp = minion.max_hp
+
+func summon_boss_minion(poisonous: bool) -> void:
+	var alive_allies := 0
+	for ally in battle.enemies:
+		if is_instance_valid(ally) and not ally.dead: alive_allies += 1
+	if alive_allies >= 3: return
+	var summon_id := "yellow_turban" if str(actor_data.get("world", "")) in ["三国", "逆水寒"] else "zubat"
+	var minion = battle.spawn_unit(summon_id, "enemies", position + Vector2(randf_range(-60, 60), randf_range(-50, 50)))
+	minion.monster_level = monster_level; minion.max_hp *= 1.0 + monster_level * 0.06; minion.hp = minion.max_hp
+	if poisonous: minion.actor_data.boss_mechanic = "venom_strike"
 
 func apply_hard_control(duration: float) -> float:
 	# Boss hard-control duration diminishes per application and is capped cumulatively.
@@ -913,6 +1017,8 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 			attack_speed = clampf(attack_speed + passive_value(), 0.0, float(rules.get("max_attack_speed", 1.5)))
 		"elemental_damage":
 			elemental_damage += passive_value()
+		"critical": crit_chance += passive_value()
+		"cooldown_reduction": cooldown_reduction += passive_value()
 	attack_interval = maxf(float(rules.get("min_attack_interval", 0.25)), base_attack_interval / (1.0 + attack_speed))
 	hp = clampf(max_hp * hp_ratio, 1.0 if not dead else 0.0, max_hp)
 	health_changed.emit(self)
@@ -948,6 +1054,7 @@ func passive_effect_total(effect: String) -> float:
 	var total := 0.0
 	for row in general_passive_datas:
 		if str(row.data.get("effect", "")) == effect:
+			if str(row.id) == "dz_unyielding_soul" and hp / maxf(1.0, max_hp) > 0.45: continue
 			total += general_passive_value(str(row.id), row.data)
 	return total
 

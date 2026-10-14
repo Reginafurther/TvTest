@@ -6,12 +6,14 @@
   "cap_storage_ratio": 0.25,
   "general_skill_upgrade": {"max_level": 10, "gold_base": 80, "gold_linear": 55, "gold_quadratic": 10, "duplicate_book_recycle_gold": 45},
   "combat_difficulty": {
+	"v08_global_factor": 1.30,
+	"v08_applied_scales": {"health":1.18,"attack":1.10,"defense":1.05},
     "regular_health": {"linear": 0.17, "quadratic": 0.020},
     "regular_attack": {"linear": 0.10, "quadratic": 0.012},
     "regular_defense": {"linear": 0.08, "quadratic": 0.008},
     "guardian_health": {"linear": 0.55, "quadratic": 0.060},
     "guardian_attack": {"linear": 0.12, "quadratic": 0.012},
     "guardian_defense": {"linear": 0.10, "quadratic": 0.008},
-    "final_boss": {"10": {"health": 2.4, "attack": 1.7, "defense": 1.5}, "20": {"health": 4.2, "attack": 2.5, "defense": 2.0}}
+	"final_boss": {"10": {"health": 2.4, "attack": 1.7, "defense": 1.5}, "20": {"health": 4.2, "attack": 2.5, "defense": 2.0}, "30": {"health": 5.8, "attack": 3.1, "defense": 2.45}, "40": {"health": 7.2, "attack": 3.8, "defense": 2.9}}
   }
 }
