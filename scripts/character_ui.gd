@@ -280,7 +280,7 @@ func refresh_center() -> void:
 	portrait_texture.size = portrait_size
 	portrait_placeholder.position = portrait_position
 	portrait_placeholder.size = portrait_size
-	portrait_texture.texture = ArtCatalogScript.texture("portraits", selected_actor)
+	portrait_texture.texture = ArtCatalogScript.portrait(selected_actor)
 	portrait_texture.visible = portrait_texture.texture != null
 	portrait_placeholder.visible = portrait_texture.texture == null
 	portrait_placeholder.text = "%s\n%s\n%s · 立绘待接入" % [str(data.get("name", selected_actor)).substr(0, 1), data.get("name", selected_actor), data.get("role", "未知定位")]

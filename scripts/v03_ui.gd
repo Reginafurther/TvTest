@@ -51,7 +51,7 @@ var stats_summary: RichTextLabel
 var stats_rows_box: VBoxContainer
 var stats_actor_rows: Dictionary = {}
 var stats_sort_mode := "DPS"
-var difficulty_preview := 1.5
+var difficulty_preview := 1.0
 var settings_feedback := ""
 
 func setup(owner_battle) -> void:
@@ -934,22 +934,22 @@ func build_settings() -> void:
 	difficulty_preview = battle.progression.combat_difficulty
 	var heading := Label.new(); heading.text = "战斗难度系数"; heading.add_theme_font_size_override("font_size", 21); content.add_child(heading)
 	var preview_label := Label.new(); preview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(preview_label)
-	var slider := HSlider.new(); slider.min_value = 0.5; slider.max_value = 3.0; slider.step = 0.1; slider.value = difficulty_preview; slider.custom_minimum_size = Vector2(0, 34); content.add_child(slider)
+	var slider := HSlider.new(); slider.min_value = 0.5; slider.max_value = 5.0; slider.step = 0.1; slider.value = difficulty_preview; slider.custom_minimum_size = Vector2(0, 34); content.add_child(slider)
 	slider.value_changed.connect(func(value): difficulty_preview = snappedf(float(value), 0.1); _update_difficulty_preview(preview_label))
-	var presets := HBoxContainer.new(); content.add_child(presets)
-	for spec in [["轻松", 0.5], ["标准", 1.0], ["挑战", 1.5], ["困难", 2.0], ["极限", 3.0]]:
-		var button := Button.new(); button.text = "%s %.1f×" % [spec[0], spec[1]]; button.pressed.connect(_set_difficulty_preview.bind(float(spec[1]), slider, preview_label)); presets.add_child(button)
+	var presets := GridContainer.new(); presets.columns = 5; content.add_child(presets)
+	for spec in [["轻松", 0.5], ["标准", 1.0], ["挑战", 1.5], ["困难", 2.0], ["极限", 5.0]]:
+		var button := Button.new(); button.text = "%s %.1f×" % [spec[0], spec[1]]; button.size_flags_horizontal = Control.SIZE_EXPAND_FILL; button.pressed.connect(_set_difficulty_preview.bind(float(spec[1]), slider, preview_label)); presets.add_child(button)
 	var apply := Button.new(); apply.text = "应用难度（下一波开始生效）"; apply.pressed.connect(_apply_difficulty); V035ThemeScript.button(apply, "gold"); content.add_child(apply)
-	var formula := Label.new(); formula.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; formula.text = "1.0×严格对应V0.8基准。综合系数分别映射为：生命=系数^0.55、攻击=系数^0.35、防御=系数^0.18；只作用于之后新生成的敌人，奖励不变。"; content.add_child(formula)
+	var formula := Label.new(); formula.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; formula.text = "新版1.0× = 原2.5×难度，调整后下一波敌人生效。敌人生命、攻击、防御沿用原有非线性映射；玩家属性与奖励不变。"; content.add_child(formula)
 	content.add_child(HSeparator.new())
 	var guide := Button.new(); guide.text = "重新查看新手引导（不重置存档）"; guide.pressed.connect(func(): battle.progression.restart_guide(); settings_feedback = "新手引导已重新开启。"; refresh()); content.add_child(guide)
 	var reset := Button.new(); reset.text = "重新开始游戏（先自动备份）"; reset.tooltip_text = "备份并逐字节校验成功后才会重置全部进度"; reset.pressed.connect(func(): reset_dialog.popup_centered()); V035ThemeScript.button(reset, "blue"); content.add_child(reset)
-	var feedback := Label.new(); feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; feedback.text = settings_feedback if not settings_feedback.is_empty() else "重新开始后：仅刘备Lv.1、虎符150、金币0、主线第1关、默认难度1.5×，并恢复完整新手引导。"; feedback.add_theme_color_override("font_color", Color("#FFD27A")); content.add_child(feedback)
+	var feedback := Label.new(); feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; feedback.text = settings_feedback if not settings_feedback.is_empty() else "重新开始后：仅刘备Lv.1、虎符150、金币0、主线第1关、默认难度1.0×，并恢复完整新手引导。"; feedback.add_theme_color_override("font_color", Color("#FFD27A")); content.add_child(feedback)
 	_update_difficulty_preview(preview_label)
 
 func _update_difficulty_preview(label: Label) -> void:
 	var profile: Dictionary = battle.custom_difficulty_profile(difficulty_preview)
-	label.text = "战斗难度 %.1f×（当前已应用 %.1f×）\n相对V0.8基准综合挑战强度目标约 %.0f%%｜敌人生命 %.2f×、攻击 %.2f×、防御 %.2f×" % [difficulty_preview, battle.progression.combat_difficulty, difficulty_preview * 100.0, profile.health, profile.attack, profile.defense]
+	label.text = "新版难度 %.1f×（当前已应用 %.1f×）｜等价旧版 %.2f×\n敌人生命 %.2f×、攻击 %.2f×、防御 %.2f×" % [difficulty_preview, battle.progression.combat_difficulty, profile.equivalent_old_coefficient, profile.health, profile.attack, profile.defense]
 
 func _set_difficulty_preview(value: float, slider: HSlider, label: Label) -> void:
 	difficulty_preview = value

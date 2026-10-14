@@ -1,7 +1,30 @@
 {
-  "portraits": {"zhao_yun": "res://assets/portraits/zhao_yun_portrait_v1.png", "liu_bei": "res://assets/portraits/liu_bei_v035.png"},
-  "portraits_regions": {"liu_bei": [360, 110, 650, 900]},
-  "portraits_layouts": {"zhao_yun": {"scale": 1.0, "offset_x": 0, "offset_y": 0}, "liu_bei": {"scale": 1.0, "offset_x": 0, "offset_y": 0}},
+  "portraits": {
+    "zhao_yun": "res://assets/portraits/zhao_yun_portrait_v1.png",
+    "liu_bei": "res://assets/portraits/liu_bei_portrait_v1.png",
+    "zhang_fei": "res://assets/portraits/zhang_fei_portrait_v1.png",
+    "guan_yu": "res://assets/portraits/guan_yu_portrait_v1.png",
+    "lu_bu": "res://assets/portraits/lu_bu_portrait_v1.png",
+    "zhuge_liang": "res://assets/portraits/zhuge_liang_portrait_v1.png",
+    "huang_zhong": "res://assets/portraits/huang_zhong_portrait_v1.png",
+    "dian_wei": "res://assets/portraits/dian_wei_portrait_v1.png",
+    "diao_chan": "res://assets/portraits/diao_chan_portrait_v1.png",
+    "zhou_yu": "res://assets/portraits/zhou_yu_portrait_v1.png"
+  },
+  "portrait_backups": {"liu_bei": "res://assets/portraits/liu_bei_v035.png"},
+  "portraits_regions": {},
+  "portraits_layouts": {
+    "zhao_yun": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "liu_bei": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "zhang_fei": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "guan_yu": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "lu_bu": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "zhuge_liang": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "huang_zhong": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "dian_wei": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "diao_chan": {"scale": 1.0, "offset_x": 0, "offset_y": 0},
+    "zhou_yu": {"scale": 1.0, "offset_x": 0, "offset_y": 0}
+  },
   "units": {"zhao_yun": "res://assets/units/zhao_yun_battle_v1.png", "liu_bei": "res://assets/units/liu_bei_v035.png"},
   "units_layouts": {"zhao_yun": {"width": 88, "height": 88, "scale": 1.0, "offset_x": 0, "offset_y": 16, "anchor": [0.5, 0.92]}},
   "equipment_icons": {},

@@ -218,12 +218,14 @@ func difficulty_multiplier(curve_id: String, stage: int) -> float:
 	return 1.0 + step * float(curve.get("linear", 0.0)) + step * step * float(curve.get("quadratic", 0.0))
 
 func custom_difficulty_profile(value: float = -1.0) -> Dictionary:
-	var coefficient: float = progression.combat_difficulty if value < 0.0 else snappedf(clampf(value, 0.5, 3.0), 0.1)
+	var coefficient: float = progression.combat_difficulty if value < 0.0 else snappedf(clampf(value, 0.5, 5.0), 0.1)
+	var equivalent_old_coefficient := 2.5 * coefficient
 	return {
 		"coefficient": coefficient,
-		"health": pow(coefficient, 0.55),
-		"attack": pow(coefficient, 0.35),
-		"defense": pow(coefficient, 0.18)
+		"equivalent_old_coefficient": equivalent_old_coefficient,
+		"health": pow(equivalent_old_coefficient, 0.55),
+		"attack": pow(equivalent_old_coefficient, 0.35),
+		"defense": pow(equivalent_old_coefficient, 0.18)
 	}
 
 func apply_custom_difficulty(unit) -> void:

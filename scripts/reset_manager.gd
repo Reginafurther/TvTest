@@ -83,7 +83,8 @@ func _validate_new_game(progress_path: String, inventory_path: String) -> bool:
 		and int(progress.get("gold", -1)) == 0 \
 		and int(progress.get("materials", {}).get("three_kingdoms_token", -1)) == 150 \
 		and progress.get("completed_stages", []) == [] \
-		and is_equal_approx(float(progress.get("combat_difficulty", 0.0)), 1.5) \
+		and is_equal_approx(float(progress.get("combat_difficulty", 0.0)), 1.0) \
+		and int(progress.get("difficulty_config_version", 0)) == ProgressionManager.DIFFICULTY_CONFIG_VERSION \
 		and inventory.get("items", []) == []
 
 func _restore_backup(backup: Dictionary, generated_paths: Array) -> void:

@@ -10,6 +10,8 @@ const LEGACY_V061_PATH := "user://wanjie_v061_progress.json"
 const MIGRATION_BACKUP_PATH := "user://wanjie_v07_progress.pre_v08_backup.json"
 const TEST_PATH := "user://wanjie_v08_test_progress.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
+const DIFFICULTY_CONFIG_VERSION := 2
+const LEGACY_DIFFICULTY_BASE := 2.5
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits"]
 
 var save_path := NORMAL_PATH
@@ -57,7 +59,8 @@ var camp_inventory: Dictionary = {"camp_flag": 1, "campfire": 1, "tent": 1, "ben
 var camp_layout: Array = []
 var achievements: Dictionary = {}
 var auto_push := true
-var combat_difficulty := 1.5
+var combat_difficulty := 1.0
+var difficulty_config_version := DIFFICULTY_CONFIG_VERSION
 var progression_config: Dictionary = {}
 
 func setup() -> void:
@@ -517,7 +520,8 @@ func claim_offline_rewards() -> Dictionary:
 	return reward
 
 func set_combat_difficulty(value: float, autosave: bool = true) -> float:
-	combat_difficulty = snappedf(clampf(value, 0.5, 3.0), 0.1)
+	combat_difficulty = snappedf(clampf(value, 0.5, 5.0), 0.1)
+	difficulty_config_version = DIFFICULTY_CONFIG_VERSION
 	changed.emit()
 	if autosave: save_to_disk()
 	return combat_difficulty
@@ -564,7 +568,8 @@ func reset_to_new_game() -> bool:
 	camp_layout = []
 	achievements = {}
 	auto_push = true
-	combat_difficulty = 1.5
+	combat_difficulty = 1.0
+	difficulty_config_version = DIFFICULTY_CONFIG_VERSION
 	ensure_growth_layout()
 	ensure_world_layout()
 	ensure_adventure_layout()
@@ -573,7 +578,7 @@ func reset_to_new_game() -> bool:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -630,8 +635,16 @@ func apply_payload(parsed) -> bool:
 	camp_layout = parsed.get("camp_layout", [])
 	achievements = parsed.get("achievements", {})
 	auto_push = bool(parsed.get("auto_push", true))
-	combat_difficulty = snappedf(clampf(float(parsed.get("combat_difficulty", 1.5)), 0.5, 3.0), 0.1)
 	transaction_log = parsed.get("transaction_log", [])
+	var stored_difficulty_version := int(parsed.get("difficulty_config_version", 1))
+	if stored_difficulty_version < DIFFICULTY_CONFIG_VERSION:
+		var legacy_difficulty := float(parsed.get("combat_difficulty", 1.5))
+		combat_difficulty = snappedf(clampf(legacy_difficulty / LEGACY_DIFFICULTY_BASE, 0.5, 5.0), 0.1)
+		difficulty_config_version = DIFFICULTY_CONFIG_VERSION
+		record_transaction("难度配置迁移", "旧版 %.1f× → 新版 %.1f×（新版1.0×=旧版2.5×）" % [legacy_difficulty, combat_difficulty], 0)
+	else:
+		combat_difficulty = snappedf(clampf(float(parsed.get("combat_difficulty", 1.0)), 0.5, 5.0), 0.1)
+		difficulty_config_version = DIFFICULTY_CONFIG_VERSION
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))
 	completed_stages = parsed.get("completed_stages", [])

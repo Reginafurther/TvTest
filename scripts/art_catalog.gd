@@ -43,6 +43,15 @@ static func texture(group: String, key: String) -> Texture2D:
 	_cache[cache_key] = result
 	return result
 
+static func portrait(actor_id: String) -> Texture2D:
+	# Portraits are actor-specific. Missing art deliberately returns null so the
+	# caller shows that actor's own placeholder instead of another hero's image.
+	return texture("portraits", actor_id)
+
+static func configured_path(group: String, key: String) -> String:
+	if _config.is_empty(): reload()
+	return str(_config.get(group, {}).get(key, ""))
+
 static func layout(group: String, key: String) -> Dictionary:
 	if _config.is_empty(): reload()
 	var value = _config.get(group + "_layouts", {}).get(key, {})
