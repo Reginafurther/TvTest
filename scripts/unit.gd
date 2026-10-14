@@ -1115,7 +1115,16 @@ func _draw() -> void:
 	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
 	var artwork: Texture2D = ArtCatalogScript.texture("units", actor_id)
 	if artwork != null:
-		draw_texture_rect(artwork, Rect2(-38, -58, 76, 83), false)
+		var draw_rect := Rect2(-38, -58, 76, 83)
+		var layout := ArtCatalogScript.layout("units", actor_id)
+		if not layout.is_empty():
+			var scale := clampf(float(layout.get("scale", 1.0)), 0.25, 3.0)
+			var draw_size := Vector2(float(layout.get("width", 76.0)), float(layout.get("height", 83.0))) * scale
+			var anchor_data: Array = layout.get("anchor", [0.5, 0.70])
+			var anchor := Vector2(float(anchor_data[0]), float(anchor_data[1])) if anchor_data.size() >= 2 else Vector2(0.5, 0.70)
+			var offset := Vector2(float(layout.get("offset_x", 0.0)), float(layout.get("offset_y", 0.0)))
+			draw_rect = Rect2(offset - draw_size * anchor, draw_size)
+		draw_texture_rect(artwork, draw_rect, false)
 	else:
 		draw_circle(Vector2(0, 5), 16, base.darkened(0.16))
 		draw_rect(Rect2(-12, -2, 24, 26), base, true)

@@ -12,6 +12,7 @@ const CombatStatsScript = preload("res://scripts/combat_stats.gd")
 const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
 const ShopManagerScript = preload("res://scripts/shop_manager.gd")
 const AdventureManagerScript = preload("res://scripts/adventure_manager.gd")
+const ResetManagerScript = preload("res://scripts/reset_manager.gd")
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
@@ -71,6 +72,7 @@ var combat_log: Array[String] = []
 var retry_timer := -1.0
 var consecutive_defeats := 0
 var auto_retry_enabled := true
+var reset_manager
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -101,7 +103,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var v061_write_test := false
 	for value in args:
-		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read"]: v061_write_test = true
+		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read", "--v081-reset-read"]: v061_write_test = true
 	if "--equipment-test" in args or "--persistence-write" in args or "--v03-test" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or v061_write_test:
 		inventory.clear_test_save()
 	inventory.load_from_disk()
@@ -110,6 +112,7 @@ func _ready() -> void:
 	progression.setup()
 	add_child(progression)
 	progression.changed.connect(func(): progression_changed.emit())
+	reset_manager = ResetManagerScript.new()
 	if worlds_config.maps.has(progression.last_stage_id):
 		var saved_stage := int(worlds_config.maps[progression.last_stage_id].get("global_stage", 1))
 		if progression.can_enter_stage(saved_stage):
@@ -214,6 +217,25 @@ func difficulty_multiplier(curve_id: String, stage: int) -> float:
 	var step := maxf(0.0, float(stage - 1))
 	return 1.0 + step * float(curve.get("linear", 0.0)) + step * step * float(curve.get("quadratic", 0.0))
 
+func custom_difficulty_profile(value: float = -1.0) -> Dictionary:
+	var coefficient: float = progression.combat_difficulty if value < 0.0 else snappedf(clampf(value, 0.5, 3.0), 0.1)
+	return {
+		"coefficient": coefficient,
+		"health": pow(coefficient, 0.55),
+		"attack": pow(coefficient, 0.35),
+		"defense": pow(coefficient, 0.18)
+	}
+
+func apply_custom_difficulty(unit) -> void:
+	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("custom_difficulty_applied"): return
+	var profile := custom_difficulty_profile()
+	unit.max_hp *= float(profile.health)
+	unit.hp = unit.max_hp
+	unit.attack *= float(profile.attack)
+	unit.defense *= float(profile.defense)
+	unit.set_meta("custom_difficulty_applied", true)
+	unit.set_meta("custom_difficulty_coefficient", float(profile.coefficient))
+
 func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary = {}):
 	var unit = BattleUnitScript.new()
 	var data: Dictionary = actors.get(id, {}).duplicate(true)
@@ -229,6 +251,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 		unit.defense *= float(v08_scales.get("defense", 1.0))
 		unit.monster_level = int(worlds_config.maps.get(current_map_id, {}).get("difficulty_level", 1))
 		unit.enemy_type = str(data.get("enemy_type", "normal"))
+		apply_custom_difficulty(unit)
 	unit.position = pos
 	unit.died.connect(_on_unit_died)
 	unit.combat_event.connect(_on_combat_event)
@@ -236,6 +259,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 	add_child(unit)
 	if faction == "heroes":
 		heroes.append(unit)
+		combat_stats.ensure_actor(id)
 		unit.home_position = pos
 		unit.apply_equipment_stats(inventory.get_actor_stats(id), equipment_config.get("rules", {}))
 		unit.set_special_effects(inventory.get_actor_specials(id))
@@ -442,7 +466,7 @@ func _on_unit_died(unit) -> void:
 		progression.add_gold(1 + int(worlds_config.maps.get(current_map_id, {}).get("level", 1)))
 		if is_instance_valid(unit.last_damage_source):
 			unit.last_damage_source.on_kill_trigger()
-			combat_stats.record_kill(unit.last_damage_source.actor_id)
+			combat_stats.record_kill(stats_actor_id(unit.last_damage_source))
 		var leveled_actors: Array[String] = []
 		for actor_id in progression.party:
 			if str(actor_id).is_empty():
@@ -691,7 +715,9 @@ func resolve_stage_wave(defeated_unit) -> void:
 	var first_clear: bool = not progression.is_stage_complete(stage)
 	if first_clear and progression.complete_stage(stage):
 		progression.add_gold(int(map_data.get("first_clear_gold", 0)))
-		progression.add_material(str(map_data.get("material", "three_kingdoms_token")), int(map_data.get("first_clear_material", 0)))
+		var first_material := int(map_data.get("first_clear_material", 0))
+		progression.add_material(str(map_data.get("material", "three_kingdoms_token")), first_material)
+		combat_stats.resources.materials += first_material
 		if map_data.has("boss_id"):
 			var boss_id := str(map_data.boss_id)
 			var boss_data: Dictionary = worlds_config.bosses.get(boss_id, {})
@@ -746,6 +772,7 @@ func resolve_boss_victory(boss_id: String) -> void:
 		log_message.emit("★ 首次击败%s，永久解锁%s！" % [data.name, actors[data.unlock_actor].name])
 	else:
 		progression.add_material(data.repeat_material, int(data.repeat_amount))
+		combat_stats.resources.materials += int(data.repeat_amount)
 		log_message.emit("再次击败%s，获得材料 ×%d" % [data.name, data.repeat_amount])
 	active_boss_id = ""
 
@@ -760,8 +787,9 @@ func strategy_allows(unit) -> bool:
 	return enemies_near(unit.position, unit.faction, float(unit.skill_data.get("range", 180)), 99).size() >= int(preset.get("enemy_count", 1))
 
 func on_damage(source, target, amount: float, context: Dictionary) -> void:
-	var source_id: String = source.actor_id if is_instance_valid(source) else ""
-	combat_stats.record_damage(source_id, target.actor_id, amount, context.get("kind", "skill"))
+	var source_id := stats_actor_id(source)
+	var target_id := stats_actor_id(target)
+	combat_stats.record_damage(source_id, target_id, amount, context.get("kind", "skill"))
 	if not context.get("allow_triggers", true):
 		return
 	if context.get("critical", false) and is_instance_valid(source) and source.has_special("crit_lightning"):
@@ -802,11 +830,17 @@ func record_damage_resolution(source, target, result: Dictionary, context: Dicti
 
 func on_heal(source, amount: float) -> void:
 	if is_instance_valid(source):
-		combat_stats.record_heal(source.actor_id, amount)
+		combat_stats.record_heal(stats_actor_id(source), amount)
 
 func on_skill(source) -> void:
-	combat_stats.record_skill(source.actor_id)
+	combat_stats.record_skill(stats_actor_id(source))
 	source.on_boss_skill_cast()
+
+func stats_actor_id(unit) -> String:
+	if not is_instance_valid(unit): return ""
+	if bool(unit.get("is_summon")) and not str(unit.get("summon_owner_id")).is_empty():
+		return str(unit.get("summon_owner_id"))
+	return str(unit.actor_id)
 
 func trigger_lightning(source, primary) -> void:
 	var effect: Dictionary = special_config.effects.crit_lightning
@@ -828,11 +862,26 @@ func propagate_poison(dead_unit) -> void:
 		victim.apply_poison(dead_unit.poison_damage, 4.0, dead_unit.poison_source, dead_unit.poison_depth + 1)
 
 func stats_snapshot() -> Dictionary:
-	return combat_stats.snapshot(elapsed)
+	return combat_stats.snapshot(elapsed, progression.roster)
 
 func reset_combat_stats() -> void:
 	combat_stats.reset(elapsed)
 	log_message.emit("本次实时战斗统计已清空；战斗与永久成长不受影响。")
+
+func safe_restart_game() -> Dictionary:
+	is_paused = true
+	auto_retry_enabled = false
+	var result: Dictionary = reset_manager.perform_safe_reset(progression, inventory)
+	if bool(result.get("ok", false)):
+		combat_stats.reset(elapsed)
+		combat_log.clear()
+		clear_combatants()
+		battle_state_changed.emit("旧存档已验证备份，正在载入全新冒险")
+	else:
+		is_paused = false
+		auto_retry_enabled = true
+		battle_state_changed.emit("重新开始已取消：" + str(result.get("error", "备份或校验失败")))
+	return result
 
 func note_effect(id: String) -> void:
 	trigger_counts[id] = int(trigger_counts.get(id, 0)) + 1

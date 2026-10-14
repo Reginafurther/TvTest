@@ -21,7 +21,8 @@ var inventory_ui
 var character_ui
 var camp_ui
 var toolbar_root: GridContainer
-var aux_root: VBoxContainer
+var aux_root: ScrollContainer
+var aux_list: VBoxContainer
 var log_lines: Array[String] = []
 var recruit_feedback := ""
 var refresh_pending := false
@@ -43,7 +44,15 @@ var recruit_world_filter := "全部"
 var challenge_tab := "world_boss"
 var bulk_sell_min_rank := 0
 var bulk_sell_dialog: ConfirmationDialog
+var reset_dialog: ConfirmationDialog
 var shop_world_filter := "全部"
+var stats_refresh_timer := 0.0
+var stats_summary: RichTextLabel
+var stats_rows_box: VBoxContainer
+var stats_actor_rows: Dictionary = {}
+var stats_sort_mode := "DPS"
+var difficulty_preview := 1.5
+var settings_feedback := ""
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -79,23 +88,31 @@ func build_toolbar() -> void:
 			button.pressed.connect(open_view.bind(spec[1]))
 		toolbar_root.add_child(button)
 		toolbar_buttons[spec[1]] = button
-	aux_root = VBoxContainer.new()
-	aux_root.add_theme_constant_override("separation", 2)
+	aux_root = ScrollContainer.new()
+	aux_root.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	aux_root.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	aux_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	aux_root.follow_focus = true
 	add_child(aux_root)
-	for spec in [["商店", "shop"], ["奇遇", "encounters"], ["成就", "achievements"], ["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["统计", "stats"]]:
+	aux_list = VBoxContainer.new()
+	aux_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	aux_list.add_theme_constant_override("separation", 2)
+	aux_root.add_child(aux_list)
+	for spec in [["商店", "shop"], ["奇遇", "encounters"], ["成就", "achievements"], ["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["战斗统计", "stats"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(115, 27)
 		V035ThemeScript.button(button, "gold" if spec[1] == "shop" else "blue")
 		button.add_theme_font_size_override("font_size", 13)
 		button.pressed.connect(open_view.bind(spec[1]))
-		aux_root.add_child(button)
+		aux_list.add_child(button)
 		toolbar_buttons[spec[1]] = button
 
-func apply_layout(_viewport_size: Vector2, factor: float, offset_x: float, footer_y: float) -> void:
+func apply_layout(viewport_size: Vector2, factor: float, offset_x: float, footer_y: float) -> void:
 	toolbar_root.position = Vector2(offset_x + 864 * factor, footer_y + 12 * factor)
 	toolbar_root.scale = Vector2.ONE * factor
 	aux_root.position = Vector2(offset_x + 1305 * factor, footer_y + 12 * factor)
+	aux_root.size = Vector2(125, maxf(72.0, (viewport_size.y - footer_y - 22.0 * factor) / maxf(0.01, factor)))
 	aux_root.scale = Vector2.ONE * factor
 	panel.position = Vector2(offset_x + 890 * factor, 72 * factor)
 	panel.scale = Vector2.ONE * factor
@@ -160,6 +177,13 @@ func build_panel() -> void:
 	bulk_sell_dialog.title = "确认一键出售未穿戴装备"
 	bulk_sell_dialog.confirmed.connect(_confirm_bulk_sell)
 	add_child(bulk_sell_dialog)
+	reset_dialog = ConfirmationDialog.new()
+	reset_dialog.title = "二次确认：备份并重新开始"
+	reset_dialog.dialog_text = "系统将先完整备份并校验现有存档，然后重置角色、装备、技能、主线、秘境、营地与成就。\n\n备份失败时绝不会执行重置。此操作完成后将重新载入游戏。"
+	reset_dialog.ok_button_text = "确认备份并重新开始"
+	reset_dialog.cancel_button_text = "取消"
+	reset_dialog.confirmed.connect(_confirm_safe_reset)
+	add_child(reset_dialog)
 
 func open_view(view: String) -> void:
 	if character_ui != null and character_ui.panel.visible:
@@ -170,9 +194,10 @@ func open_view(view: String) -> void:
 	elif view == "boss": challenge_tab = "world_boss"
 	current_view = "challenge" if view in ["rift", "boss"] else view
 	panel.visible = true
-	battle.is_paused = view != "encounters"
-	battle.battle_state_changed.emit("奇遇交易中 · 自动战斗继续" if view == "encounters" else "功能界面中")
+	battle.is_paused = view not in ["encounters", "stats"]
+	battle.battle_state_changed.emit("战斗统计中 · 自动战斗继续" if view == "stats" else "奇遇交易中 · 自动战斗继续" if view == "encounters" else "功能界面中")
 	refresh()
+	if current_view == "stats": stats_refresh_timer = 0.0
 
 func _open_character_view(tab_name: String) -> void:
 	if panel.visible: close_panel()
@@ -189,6 +214,8 @@ func clear_content() -> void:
 		child.queue_free()
 
 func refresh_if_open() -> void:
+	if panel.visible and current_view == "stats":
+		return
 	if panel.visible and not refresh_pending:
 		refresh_pending = true
 		call_deferred("_perform_deferred_refresh")
@@ -216,7 +243,16 @@ func refresh() -> void:
 		"rift": build_rift()
 		"encounters": build_encounters()
 		"achievements": build_achievements()
+		"settings": build_settings()
 	call_deferred("_restore_scroll_position", current_view)
+
+func _process(delta: float) -> void:
+	if panel == null or not panel.visible or current_view != "stats":
+		return
+	stats_refresh_timer -= delta
+	if stats_refresh_timer <= 0.0:
+		stats_refresh_timer = 0.75
+		update_stats_view()
 
 func _restore_scroll_position(view: String) -> void:
 	if panel.visible and current_view == view and content_scroll != null:
@@ -813,23 +849,135 @@ func _upgrade_selected_skill(kind: String) -> void:
 	refresh()
 
 func build_stats() -> void:
-	title.text = "实时战斗统计"
+	title.text = "战斗统计 · 实时DPS/HPS"
+	stats_actor_rows.clear()
+	var actions := HBoxContainer.new()
+	content.add_child(actions)
 	var clear := Button.new()
 	clear.text = "清空本次统计"
 	clear.tooltip_text = "仅重置伤害、治疗、承伤、技能、击杀和统计时间；不影响任何成长与奖励。"
 	clear.pressed.connect(_clear_combat_stats)
-	content.add_child(clear)
+	actions.add_child(clear)
+	var sort := OptionButton.new()
+	for value in ["按DPS排序", "按HPS排序"]: sort.add_item(value)
+	sort.selected = 1 if stats_sort_mode == "HPS" else 0
+	sort.item_selected.connect(func(index): stats_sort_mode = "HPS" if index == 1 else "DPS"; update_stats_view())
+	actions.add_child(sort)
+	var live := Label.new(); live.text = "● 每0.75秒刷新 · 关闭页面后仍继续记录"; live.add_theme_color_override("font_color", Color("#8EE6A8")); actions.add_child(live)
+	stats_summary = RichTextLabel.new()
+	stats_summary.bbcode_enabled = true
+	stats_summary.fit_content = true
+	stats_summary.custom_minimum_size = Vector2(0, 92)
+	content.add_child(stats_summary)
+	stats_rows_box = VBoxContainer.new()
+	stats_rows_box.add_theme_constant_override("separation", 8)
+	content.add_child(stats_rows_box)
+	update_stats_view()
+
+func _stats_actor_ids(snapshot: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for actor_id in battle.progression.party:
+		var id := str(actor_id)
+		if not id.is_empty() and id not in result: result.append(id)
+	for actor_id in snapshot.get("actors", {}):
+		var id := str(actor_id)
+		if id in battle.progression.roster and id not in result: result.append(id)
+	return result
+
+func _rebuild_stats_rows(ids: Array[String]) -> void:
+	for child in stats_rows_box.get_children(): child.queue_free()
+	stats_actor_rows.clear()
+	for actor_id in ids:
+		var card := VBoxContainer.new()
+		var values := RichTextLabel.new()
+		values.bbcode_enabled = true
+		values.fit_content = true
+		values.custom_minimum_size = Vector2(0, 64)
+		card.add_child(values)
+		var share := ProgressBar.new()
+		share.show_percentage = false
+		share.max_value = 100.0
+		share.custom_minimum_size = Vector2(0, 8)
+		card.add_child(share)
+		stats_rows_box.add_child(card)
+		stats_actor_rows[actor_id] = {"root": card, "values": values, "share": share}
+
+func update_stats_view() -> void:
+	if stats_summary == null or stats_rows_box == null: return
 	var snap: Dictionary = battle.stats_snapshot()
-	var text := RichTextLabel.new(); text.bbcode_enabled = true; text.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	text.text = "本场实时统计 %.1f 秒　装备 %d 件　材料 %d 个　收益 %.1f 件/分钟\nDPS = 每秒平均伤害；换地图/重开后从零统计。\n\n" % [snap.duration, snap.resources.equipment, snap.resources.materials, snap.resources_per_minute]
-	for actor_id in snap.actors:
-		var row: Dictionary = snap.actors[actor_id]
-		text.append_text("[b]%s[/b]　伤害 %.0f　DPS %.1f　普攻 %.0f　技能 %.0f　特效 %.0f　治疗 %.0f　承伤 %.0f　技能%d　击杀%d\n" % [battle.actors.get(actor_id, {"name": actor_id}).name, row.damage, row.dps, row.basic, row.skill, row.effect, row.healing, row.taken, row.skills, row.kills])
-	content.add_child(text)
+	var ids := _stats_actor_ids(snap)
+	if stats_actor_rows.keys().size() != ids.size() or ids.any(func(id): return not stats_actor_rows.has(id)):
+		_rebuild_stats_rows(ids)
+	ids.sort_custom(func(a, b):
+		var key := "hps" if stats_sort_mode == "HPS" else "dps"
+		return float(snap.actors.get(a, {}).get(key, 0.0)) > float(snap.actors.get(b, {}).get(key, 0.0)))
+	var team: Dictionary = snap.get("team", {})
+	stats_summary.text = "[b]统计时长[/b] %.1f秒　[b][color=#FFB86B]队伍伤害[/color][/b] %s　[b]DPS[/b] %s\n[b][color=#77E89A]队伍治疗[/color][/b] %s　[b]HPS[/b] %s　累计击杀 %d\n装备 %d件　材料 %d个　装备收益 %.2f件/分钟" % [snap.duration, compact_number(float(team.get("damage", 0))), compact_number(float(team.get("dps", 0))), compact_number(float(team.get("healing", 0))), compact_number(float(team.get("hps", 0))), int(team.get("kills", 0)), int(snap.resources.equipment), int(snap.resources.materials), float(snap.get("equipment_per_minute", 0.0))]
+	var total_damage := maxf(1.0, float(team.get("damage", 0.0)))
+	for index in range(ids.size()):
+		var actor_id := ids[index]
+		var row: Dictionary = snap.actors.get(actor_id, {})
+		var controls: Dictionary = stats_actor_rows[actor_id]
+		stats_rows_box.move_child(controls.root, index)
+		var deployed: bool = actor_id in battle.progression.party
+		controls.values.text = "[b]%s[/b] %s　[color=#FFB86B]伤害 %s｜DPS %s[/color]　[color=#77E89A]治疗 %s｜HPS %s[/color]\n普攻 %s　技能 %s　特效 %s　承伤 %s　施法 %d　击杀 %d" % [battle.actors.get(actor_id, {"name":actor_id}).get("name", actor_id), "●上阵" if deployed else "○本次历史", compact_number(float(row.get("damage", 0))), compact_number(float(row.get("dps", 0))), compact_number(float(row.get("healing", 0))), compact_number(float(row.get("hps", 0))), compact_number(float(row.get("basic", 0))), compact_number(float(row.get("skill", 0))), compact_number(float(row.get("effect", 0))), compact_number(float(row.get("taken", 0))), int(row.get("skills", 0)), int(row.get("kills", 0))]
+		controls.values.tooltip_text = "伤害 %.0f｜DPS %.2f｜治疗 %.0f｜HPS %.2f｜承伤 %.0f" % [float(row.get("damage", 0)), float(row.get("dps", 0)), float(row.get("healing", 0)), float(row.get("hps", 0)), float(row.get("taken", 0))]
+		controls.share.value = float(row.get("damage", 0.0)) * 100.0 / total_damage
+
+func compact_number(value: float) -> String:
+	if absf(value) >= 1000000.0: return "%.2fM" % (value / 1000000.0)
+	if absf(value) >= 1000.0: return "%.1fK" % (value / 1000.0)
+	return "%.0f" % value
+
+func build_settings() -> void:
+	title.text = "设置 · 难度与安全重开"
+	difficulty_preview = battle.progression.combat_difficulty
+	var heading := Label.new(); heading.text = "战斗难度系数"; heading.add_theme_font_size_override("font_size", 21); content.add_child(heading)
+	var preview_label := Label.new(); preview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(preview_label)
+	var slider := HSlider.new(); slider.min_value = 0.5; slider.max_value = 3.0; slider.step = 0.1; slider.value = difficulty_preview; slider.custom_minimum_size = Vector2(0, 34); content.add_child(slider)
+	slider.value_changed.connect(func(value): difficulty_preview = snappedf(float(value), 0.1); _update_difficulty_preview(preview_label))
+	var presets := HBoxContainer.new(); content.add_child(presets)
+	for spec in [["轻松", 0.5], ["标准", 1.0], ["挑战", 1.5], ["困难", 2.0], ["极限", 3.0]]:
+		var button := Button.new(); button.text = "%s %.1f×" % [spec[0], spec[1]]; button.pressed.connect(_set_difficulty_preview.bind(float(spec[1]), slider, preview_label)); presets.add_child(button)
+	var apply := Button.new(); apply.text = "应用难度（下一波开始生效）"; apply.pressed.connect(_apply_difficulty); V035ThemeScript.button(apply, "gold"); content.add_child(apply)
+	var formula := Label.new(); formula.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; formula.text = "1.0×严格对应V0.8基准。综合系数分别映射为：生命=系数^0.55、攻击=系数^0.35、防御=系数^0.18；只作用于之后新生成的敌人，奖励不变。"; content.add_child(formula)
+	content.add_child(HSeparator.new())
+	var guide := Button.new(); guide.text = "重新查看新手引导（不重置存档）"; guide.pressed.connect(func(): battle.progression.restart_guide(); settings_feedback = "新手引导已重新开启。"; refresh()); content.add_child(guide)
+	var reset := Button.new(); reset.text = "重新开始游戏（先自动备份）"; reset.tooltip_text = "备份并逐字节校验成功后才会重置全部进度"; reset.pressed.connect(func(): reset_dialog.popup_centered()); V035ThemeScript.button(reset, "blue"); content.add_child(reset)
+	var feedback := Label.new(); feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; feedback.text = settings_feedback if not settings_feedback.is_empty() else "重新开始后：仅刘备Lv.1、虎符150、金币0、主线第1关、默认难度1.5×，并恢复完整新手引导。"; feedback.add_theme_color_override("font_color", Color("#FFD27A")); content.add_child(feedback)
+	_update_difficulty_preview(preview_label)
+
+func _update_difficulty_preview(label: Label) -> void:
+	var profile: Dictionary = battle.custom_difficulty_profile(difficulty_preview)
+	label.text = "战斗难度 %.1f×（当前已应用 %.1f×）\n相对V0.8基准综合挑战强度目标约 %.0f%%｜敌人生命 %.2f×、攻击 %.2f×、防御 %.2f×" % [difficulty_preview, battle.progression.combat_difficulty, difficulty_preview * 100.0, profile.health, profile.attack, profile.defense]
+
+func _set_difficulty_preview(value: float, slider: HSlider, label: Label) -> void:
+	difficulty_preview = value
+	slider.value = value
+	_update_difficulty_preview(label)
+
+func _apply_difficulty() -> void:
+	var applied: float = battle.progression.set_combat_difficulty(difficulty_preview)
+	settings_feedback = "战斗难度已保存为 %.1f×，当前敌人不变，下一波/Boss/秘境/奇遇开始生效。" % applied
+	battle.log_message.emit(settings_feedback)
+	refresh()
+
+func _confirm_safe_reset() -> void:
+	var result: Dictionary = battle.safe_restart_game()
+	if bool(result.get("ok", false)):
+		settings_feedback = "备份校验成功：%s。正在载入全新冒险。" % str(result.get("backup_path", ""))
+		call_deferred("_reload_after_reset")
+	else:
+		settings_feedback = "重开失败，原存档保持不变：" + str(result.get("error", "未知错误"))
+		if bool(result.get("reload_required", false)): call_deferred("_reload_after_reset")
+		else: refresh()
+
+func _reload_after_reset() -> void:
+	get_tree().reload_current_scene()
 
 func _clear_combat_stats() -> void:
 	battle.reset_combat_stats()
-	refresh()
+	update_stats_view()
 
 func exchange_actor(index: int, list: ItemList) -> void:
 	selected_party_actor = str(list.get_item_metadata(index))

@@ -15,6 +15,8 @@ var actor_role: Label
 var exp_bar: ProgressBar
 var exp_label: Label
 var portrait_box: Control
+var portrait_texture: TextureRect
+var portrait_placeholder: Label
 var slot_buttons: Dictionary = {}
 var tabs: TabContainer
 var stats_text: RichTextLabel
@@ -35,6 +37,7 @@ var skill_category_filter := "全部"
 func setup(owner_battle) -> void:
 	battle = owner_battle
 	layer = 40
+	ArtCatalogScript.reload()
 	build_ui()
 	# Hidden character UI used to rebuild the 76-skill list on every kill/save.
 	# That was the primary source of periodic battle hitches in long sessions.
@@ -134,6 +137,18 @@ func build_center_column(parent: HBoxContainer) -> void:
 	portrait_box = Control.new()
 	portrait_box.custom_minimum_size = Vector2(400, 450)
 	box.add_child(portrait_box)
+	portrait_texture = TextureRect.new()
+	portrait_texture.name = "CharacterPortrait"
+	portrait_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_box.add_child(portrait_texture)
+	portrait_placeholder = Label.new()
+	portrait_placeholder.name = "CharacterPortraitFallback"
+	portrait_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	portrait_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	portrait_placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_box.add_child(portrait_placeholder)
 	var positions := {
 		"main_hand": Vector2(4, 42), "off_hand": Vector2(4, 126), "helmet": Vector2(4, 210),
 		"armor": Vector2(288, 42), "gloves": Vector2(288, 126), "boots": Vector2(288, 210),
@@ -257,29 +272,19 @@ func refresh_center() -> void:
 	exp_bar.max_value = needed
 	exp_bar.value = xp
 	exp_label.text = "Lv.%d / 上限Lv.%d　经验 %d / %d（%.1f%%）" % [level, battle.progression.actor_level_cap(), xp, needed, 100.0 * xp / maxf(1.0, needed)]
-	for old in portrait_box.find_children("CharacterPortrait", "Control", false, false): old.queue_free()
-	var portrait := TextureRect.new()
-	portrait.name = "CharacterPortrait"
-	portrait.position = Vector2(115, 45)
-	portrait.size = Vector2(170, 270)
-	portrait.texture = ArtCatalogScript.texture("portraits", selected_actor)
-	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	portrait_box.add_child(portrait)
-	portrait_box.move_child(portrait, 0)
-	if portrait.texture == null:
-		var placeholder := Label.new()
-		placeholder.name = "CharacterPortrait"
-		placeholder.position = Vector2(115, 45)
-		placeholder.size = Vector2(170, 270)
-		placeholder.text = str(data.get("name", selected_actor)).substr(0, 1) + "\n立绘占位"
-		placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		V035ThemeScript.label(placeholder, 28, Color(data.get("color", "FFFFFF")))
-		portrait_box.add_child(placeholder)
-		portrait_box.move_child(placeholder, 0)
+	var layout := ArtCatalogScript.layout("portraits", selected_actor)
+	var scale := clampf(float(layout.get("scale", 1.0)), 0.25, 2.5)
+	var portrait_size := Vector2(170, 270) * scale
+	var portrait_position := Vector2(200, 180) - portrait_size * 0.5 + Vector2(float(layout.get("offset_x", 0.0)), float(layout.get("offset_y", 0.0)))
+	portrait_texture.position = portrait_position
+	portrait_texture.size = portrait_size
+	portrait_placeholder.position = portrait_position
+	portrait_placeholder.size = portrait_size
+	portrait_texture.texture = ArtCatalogScript.texture("portraits", selected_actor)
+	portrait_texture.visible = portrait_texture.texture != null
+	portrait_placeholder.visible = portrait_texture.texture == null
+	portrait_placeholder.text = "%s\n%s\n%s · 立绘待接入" % [str(data.get("name", selected_actor)).substr(0, 1), data.get("name", selected_actor), data.get("role", "未知定位")]
+	V035ThemeScript.label(portrait_placeholder, 22, Color(data.get("color", "FFFFFF")))
 	for slot in slot_buttons:
 		var item = battle.inventory.get_equipped_item(selected_actor, slot)
 		var button: Button = slot_buttons[slot]

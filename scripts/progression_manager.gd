@@ -9,6 +9,7 @@ const LEGACY_PATH := "user://wanjie_v07_progress.json"
 const LEGACY_V061_PATH := "user://wanjie_v061_progress.json"
 const MIGRATION_BACKUP_PATH := "user://wanjie_v07_progress.pre_v08_backup.json"
 const TEST_PATH := "user://wanjie_v08_test_progress.json"
+const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits"]
 
 var save_path := NORMAL_PATH
@@ -56,6 +57,7 @@ var camp_inventory: Dictionary = {"camp_flag": 1, "campfire": 1, "tent": 1, "ben
 var camp_layout: Array = []
 var achievements: Dictionary = {}
 var auto_push := true
+var combat_difficulty := 1.5
 var progression_config: Dictionary = {}
 
 func setup() -> void:
@@ -64,12 +66,12 @@ func setup() -> void:
 	var args := OS.get_cmdline_user_args()
 	var test_mode := false
 	for value in args:
-		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-"):
+		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-"):
 			test_mode = true
 			break
 	if test_mode:
 		save_path = TEST_PATH
-	if test_mode and "--v061-persist-read" not in args:
+	if test_mode and "--v061-persist-read" not in args and "--v07-persist-read" not in args and "--v08-persist-read" not in args and "--v081-reset-read" not in args:
 		clear_test_save()
 	var loaded := load_from_disk()
 	ensure_growth_layout()
@@ -514,9 +516,64 @@ func claim_offline_rewards() -> Dictionary:
 	save_to_disk()
 	return reward
 
+func set_combat_difficulty(value: float, autosave: bool = true) -> float:
+	combat_difficulty = snappedf(clampf(value, 0.5, 3.0), 0.1)
+	changed.emit()
+	if autosave: save_to_disk()
+	return combat_difficulty
+
+func reset_to_new_game() -> bool:
+	materials = {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0}
+	gold = 0
+	guide_step = 0
+	guide_finished = false
+	guide_skipped = false
+	guide_replay = false
+	roster = ["liu_bei"]
+	party = ["liu_bei", "", "", ""]
+	boss_first_clear = {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false}
+	strategy_presets = {"稳健": {"self_hp": 0.45, "ally_hp": 0.65, "enemy_count": 1}, "猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}}
+	active_strategy = "稳健"
+	actor_levels = {}
+	actor_experience = {}
+	skill_levels = {}
+	transaction_log = []
+	pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0}
+	last_seen_unix = int(Time.get_unix_time_from_system())
+	completed_stages = []
+	pokemon_world_unlocked = false
+	last_stage_id = "hulao_pass"
+	level_history = {}
+	learned_general_skills = {}
+	equipped_general_skills = {}
+	general_skill_levels = {}
+	skill_priorities = {}
+	skill_books = {}
+	special_items = {"recruit_ticket": 0, "camp_coupon": 0, "rift_key": 0}
+	collectibles = {}
+	rift_progress = {
+		"three_kingdoms": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
+		"pokemon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
+		"dragon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
+		"nsh": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+	}
+	encounter_state = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
+	encounter_log = []
+	encounter_counts = {}
+	camp_inventory = {"camp_flag": 1, "campfire": 1, "tent": 1, "bench": 1}
+	camp_layout = []
+	achievements = {}
+	auto_push = true
+	combat_difficulty = 1.5
+	ensure_growth_layout()
+	ensure_world_layout()
+	ensure_adventure_layout()
+	changed.emit()
+	return save_to_disk()
+
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -527,11 +584,11 @@ func save_to_disk() -> bool:
 
 func load_from_disk() -> bool:
 	var source_path := save_path
-	if not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and FileAccess.file_exists(LEGACY_PATH):
+	if not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and not FileAccess.file_exists(RESET_MARKER_PATH) and FileAccess.file_exists(LEGACY_PATH):
 		if not FileAccess.file_exists(MIGRATION_BACKUP_PATH):
 			DirAccess.copy_absolute(ProjectSettings.globalize_path(LEGACY_PATH), ProjectSettings.globalize_path(MIGRATION_BACKUP_PATH))
 		source_path = LEGACY_PATH
-	elif not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and FileAccess.file_exists(LEGACY_V061_PATH):
+	elif not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and not FileAccess.file_exists(RESET_MARKER_PATH) and FileAccess.file_exists(LEGACY_V061_PATH):
 		source_path = LEGACY_V061_PATH
 	if not FileAccess.file_exists(source_path):
 		return false
@@ -573,6 +630,7 @@ func apply_payload(parsed) -> bool:
 	camp_layout = parsed.get("camp_layout", [])
 	achievements = parsed.get("achievements", {})
 	auto_push = bool(parsed.get("auto_push", true))
+	combat_difficulty = snappedf(clampf(float(parsed.get("combat_difficulty", 1.5)), 0.5, 3.0), 0.1)
 	transaction_log = parsed.get("transaction_log", [])
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))

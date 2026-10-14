@@ -32,10 +32,32 @@ func record_skill(source_id: String) -> void:
 func record_kill(source_id: String) -> void:
 	ensure_actor(source_id).kills += 1
 
-func snapshot(elapsed: float) -> Dictionary:
+func snapshot(elapsed: float, tracked_ids: Array = []) -> Dictionary:
 	var duration := maxf(1.0, elapsed - started_at)
 	var copy := actors.duplicate(true)
+	for id in tracked_ids:
+		if not copy.has(id):
+			copy[id] = {"damage": 0.0, "basic": 0.0, "skill": 0.0, "effect": 0.0, "healing": 0.0, "taken": 0.0, "skills": 0, "kills": 0}
 	for id in copy:
 		copy[id].dps = float(copy[id].damage) / duration
-	return {"duration": duration, "actors": copy, "resources": resources.duplicate(true), "resources_per_minute": (resources.equipment + resources.materials) * 60.0 / duration}
+		copy[id].hps = float(copy[id].healing) / duration
+	var team := {"damage": 0.0, "healing": 0.0, "taken": 0.0, "skills": 0, "kills": 0, "dps": 0.0, "hps": 0.0}
+	var aggregate_ids: Array = tracked_ids if not tracked_ids.is_empty() else copy.keys()
+	for id in aggregate_ids:
+		var row: Dictionary = copy.get(id, {})
+		team.damage += float(row.get("damage", 0.0))
+		team.healing += float(row.get("healing", 0.0))
+		team.taken += float(row.get("taken", 0.0))
+		team.skills += int(row.get("skills", 0))
+		team.kills += int(row.get("kills", 0))
+	team.dps = team.damage / duration
+	team.hps = team.healing / duration
+	return {
+		"duration": duration,
+		"actors": copy,
+		"team": team,
+		"resources": resources.duplicate(true),
+		"resources_per_minute": (resources.equipment + resources.materials) * 60.0 / duration,
+		"equipment_per_minute": resources.equipment * 60.0 / duration
+	}
 

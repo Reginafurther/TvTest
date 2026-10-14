@@ -91,7 +91,10 @@ func resolve_rift_victory() -> Dictionary:
 	battle.progression.gold += gold
 	var material_id := str(config.rift.worlds[world_id].material)
 	battle.progression.materials[material_id] = int(battle.progression.materials.get(material_id, 0)) + material
-	if first: battle.progression.materials.rift_crystal = int(battle.progression.materials.get("rift_crystal", 0)) + int(reward_cfg.first_clear_crystal)
+	battle.combat_stats.resources.materials += material
+	if first:
+		battle.progression.materials.rift_crystal = int(battle.progression.materials.get("rift_crystal", 0)) + int(reward_cfg.first_clear_crystal)
+		battle.combat_stats.resources.materials += int(reward_cfg.first_clear_crystal)
 	var quality := "purple" if floor >= 10 else "blue" if floor >= 5 else "green"
 	var item: Dictionary = battle.equipment_generator.generate(maxi(1, floor), "%s第%d层" % [config.rift.worlds[world_id].name, floor], quality)
 	item["rift_floor"] = floor
@@ -99,7 +102,7 @@ func resolve_rift_victory() -> Dictionary:
 	if floor >= 5 and item.get("special_effects", []).is_empty():
 		var special_ids: Array = battle.special_config.get("effects", {}).keys()
 		if not special_ids.is_empty(): item.special_effects = [special_ids[floor % special_ids.size()]]
-	battle.inventory.add_item(item)
+	if battle.inventory.add_item(item): battle.combat_stats.resources.equipment += 1
 	if first and floor % 5 == 0: grant_furniture("rift_beacon", 1)
 	battle.progression.record_transaction("秘境结算", "%s第%d层%s" % [config.rift.worlds[world_id].name, floor, "首通" if first else "重复"], gold)
 	if bool(state.auto_climb) and floor < main_stage_cap(): state.selected_floor = floor + 1
@@ -164,10 +167,13 @@ func reward_for_encounter(event_id: String) -> Dictionary:
 	battle.progression.gold += int(reward.gold)
 	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token" if stage <= 20 else "dragon_blood_crystal" if stage <= 30 else "jianghu_token"
 	battle.progression.materials[material_id] = int(battle.progression.materials.get(material_id, 0)) + int(reward.material)
+	battle.combat_stats.resources.materials += int(reward.material)
 	if event_id in ["rare_elite", "chest_mimic", "hidden_boss"]:
 		var quality := "orange" if event_id == "hidden_boss" else "purple" if event_id == "chest_mimic" else "blue"
 		var item: Dictionary = battle.equipment_generator.generate(stage, "奇遇·%s" % config.encounters.types[event_id].name, quality)
-		battle.inventory.add_item(item); reward.equipment = item
+		if battle.inventory.add_item(item):
+			battle.combat_stats.resources.equipment += 1
+			reward.equipment = item
 	if event_id == "chest_mimic":
 		var skill_ids: Array = battle.general_skills_config.keys()
 		var book_id := str(skill_ids[randi() % skill_ids.size()]); battle.progression.skill_books[book_id] = int(battle.progression.skill_books.get(book_id, 0)) + 1; reward.skill_book = book_id

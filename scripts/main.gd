@@ -138,6 +138,14 @@ func _ready() -> void:
 		call_deferred("finish_v08_skills_test")
 	elif "--v08-systems-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v08_systems_test")
+	elif "--v081-ui-stats-art-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v081_ui_stats_art_test")
+	elif "--v081-difficulty-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v081_difficulty_test")
+	elif "--v081-reset-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v081_reset_test")
+	elif "--v081-reset-read" in OS.get_cmdline_user_args():
+		call_deferred("finish_v081_reset_read_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -336,13 +344,7 @@ func _show_loot(item: Dictionary) -> void:
 	loot_notice_time = 3.5
 
 func _open_settings() -> void:
-	var popup := ConfirmationDialog.new()
-	popup.title = "设置与新手引导"
-	popup.dialog_text = "游戏自动存档。按空格暂停或继续。\n点击“确定”可从头重新查看新手引导，不会重置存档。"
-	popup.confirmed.connect(func(): battle.progression.restart_guide(); popup.queue_free())
-	popup.canceled.connect(func(): popup.queue_free())
-	add_child(popup)
-	popup.popup_centered()
+	v03_ui.open_view("settings")
 
 func _save_v035_preview() -> void:
 	var path := "user://v035_preview.png"
@@ -2282,6 +2284,136 @@ func finish_v08_systems_test() -> void:
 	if failures.is_empty(): print("V08_SYSTEMS_TEST_PASS log_persistent=true bulk_sell_transaction=true equipped_protected=true v07_migration=true")
 	else:
 		for failure in failures: push_error("V08_SYSTEMS_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v081_ui_stats_art_test() -> void:
+	var failures: Array[String] = []
+	if not v03_ui.aux_root is ScrollContainer or v03_ui.aux_root.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_AUTO or v03_ui.aux_root.mouse_filter != Control.MOUSE_FILTER_STOP:
+		failures.append("右侧辅助功能栏未使用独立滚动容器")
+	v03_ui.apply_layout(Vector2(1440, 768), 1.0, 0.0, 570.0)
+	if v03_ui.aux_list.get_combined_minimum_size().y <= v03_ui.aux_root.size.y: failures.append("1440×768侧栏未形成可滚动区域")
+	v03_ui.apply_layout(Vector2(1920, 1080), 4.0 / 3.0, 0.0, 816.0)
+	if v03_ui.aux_root.position.y + v03_ui.aux_root.size.y * v03_ui.aux_root.scale.y > 1080.1: failures.append("1920×1080侧栏超出窗口底部")
+	if v03_ui.toolbar_buttons.stats.text != "战斗统计": failures.append("统计入口未正式命名为战斗统计")
+	battle.progression.roster = ["zhao_yun", "liu_bei", "zhang_fei", "zhuge_liang"]
+	battle.progression.party = battle.progression.roster.duplicate()
+	battle.progression.ensure_growth_layout()
+	battle.clear_combatants(); battle.spawn_party(); battle.combat_stats.reset(battle.elapsed)
+	var zhao = battle.get_hero("zhao_yun"); var liu = battle.get_hero("liu_bei")
+	var enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(330, 240)); enemy.max_hp = 100000.0; enemy.hp = enemy.max_hp; enemy.defense = 0.0
+	enemy.take_damage(250.0, zhao, false, {"kind":"basic", "allow_triggers":false})
+	zhao.hp = maxf(1.0, zhao.max_hp - 200.0); zhao.heal(120.0, liu)
+	battle.on_skill(zhao)
+	var summon = battle.spawn_unit("stage_guardian_pk", "heroes", Vector2(260, 240)); summon.is_summon = true; summon.summon_owner_id = "zhao_yun"
+	enemy.take_damage(80.0, summon, false, {"kind":"effect", "allow_triggers":false})
+	var snapshot: Dictionary = battle.stats_snapshot()
+	if float(snapshot.actors.zhao_yun.damage) < 330.0 or float(snapshot.actors.zhao_yun.basic) < 250.0 or float(snapshot.actors.zhao_yun.effect) < 80.0: failures.append("普攻/特效或召唤物归属统计错误")
+	if float(snapshot.actors.liu_bei.healing) != 120.0 or float(snapshot.actors.liu_bei.hps) <= 0.0: failures.append("有效治疗/HPS统计错误")
+	v03_ui.open_view("stats"); await get_tree().process_frame
+	if battle.is_paused: failures.append("打开战斗统计错误地暂停了战斗")
+	if v03_ui.stats_actor_rows.size() != 4: failures.append("当前四名角色未全部显示，含零数据角色")
+	var summary_instance: int = v03_ui.stats_summary.get_instance_id(); v03_ui.update_stats_view()
+	if v03_ui.stats_summary.get_instance_id() != summary_instance: failures.append("实时刷新重建了整个统计摘要控件")
+	var permanent := {"gold":battle.progression.gold, "roster":battle.progression.roster.duplicate(), "party":battle.progression.party.duplicate()}
+	battle.reset_combat_stats(); v03_ui.update_stats_view(); snapshot = battle.stats_snapshot()
+	if float(snapshot.team.damage) != 0.0 or int(snapshot.resources.equipment) != 0 or battle.progression.gold != permanent.gold or battle.progression.roster != permanent.roster or battle.progression.party != permanent.party: failures.append("清空统计影响永久进度或未清零")
+	character_ui.selected_actor = "zhao_yun"; character_ui.refresh_all()
+	var zhao_texture = character_ui.portrait_texture.texture
+	if zhao_texture == null or zhao_texture.get_width() != 1024 or zhao_texture.get_height() != 1536: failures.append("赵云正式半身立绘未实际加载")
+	character_ui.selected_actor = "liu_bei"; character_ui.refresh_all()
+	if character_ui.portrait_texture.texture == null or character_ui.portrait_texture.texture == zhao_texture: failures.append("刘备与赵云发生立绘串图")
+	character_ui.selected_actor = "zhang_fei"; character_ui.refresh_all()
+	if character_ui.portrait_texture.visible or not character_ui.portrait_placeholder.visible or "张飞" not in character_ui.portrait_placeholder.text: failures.append("缺图角色未显示自身占位信息")
+	if ArtCatalogScript.texture("units", "zhao_yun") == null: failures.append("赵云战斗贴图未加载")
+	if failures.is_empty(): print("V081_UI_STATS_ART_TEST_PASS sidebar_scroll=true stats_live=true dps_hps=true summon_owner=true reset_safe=true portraits_distinct=true zhao_portrait=1024x1536 zhao_unit=true")
+	else:
+		for failure in failures: push_error("V081_UI_STATS_ART_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v081_difficulty_test() -> void:
+	var failures: Array[String] = []
+	battle.clear_combatants(); battle.progression.set_combat_difficulty(1.0, false)
+	var baseline = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(300, 240))
+	var base := {"health":baseline.max_hp, "attack":baseline.attack, "defense":baseline.defense}
+	var hero_base = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 240)); var hero_attack: float = hero_base.attack
+	for coefficient in [0.5, 1.0, 1.5, 2.0, 3.0]:
+		battle.progression.set_combat_difficulty(coefficient, false); battle.clear_combatants()
+		var enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(300, 240)); var profile: Dictionary = battle.custom_difficulty_profile(coefficient)
+		if not is_equal_approx(enemy.max_hp / float(base.health), float(profile.health)) or not is_equal_approx(enemy.attack / float(base.attack), float(profile.attack)) or not is_equal_approx(enemy.defense / float(base.defense), float(profile.defense)): failures.append("难度%.1f×没有按统一公式进入敌人属性" % coefficient)
+		var before := Vector3(enemy.max_hp, enemy.attack, enemy.defense); battle.apply_custom_difficulty(enemy)
+		if Vector3(enemy.max_hp, enemy.attack, enemy.defense) != before: failures.append("难度%.1f×被重复叠加" % coefficient)
+		var hero = battle.spawn_unit("zhao_yun", "heroes", Vector2(200,240))
+		if not is_equal_approx(hero.attack, hero_attack): failures.append("难度%.1f×错误修改玩家属性" % coefficient)
+	battle.clear_combatants(); battle.progression.set_combat_difficulty(1.0, false)
+	var existing = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(300,240)); var existing_hp: float = existing.max_hp
+	battle.progression.set_combat_difficulty(3.0, false)
+	if existing.max_hp != existing_hp: failures.append("设置难度后修改了当前已生成敌人")
+	var next_enemy = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(330,240))
+	if float(next_enemy.get_meta("custom_difficulty_coefficient", 0.0)) != 3.0: failures.append("新难度未在下一只敌人生效")
+	battle.progression.set_combat_difficulty(2.0, true)
+	var loaded = ProgressionManagerScript.new(); loaded.save_path = ProgressionManagerScript.TEST_PATH
+	if not loaded.load_from_disk() or not is_equal_approx(loaded.combat_difficulty, 2.0): failures.append("难度系数未正确存档读取")
+	loaded.free()
+	var combat_results: Dictionary = {}
+	battle.suppress_combat_visuals = true
+	for coefficient in [0.5, 1.0, 1.5, 2.0, 3.0]:
+		battle.clear_combatants(); battle.progression.set_combat_difficulty(coefficient, false)
+		var hero = battle.spawn_unit("zhao_yun", "heroes", Vector2(250, 240)); var enemy = battle.spawn_unit("yellow_turban", "enemies", Vector2(292, 240)); hero.target = enemy; enemy.target = hero; hero.skill_timer = 999.0; enemy.skill_timer = 999.0
+		var seconds := 0.0
+		for _step in range(1200):
+			if hero.dead or enemy.dead: break
+			hero._physics_process(0.1); enemy._physics_process(0.1); seconds += 0.1
+		combat_results["%.1f" % coefficient] = {"seconds":snappedf(seconds, 0.1), "victory":enemy.dead and not hero.dead, "hero_remaining":snappedf(maxf(0.0, hero.hp), 0.1)}
+	print("V081_DIFFICULTY_COMBAT_RESULTS " + JSON.stringify(combat_results))
+	if failures.is_empty(): print("V081_DIFFICULTY_TEST_PASS presets=0.5,1.0,1.5,2.0,3.0 baseline=true next_spawn=true single_application=true heroes_unchanged=true persistence=true real_pipeline=true")
+	else:
+		for failure in failures: push_error("V081_DIFFICULTY_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v081_reset_test() -> void:
+	var failures: Array[String] = []
+	battle.progression.gold = 987
+	battle.progression.materials.three_kingdoms_token = 9
+	battle.progression.roster = ["liu_bei", "zhao_yun"]
+	battle.progression.party = ["zhao_yun", "liu_bei", "", ""]
+	battle.progression.actor_levels.zhao_yun = 12
+	battle.progression.completed_stages = range(1, 18)
+	battle.progression.combat_difficulty = 3.0
+	battle.progression.save_to_disk()
+	var item = battle.equipment_generator.generate(8, "V081重开备份", "purple", "main_hand"); battle.inventory.add_item(item)
+	var result: Dictionary = battle.safe_restart_game()
+	if not bool(result.get("ok", false)): failures.append("安全重开失败：" + str(result.get("error", "")))
+	var backup_path := str(result.get("backup_path", ""))
+	if backup_path.is_empty() or not FileAccess.file_exists(backup_path + "/backup_manifest.json"): failures.append("重开备份目录或清单不存在")
+	var p = battle.progression
+	if p.roster != ["liu_bei"] or p.party != ["liu_bei", "", "", ""] or p.actor_level("liu_bei") != 1 or p.gold != 0 or int(p.materials.three_kingdoms_token) != 150 or not p.completed_stages.is_empty() or not is_equal_approx(p.combat_difficulty, 1.5): failures.append("重开后的进度初始状态错误")
+	if not battle.inventory.items.is_empty(): failures.append("重开后背包不为空")
+	if not FileAccess.file_exists("user://wanjie_reset_test_marker.json"): failures.append("重开迁移阻断标记未写入")
+	for path in [ProgressionManagerScript.NORMAL_PATH, ProgressionManagerScript.LEGACY_PATH, ProgressionManagerScript.RESET_MARKER_PATH, InventoryManagerScript.SAVE_PATH, InventoryManagerScript.LEGACY_SAVE_PATH]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var legacy_progress := FileAccess.open(ProgressionManagerScript.LEGACY_PATH, FileAccess.WRITE); legacy_progress.store_string(JSON.stringify({"version":"0.7", "gold":777, "roster":["zhao_yun"], "party":["zhao_yun","","",""]})); legacy_progress.close()
+	var legacy_inventory := FileAccess.open(InventoryManagerScript.LEGACY_SAVE_PATH, FileAccess.WRITE); legacy_inventory.store_string(JSON.stringify({"version":"0.7", "items":[item], "equipped":{}})); legacy_inventory.close()
+	var normal_marker := FileAccess.open(ProgressionManagerScript.RESET_MARKER_PATH, FileAccess.WRITE); normal_marker.store_string("{\"version\":\"0.8.1-test\"}"); normal_marker.close()
+	var blocked_progress = ProgressionManagerScript.new(); blocked_progress.save_path = ProgressionManagerScript.NORMAL_PATH
+	var blocked_inventory = InventoryManagerScript.new(); blocked_inventory.setup(battle.equipment_config); blocked_inventory.save_path = InventoryManagerScript.SAVE_PATH
+	if blocked_progress.load_from_disk() or blocked_inventory.load_from_disk(): failures.append("重开标记未阻止V0.7/V0.6.1旧存档自动迁移")
+	blocked_progress.free(); blocked_inventory.free()
+	for path in [ProgressionManagerScript.NORMAL_PATH, ProgressionManagerScript.LEGACY_PATH, ProgressionManagerScript.RESET_MARKER_PATH, InventoryManagerScript.SAVE_PATH, InventoryManagerScript.LEGACY_SAVE_PATH]:
+		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	if failures.is_empty(): print("V081_RESET_TEST_PASS backup_verified=true inventory_empty=true liu_bei_level=1 tokens=150 gold=0 stages=0 difficulty=1.5 marker=true")
+	else:
+		for failure in failures: push_error("V081_RESET_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v081_reset_read_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	if p.roster != ["liu_bei"] or p.party != ["liu_bei", "", "", ""] or p.actor_level("liu_bei") != 1 or p.gold != 0 or int(p.materials.three_kingdoms_token) != 150 or not p.completed_stages.is_empty() or not is_equal_approx(p.combat_difficulty, 1.5): failures.append("重启后未保持全新进度")
+	if not battle.inventory.items.is_empty(): failures.append("重启后恢复了历史装备")
+	if int(p.pending_offline.seconds) != 0: failures.append("重启后重复产生旧离线收益")
+	if failures.is_empty(): print("V081_RESET_READ_TEST_PASS fresh_state_persistent=true legacy_not_restored=true offline_zero=true inventory_empty=true")
+	else:
+		for failure in failures: push_error("V081_RESET_READ_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
