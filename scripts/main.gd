@@ -203,7 +203,7 @@ func build_ui() -> void:
 	add_child(state_label)
 
 	stats_label = Label.new()
-	stats_label.text = "击败 0  ·  第 1 波  ·  00:00"
+	stats_label.text = "击败 0  ·  第 1/3 波  ·  00:00"
 	stats_label.size = Vector2(265, 30)
 	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	V035ThemeScript.label(stats_label, 15, Color("#FFF1D2"))
@@ -391,7 +391,10 @@ func _save_v06_character_preview(window_size: Vector2i, file_name: String) -> vo
 func update_stats(kills: int, elapsed: float, wave: int) -> void:
 	var minutes := int(elapsed) / 60
 	var seconds := int(elapsed) % 60
-	stats_label.text = "击败 %d  ·  第 %d 波  ·  %02d:%02d" % [kills, wave, minutes, seconds]
+	var total_waves := maxi(1, int(battle.worlds_config.maps.get(battle.current_map_id, {}).get("waves_to_clear", 3)))
+	var shown_wave := clampi(wave, 1, total_waves)
+	var boss_suffix := "：Boss" if battle.stage_boss_spawned and shown_wave == total_waves else ""
+	stats_label.text = "击败 %d  ·  第 %d/%d 波%s  ·  %02d:%02d" % [kills, shown_wave, total_waves, boss_suffix, minutes, seconds]
 
 func update_state(message: String) -> void:
 	state_label.text = "● " + message

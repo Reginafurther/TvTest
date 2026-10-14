@@ -57,6 +57,9 @@ var trigger_counts := {"crit_lightning": 0, "thorn_reflect": 0, "poison_spread":
 var passive_trigger_counts: Dictionary = {}
 var stage_cleared := false
 var stage_boss_active := false
+var stage_boss_spawned := false
+var stage_boss_defeated := false
+var stage_resolution_started := false
 var ai_trace: Array = []
 var ai_trace_timer := 0.0
 var ai_test_wave := 0
@@ -163,16 +166,24 @@ func spawn_party() -> void:
 	party_changed.emit(heroes)
 
 func spawn_wave() -> void:
-	if game_over or stage_cleared:
+	if game_over or stage_cleared or stage_resolution_started:
 		return
 	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
 	var target_wave := int(map_data.get("waves_to_clear", 3))
+	# `wave` is the next wave to spawn. Never allow an invalid (for example 4/3)
+	# wave to become a recovery path after the stage boss has already appeared.
+	if wave > target_wave:
+		if enemies.is_empty():
+			resolve_stage_wave()
+		return
 	if not str(map_data.get("main_boss", "")).is_empty() and wave == target_wave:
 		stage_boss_active = true
+		stage_boss_spawned = true
+		stage_boss_defeated = false
 		var stage := int(map_data.get("global_stage", 1))
-		var overrides: Dictionary = {}
+		var overrides: Dictionary = {"enemy_type":"boss", "stage_boss":true, "boss_id":"stage_%d" % stage, "boss_mechanic":map_data.get("boss_mechanic", ""), "world":map_data.get("world", "")}
 		if map_data.has("boss_name"):
-			overrides = {"name":map_data.boss_name, "skill":map_data.get("boss_skill", "enemy_strike"), "boss_mechanic":map_data.get("boss_mechanic", ""), "boss_id":"stage_%d" % stage}
+			overrides.merge({"name":map_data.boss_name, "skill":map_data.get("boss_skill", "enemy_strike")}, true)
 		var boss = spawn_unit(str(map_data.main_boss), "enemies", Vector2(875, 260), overrides)
 		boss.enemy_type = "boss"
 		boss.monster_level = stage
@@ -190,7 +201,10 @@ func spawn_wave() -> void:
 		log_message.emit("主线第 %d 关关底Boss登场：【%s】" % [stage, boss._name()])
 		wave += 1
 		return
-	var pool: Array = map_data.get("enemy_pool", ["yellow_turban"])
+	var pool := valid_mainline_enemy_pool(map_data)
+	if pool.is_empty():
+		push_error("主线关卡%s没有有效普通怪配置，已停止生成该波。" % current_map_id)
+		return
 	var count := mini(3 + wave, 9)
 	for i in range(count):
 		var id: String = pool[(i + wave) % pool.size()]
@@ -211,6 +225,20 @@ func spawn_wave() -> void:
 		enemy.attack *= 1.0 + (wave - 1) * 0.07
 	log_message.emit("第 %d 波敌人进入%s" % [wave, map_data.get("name", "地图")])
 	wave += 1
+
+func valid_mainline_enemy_pool(map_data: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for raw_id in map_data.get("enemy_pool", []):
+		var enemy_id := str(raw_id)
+		var data: Dictionary = actors.get(enemy_id, {})
+		var enemy_type := str(data.get("enemy_type", "normal"))
+		if not data.is_empty() and enemy_type in ["normal", "elite"] and not data.has("boss_id"):
+			result.append(enemy_id)
+	return result
+
+func current_stage_wave() -> int:
+	var total := maxi(1, int(worlds_config.maps.get(current_map_id, {}).get("waves_to_clear", 3)))
+	return clampi(wave - 1, 1, total)
 
 func difficulty_multiplier(curve_id: String, stage: int) -> float:
 	var curve: Dictionary = progression.progression_config.get("combat_difficulty", {}).get(curve_id, {})
@@ -301,7 +329,7 @@ func _process(delta: float) -> void:
 		if spawn_timer >= 2.2:
 			spawn_timer = 0.0
 			spawn_wave()
-	stats_changed.emit(kills, elapsed, wave - 1)
+	stats_changed.emit(kills, elapsed, current_stage_wave())
 
 func _store_combat_log(message: String) -> void:
 	combat_log.append("[%s] %s" % [Time.get_time_string_from_system(), message])
@@ -463,6 +491,9 @@ func _on_unit_died(unit) -> void:
 		if unit.reward_claimed:
 			return
 		unit.reward_claimed = true
+		if bool(unit.actor_data.get("stage_boss", false)):
+			stage_boss_defeated = true
+			stage_boss_active = false
 		enemies.erase(unit)
 		kills += 1
 		progression.add_gold(1 + int(worlds_config.maps.get(current_map_id, {}).get("level", 1)))
@@ -473,8 +504,9 @@ func _on_unit_died(unit) -> void:
 		for actor_id in progression.party:
 			if str(actor_id).is_empty():
 				continue
-			var earned_xp: int = progression.experience_for_kill(unit.monster_level, unit.enemy_type, progression.actor_level(actor_id))
-			if progression.add_actor_experience(actor_id, earned_xp, false, "%s Lv.%d" % [unit.enemy_type, unit.monster_level]):
+			var reward_type := combat_enemy_type(unit)
+			var earned_xp: int = progression.experience_for_kill(unit.monster_level, reward_type, progression.actor_level(actor_id))
+			if progression.add_actor_experience(actor_id, earned_xp, false, "%s Lv.%d" % [reward_type, unit.monster_level]):
 				leveled_actors.append(actor_id)
 				log_message.emit("★ %s升级至Lv.%d" % [actors.get(actor_id, {}).get("name", actor_id), progression.actor_level(actor_id)])
 		progression.changed.emit()
@@ -496,7 +528,7 @@ func _on_unit_died(unit) -> void:
 			if bool(state.auto_climb): call_deferred("continue_rift_auto", completed_world, int(state.selected_floor))
 			else: call_deferred("return_from_special_combat", true)
 			return
-		if not active_boss_id.is_empty() and unit.actor_data.has("boss_id"):
+		if not active_boss_id.is_empty() and combat_enemy_type(unit) == "boss":
 			resolve_boss_victory(active_boss_id)
 		else:
 			roll_equipment_drop(unit)
@@ -646,9 +678,7 @@ func roll_material_drop() -> void:
 	combat_stats.resources.materials += amount
 
 func roll_skill_book_drop(defeated_unit) -> void:
-	var chance := 0.025
-	if defeated_unit.enemy_type == "elite": chance = 0.14
-	if defeated_unit.enemy_type == "boss" or defeated_unit.actor_data.has("boss_id"): chance = 1.0
+	var chance := skill_book_drop_chance(defeated_unit)
 	if randf() > chance: return
 	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
 	var world_name := str(map_data.get("world", "三国"))
@@ -659,6 +689,16 @@ func roll_skill_book_drop(defeated_unit) -> void:
 	var skill_id: String = candidates[randi() % candidates.size()]
 	progression.grant_skill_book(skill_id, 1, defeated_unit._name())
 	log_message.emit("★ 获得技能书【%s】" % general_skills_config[skill_id].get("name", skill_id))
+
+func combat_enemy_type(unit) -> String:
+	var enemy_type := str(unit.enemy_type)
+	return enemy_type if enemy_type in ["normal", "elite", "boss"] else "normal"
+
+func skill_book_drop_chance(defeated_unit) -> float:
+	match combat_enemy_type(defeated_unit):
+		"elite": return 0.14
+		"boss": return 1.0
+	return 0.025
 
 func switch_map(map_id: String) -> bool:
 	if not worlds_config.maps.has(map_id):
@@ -715,6 +755,8 @@ func return_from_special_combat(success: bool) -> void:
 	adventure.active_rift.clear()
 	active_rift_context.clear()
 	clear_combatants()
+	wave = 1
+	stage_cleared = false
 	spawn_party()
 	if has_damage_dealer_in_party(): spawn_wave()
 	if success: battle_state_changed.emit("秘境结算完成 · 返回主线挂机")
@@ -735,11 +777,16 @@ func clear_combatants() -> void:
 	game_over = false
 	spawn_timer = 0.0
 	stage_boss_active = false
+	stage_boss_spawned = false
+	stage_boss_defeated = false
+	stage_resolution_started = false
 	stage_transition_timer = -1.0
 
 func rebuild_party() -> void:
 	clear_combatants()
 	active_boss_id = ""
+	wave = 1
+	stage_cleared = false
 	spawn_party()
 	if has_damage_dealer_in_party():
 		spawn_wave()
@@ -755,14 +802,26 @@ func has_damage_dealer_in_party() -> bool:
 			return true
 	return false
 
-func resolve_stage_wave(defeated_unit) -> void:
+func resolve_stage_wave(defeated_unit = null) -> void:
+	if stage_cleared or stage_resolution_started:
+		return
 	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
 	var active_wave := wave - 1
 	var target_wave := int(map_data.get("waves_to_clear", 3))
 	if active_wave < target_wave:
 		return
-	if not str(map_data.get("main_boss", "")).is_empty() and not defeated_unit.actor_data.has("boss_id"):
+	if not str(map_data.get("main_boss", "")).is_empty():
+		# Compatibility for deterministic callers that pass the defeated boss
+		# directly. Runtime progression records this at the boss's own death, so a
+		# later-dying summon cannot erase the result.
+		if defeated_unit != null and combat_enemy_type(defeated_unit) == "boss":
+			stage_boss_spawned = true
+			stage_boss_defeated = true
+		if not stage_boss_spawned or not stage_boss_defeated:
+			return
+	if not enemies.is_empty():
 		return
+	stage_resolution_started = true
 	var stage := int(map_data.get("global_stage", 1))
 	var first_clear: bool = not progression.is_stage_complete(stage)
 	if first_clear and progression.complete_stage(stage):

@@ -951,7 +951,7 @@ func on_boss_skill_cast() -> void:
 		for ally in battle.enemies:
 			if is_instance_valid(ally) and not ally.dead: alive_allies += 1
 		if alive_allies < 3:
-			var summon_id := "yellow_turban" if str(actor_data.get("world", "")) == "三国" else "zubat"
+			var summon_id := boss_minion_actor_id()
 			var minion = battle.spawn_unit(summon_id, "enemies", position + Vector2(randf_range(-65, 65), randf_range(-55, 55)))
 			minion.monster_level = monster_level; minion.max_hp *= 1.0 + monster_level * 0.08; minion.hp = minion.max_hp
 
@@ -960,10 +960,17 @@ func summon_boss_minion(poisonous: bool) -> void:
 	for ally in battle.enemies:
 		if is_instance_valid(ally) and not ally.dead: alive_allies += 1
 	if alive_allies >= 3: return
-	var summon_id := "yellow_turban" if str(actor_data.get("world", "")) in ["三国", "逆水寒"] else "zubat"
+	var summon_id := boss_minion_actor_id()
 	var minion = battle.spawn_unit(summon_id, "enemies", position + Vector2(randf_range(-60, 60), randf_range(-50, 50)))
 	minion.monster_level = monster_level; minion.max_hp *= 1.0 + monster_level * 0.06; minion.hp = minion.max_hp
 	if poisonous: minion.actor_data.boss_mechanic = "venom_strike"
+
+func boss_minion_actor_id() -> String:
+	match str(actor_data.get("world", "")):
+		"三国": return "yellow_turban"
+		"龙族": return "dragon_deadpool"
+		"逆水寒": return "jianghu_raider"
+	return "zubat"
 
 func apply_hard_control(duration: float) -> float:
 	# Boss hard-control duration diminishes per application and is capped cumulatively.
