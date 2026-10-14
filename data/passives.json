@@ -8,5 +8,15 @@
   "static_charge": {"name": "静电加速", "effect": "attack_speed", "value": 0.16, "per_level": 0.02, "description": "持续提高攻击速度与雷电节奏。"},
   "thick_fat": {"name": "厚脂守护", "effect": "health_regen", "value": 0.18, "regen": 2.0, "per_level": 0.02, "description": "提高最大生命并持续恢复。"},
   "poison_master": {"name": "剧毒蔓延", "effect": "poison_master", "value": 0.25, "per_level": 0.035, "description": "提高中毒伤害与持续时间。"},
-  "psychic_focus": {"name": "精神专注", "effect": "elemental_damage", "value": 0.20, "per_level": 0.03, "description": "持续提高技能与元素伤害。"}
+  "psychic_focus": {"name": "精神专注", "effect": "elemental_damage", "value": 0.20, "per_level": 0.03, "description": "持续提高技能与元素伤害。"},
+  "executioner": {"name":"武圣斩将","effect":"execute_damage","value":0.22,"per_level":0.025,"description":"攻击生命低于35%的敌人时提高伤害。"},
+  "eagle_eye": {"name":"老将鹰眼","effect":"armor_ignore","value":0.16,"per_level":0.02,"description":"远程攻击稳定忽略目标部分防御。"},
+  "moon_dance": {"name":"倾城舞姿","effect":"control_haste","value":0.08,"per_level":0.012,"description":"控制目标后推进全队主动技能冷却。"},
+  "burn_master": {"name":"都督火计","effect":"burn_master","value":0.24,"per_level":0.03,"description":"提高燃烧伤害，对燃烧目标额外增伤。"},
+  "leech_growth": {"name":"茂盛共生","effect":"health_regen","value":0.10,"regen":1.5,"per_level":0.015,"description":"提高生命并持续恢复，寄生治疗得到强化。"},
+  "flame_synergy": {"name":"猛火联动","effect":"burn_master","value":0.20,"per_level":0.028,"description":"提高燃烧伤害，对燃烧敌人的普攻更强。"},
+  "shell_armor": {"name":"硬壳护体","effect":"damage_reduction","value":0.12,"per_level":0.012,"description":"持续减伤；护盾存在时额外降低受到的伤害。"},
+  "aura_focus": {"name":"不屈波导","effect":"armor_ignore","value":0.12,"per_level":0.018,"description":"攻击忽略部分防御，技能命中更稳定。"},
+  "protective_heart": {"name":"同步守护","effect":"shield_healing","value":0.16,"per_level":0.02,"description":"提高自身施加的护盾和治疗量。"},
+  "dragon_resolve": {"name":"多重鳞片","effect":"high_hp_guard","value":0.16,"per_level":0.015,"description":"生命高于70%时获得额外减伤。"}
 }

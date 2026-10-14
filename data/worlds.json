@@ -603,6 +603,10 @@
         "three_kingdoms_token",
         120
       ],
+      "guan_yu": ["three_kingdoms_token", 55],
+      "huang_zhong": ["three_kingdoms_token", 50],
+      "diao_chan": ["three_kingdoms_token", 55],
+      "zhou_yu": ["three_kingdoms_token", 60],
       "pikachu": [
         "pokemon_token",
         40
@@ -618,7 +622,13 @@
       "mewtwo": [
         "pokemon_token",
         120
-      ]
+      ],
+      "bulbasaur": ["pokemon_token", 45],
+      "charmander": ["pokemon_token", 45],
+      "squirtle": ["pokemon_token", 50],
+      "lucario": ["pokemon_token", 60],
+      "gardevoir": ["pokemon_token", 60],
+      "dragonite": ["pokemon_token", 70]
     }
   }
 }

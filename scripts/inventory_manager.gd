@@ -5,10 +5,11 @@ signal inventory_changed
 signal equipment_changed(actor_id: String)
 signal save_completed(path: String)
 
-const SAVE_VERSION := "0.6.1"
-const SAVE_PATH := "user://wanjie_v061_inventory.json"
-const TEST_SAVE_PATH := "user://wanjie_v061_test_inventory.json"
-const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
+const SAVE_VERSION := "0.7"
+const SAVE_PATH := "user://wanjie_v07_inventory.json"
+const LEGACY_SAVE_PATH := "user://wanjie_v061_inventory.json"
+const TEST_SAVE_PATH := "user://wanjie_v07_test_inventory.json"
+const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite"]
 
 var config: Dictionary
 var items: Array = []
@@ -239,12 +240,14 @@ func save_to_disk() -> bool:
 
 func load_from_disk() -> bool:
 	var source_path := save_path
+	if not FileAccess.file_exists(source_path) and save_path == SAVE_PATH and FileAccess.file_exists(LEGACY_SAVE_PATH):
+		source_path = LEGACY_SAVE_PATH
 	if not FileAccess.file_exists(source_path):
 		ensure_equipment_layout()
 		return false
 	var file := FileAccess.open(source_path, FileAccess.READ)
 	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY or str(parsed.get("version", "")) != SAVE_VERSION:
+	if typeof(parsed) != TYPE_DICTIONARY or str(parsed.get("version", "")) not in [SAVE_VERSION, "0.6.1"]:
 		push_warning("存档格式无效，已忽略")
 		return false
 	items = parsed.get("items", [])

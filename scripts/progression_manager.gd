@@ -3,10 +3,11 @@ extends Node
 
 signal changed
 
-const VERSION := "0.6.1"
-const NORMAL_PATH := "user://wanjie_v061_progress.json"
-const TEST_PATH := "user://wanjie_v061_test_progress.json"
-const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "pikachu", "snorlax", "gengar", "mewtwo"]
+const VERSION := "0.7"
+const NORMAL_PATH := "user://wanjie_v07_progress.json"
+const LEGACY_PATH := "user://wanjie_v061_progress.json"
+const TEST_PATH := "user://wanjie_v07_test_progress.json"
+const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite"]
 
 var save_path := NORMAL_PATH
 var materials := {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0}
@@ -38,6 +39,18 @@ var equipped_general_skills: Dictionary = {}
 var general_skill_levels: Dictionary = {}
 var skill_priorities: Dictionary = {}
 var skill_books: Dictionary = {}
+var special_items: Dictionary = {"recruit_ticket": 0, "camp_coupon": 0, "rift_key": 0}
+var collectibles: Dictionary = {}
+var rift_progress: Dictionary = {
+	"three_kingdoms": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
+	"pokemon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+}
+var encounter_state: Dictionary = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
+var encounter_log: Array = []
+var encounter_counts: Dictionary = {}
+var camp_inventory: Dictionary = {"camp_flag": 1, "campfire": 1, "tent": 1, "bench": 1}
+var camp_layout: Array = []
+var achievements: Dictionary = {}
 var auto_push := true
 var progression_config: Dictionary = {}
 
@@ -47,7 +60,7 @@ func setup() -> void:
 	var args := OS.get_cmdline_user_args()
 	var test_mode := false
 	for value in args:
-		if str(value).begins_with("--v061-"):
+		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-"):
 			test_mode = true
 			break
 	if test_mode:
@@ -57,6 +70,7 @@ func setup() -> void:
 	var loaded := load_from_disk()
 	ensure_growth_layout()
 	ensure_world_layout()
+	ensure_adventure_layout()
 	var now := int(Time.get_unix_time_from_system())
 	if loaded and last_seen_unix > 0:
 		calculate_offline_rewards(now)
@@ -115,6 +129,23 @@ func ensure_world_layout() -> void:
 	pokemon_world_unlocked = 10 in completed_stages
 	if last_stage_id.is_empty():
 		last_stage_id = "hulao_pass"
+
+func ensure_adventure_layout() -> void:
+	var defaults := {
+		"three_kingdoms":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]},
+		"pokemon":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
+	}
+	for world_id in defaults:
+		if typeof(rift_progress.get(world_id, {})) != TYPE_DICTIONARY: rift_progress[world_id] = {}
+		for key in defaults[world_id]:
+			if not rift_progress[world_id].has(key): rift_progress[world_id][key] = defaults[world_id][key]
+		rift_progress[world_id].highest_clear = maxi(0, int(rift_progress[world_id].highest_clear))
+		rift_progress[world_id].selected_floor = maxi(1, int(rift_progress[world_id].selected_floor))
+		if typeof(rift_progress[world_id].first_clear_claimed) != TYPE_ARRAY: rift_progress[world_id].first_clear_claimed = []
+	if typeof(encounter_log) != TYPE_ARRAY: encounter_log = []
+	if typeof(camp_layout) != TYPE_ARRAY: camp_layout = []
+	for id in special_items: special_items[id] = maxi(0, int(special_items[id]))
+	for id in camp_inventory: camp_inventory[id] = maxi(0, int(camp_inventory[id]))
 
 func highest_unlocked_stage() -> int:
 	ensure_world_layout()
@@ -471,7 +502,7 @@ func claim_offline_rewards() -> Dictionary:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "auto_push": auto_push, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -481,15 +512,18 @@ func save_to_disk() -> bool:
 	return true
 
 func load_from_disk() -> bool:
-	if not FileAccess.file_exists(save_path):
+	var source_path := save_path
+	if not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and FileAccess.file_exists(LEGACY_PATH):
+		source_path = LEGACY_PATH
+	if not FileAccess.file_exists(source_path):
 		return false
-	return apply_payload(JSON.parse_string(FileAccess.get_file_as_string(save_path)))
+	return apply_payload(JSON.parse_string(FileAccess.get_file_as_string(source_path)))
 
 func apply_payload(parsed) -> bool:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
 	var payload_version := str(parsed.get("version", ""))
-	if payload_version != VERSION:
+	if payload_version not in [VERSION, "0.6.1"]:
 		return false
 	materials.merge(parsed.get("materials", {}), true)
 	gold = maxi(0, int(parsed.get("gold", 0)))
@@ -511,6 +545,15 @@ func apply_payload(parsed) -> bool:
 	general_skill_levels = parsed.get("general_skill_levels", {})
 	skill_priorities = parsed.get("skill_priorities", {})
 	skill_books = parsed.get("skill_books", {})
+	special_items.merge(parsed.get("special_items", {}), true)
+	collectibles = parsed.get("collectibles", {})
+	rift_progress.merge(parsed.get("rift_progress", {}), true)
+	encounter_state.merge(parsed.get("encounter_state", {}), true)
+	encounter_log = parsed.get("encounter_log", [])
+	encounter_counts = parsed.get("encounter_counts", {})
+	camp_inventory.merge(parsed.get("camp_inventory", {}), true)
+	camp_layout = parsed.get("camp_layout", [])
+	achievements = parsed.get("achievements", {})
 	auto_push = bool(parsed.get("auto_push", true))
 	transaction_log = parsed.get("transaction_log", [])
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
@@ -526,4 +569,5 @@ func apply_payload(parsed) -> bool:
 		party.resize(4)
 	ensure_growth_layout()
 	ensure_world_layout()
+	ensure_adventure_layout()
 	return true
