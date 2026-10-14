@@ -12,9 +12,10 @@
     "strategy": "res://assets/ui/functions/strategy_v06.svg",
     "pause": "res://assets/ui/functions/pause_v06.svg"
   },
-  "maps_ground": {"hulao_pass": "res://assets/maps/ground/hulao_pass_v035.png"},
+  "maps_ground": {"hulao_pass": "res://assets/maps/ground/hulao_pass_v06.png"},
   "maps_decor": {},
   "maps_obstacles": {"hulao_pass": "res://assets/maps/decor/boulder_cluster_v035.png"}
 }
+
 
 
