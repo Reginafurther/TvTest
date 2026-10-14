@@ -67,11 +67,11 @@ foreach ($id in $heroActors) {
 }
 
 $worlds = Get-Content -Raw -LiteralPath (Join-Path $root 'data/worlds.json') | ConvertFrom-Json
-if ($worlds.maps.PSObject.Properties.Count -ne 20) { throw 'V0.6 requires exactly twenty configured stages.' }
+if (@($worlds.maps.PSObject.Properties).Count -ne 20) { throw 'V0.6 requires exactly twenty configured stages.' }
 $globalStages = @($worlds.maps.PSObject.Properties.Value | ForEach-Object { [int]$_.global_stage } | Sort-Object)
 if (($globalStages -join ',') -ne ((1..20) -join ',')) { throw 'V0.6 global stage numbering must be exactly 1 through 20.' }
 $shop = Get-Content -Raw -LiteralPath (Join-Path $root 'data/shop.json') | ConvertFrom-Json
-if ($shop.products.PSObject.Properties.Count -lt 7) { throw 'V0.5 shop catalog is incomplete.' }
+if (@($shop.products.PSObject.Properties).Count -lt 7) { throw 'V0.5 shop catalog is incomplete.' }
 
 $equipment = Get-Content -Raw -LiteralPath (Join-Path $root 'data/equipment.json') | ConvertFrom-Json
 $requiredSlots = @('main_hand', 'off_hand', 'helmet', 'armor', 'gloves', 'boots', 'necklace', 'ring_1', 'ring_2')
@@ -126,3 +126,4 @@ if ($godotPath -and (Test-Path -LiteralPath $godotPath)) {
     Write-Host 'PASS: Files, actor/skill references, 9 slots, and 10 affix definitions are valid.' -ForegroundColor Green
     Write-Warning 'Godot was not found. Set GODOT_BIN to the Godot executable to run both runtime tests.'
 }
+
