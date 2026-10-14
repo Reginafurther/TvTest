@@ -7,6 +7,7 @@ const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 var battle
 var panel: PanelContainer
 var content: VBoxContainer
+var content_scroll: ScrollContainer
 var title: Label
 var current_view := ""
 var selected_item_id := ""
@@ -32,6 +33,11 @@ var skill_feedback := ""
 var rewards_feedback := ""
 var shop_icon_cache: Dictionary = {}
 var selected_party_actor := ""
+var scroll_positions: Dictionary = {}
+var recruit_list: ItemList
+var recruit_detail: Label
+var recruit_button: Button
+var recruit_list_scroll := 0.0
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -120,9 +126,16 @@ func build_panel() -> void:
 	close.text = "关闭"
 	close.pressed.connect(close_panel)
 	header.add_child(close)
+	content_scroll = ScrollContainer.new()
+	content_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content_scroll.follow_focus = true
+	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(content_scroll)
 	content = VBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(content)
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_scroll.add_child(content)
 	confirm_dialog = ConfirmationDialog.new()
 	confirm_dialog.title = "确认分解高品质装备"
 	confirm_dialog.confirmed.connect(confirm_dismantle)
@@ -168,6 +181,8 @@ func _perform_deferred_refresh() -> void:
 		refresh()
 
 func refresh() -> void:
+	if content_scroll != null and not current_view.is_empty():
+		scroll_positions[current_view] = content_scroll.scroll_vertical
 	clear_content()
 	match current_view:
 		"world": build_world()
@@ -180,6 +195,11 @@ func refresh() -> void:
 		"objectives": build_objectives()
 		"logs": build_logs()
 		"shop": build_shop()
+	call_deferred("_restore_scroll_position", current_view)
+
+func _restore_scroll_position(view: String) -> void:
+	if panel.visible and current_view == view and content_scroll != null:
+		content_scroll.scroll_vertical = int(scroll_positions.get(view, 0))
 
 func build_rewards() -> void:
 	title.text = "挂机收益"
@@ -409,23 +429,30 @@ func build_recruit() -> void:
 	var info := Label.new()
 	info.text = "虎符：%d　精灵结晶：%d　已招募：%d/10\n新角色统一使用世界材料定向招募。" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.roster.size()]
 	content.add_child(info)
-	var feedback := Label.new()
-	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	feedback.text = recruit_feedback if not recruit_feedback.is_empty() else "单击角色选择上阵对象；双击未获得角色可消耗材料招募。"
-	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
-	content.add_child(feedback)
-	var list := ItemList.new()
-	list.custom_minimum_size = Vector2(0, 160)
+	recruit_detail = Label.new()
+	recruit_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	recruit_detail.text = recruit_feedback if not recruit_feedback.is_empty() else "单击角色查看详情，再点击明确的招募按钮；选择不会刷新或跳回顶部。"
+	recruit_detail.add_theme_color_override("font_color", Color("#FFD27A"))
+	content.add_child(recruit_detail)
+	recruit_list = ItemList.new()
+	recruit_list.custom_minimum_size = Vector2(0, 185)
 	for actor_id in battle.worlds_config.recruitment.costs:
 		var cost: Array = battle.worlds_config.recruitment.costs[actor_id]
 		var owned: bool = actor_id in p.roster
 		var legendary_locked: bool = actor_id in ["lu_bu", "mewtwo"] and not bool(p.boss_first_clear.get("lu_bu" if actor_id == "lu_bu" else "mewtwo", false))
 		var state: String = "已招募" if owned else "需先击败对应Boss" if legendary_locked else "%s ×%d" % [material_name(cost[0]), cost[1]]
-		var idx := list.add_item("%s · %s" % [battle.actors[actor_id].name, state])
-		list.set_item_metadata(idx, actor_id)
-	list.item_selected.connect(func(index): selected_party_actor = str(list.get_item_metadata(index)); recruit_feedback = "已选择%s；可招募或放入下方任一位置。" % battle.actors[selected_party_actor].name; refresh())
-	list.item_activated.connect(exchange_actor.bind(list))
-	content.add_child(list)
+		var idx := recruit_list.add_item("%s · %s" % [battle.actors[actor_id].name, state])
+		recruit_list.set_item_metadata(idx, actor_id)
+		if actor_id == selected_party_actor: recruit_list.select(idx)
+	recruit_list.item_selected.connect(_select_recruit_actor.bind(recruit_list))
+	content.add_child(recruit_list)
+	call_deferred("_restore_recruit_list_scroll")
+	recruit_button = Button.new()
+	recruit_button.text = "请先选择角色"
+	recruit_button.disabled = true
+	recruit_button.pressed.connect(_recruit_selected_actor)
+	content.add_child(recruit_button)
+	_update_recruit_selection_ui()
 	var hint := Label.new()
 	hint.text = "编队最多4人且允许空位。替换后立即重建战场；等级、装备和技能归属不会改变。"
 	content.add_child(hint)
@@ -450,6 +477,50 @@ func build_recruit() -> void:
 		clear.pressed.connect(clear_party_slot.bind(i))
 		row.add_child(clear)
 		grid.add_child(row)
+
+func _select_recruit_actor(index: int, list: ItemList) -> void:
+	recruit_list_scroll = list.get_v_scroll_bar().value
+	selected_party_actor = str(list.get_item_metadata(index))
+	recruit_feedback = "已选择%s；查看价格后点击招募，已拥有角色可直接在下方上阵。" % battle.actors[selected_party_actor].name
+	_update_recruit_selection_ui()
+
+func _update_recruit_selection_ui() -> void:
+	if recruit_button == null or recruit_detail == null or selected_party_actor.is_empty():
+		return
+	var p = battle.progression
+	var actor: Dictionary = battle.actors[selected_party_actor]
+	var cost: Array = battle.worlds_config.recruitment.costs[selected_party_actor]
+	var owned: bool = selected_party_actor in p.roster
+	var legendary_locked: bool = selected_party_actor in ["lu_bu", "mewtwo"] and not bool(p.boss_first_clear.get("lu_bu" if selected_party_actor == "lu_bu" else "mewtwo", false))
+	var current_amount: int = int(p.materials.get(str(cost[0]), 0))
+	recruit_detail.text = "%s｜%s｜%s\n消耗：%s ×%d　当前持有：%d\n%s" % [actor.name, actor.get("role", "冒险者"), actor.get("world", ""), material_name(str(cost[0])), int(cost[1]), current_amount, recruit_feedback]
+	if owned:
+		recruit_button.text = "已招募｜请在下方选择上阵位置"
+		recruit_button.disabled = true
+	elif legendary_locked:
+		recruit_button.text = "需先击败对应世界Boss"
+		recruit_button.disabled = true
+	elif current_amount < int(cost[1]):
+		recruit_button.text = "招募：%d%s｜材料不足（当前%d）" % [int(cost[1]), material_name(str(cost[0])), current_amount]
+		recruit_button.disabled = true
+	else:
+		recruit_button.text = "招募：%d%s" % [int(cost[1]), material_name(str(cost[0]))]
+		recruit_button.disabled = false
+
+func _recruit_selected_actor() -> void:
+	if selected_party_actor.is_empty(): return
+	recruit_list_scroll = recruit_list.get_v_scroll_bar().value if recruit_list != null else recruit_list_scroll
+	var cost: Array = battle.worlds_config.recruitment.costs[selected_party_actor]
+	if battle.progression.exchange_actor(selected_party_actor, str(cost[0]), int(cost[1])):
+		recruit_feedback = "材料招募成功：%s。请选择下方位置上阵。" % battle.actors[selected_party_actor].name
+		battle.log_message.emit("定向招募：%s" % battle.actors[selected_party_actor].name)
+	else:
+		recruit_feedback = "%s不足，无法定向招募%s。" % [material_name(str(cost[0])), battle.actors[selected_party_actor].name]
+	refresh()
+
+func _restore_recruit_list_scroll() -> void:
+	if recruit_list != null and is_instance_valid(recruit_list):
+		recruit_list.get_v_scroll_bar().value = recruit_list_scroll
 
 func build_craft() -> void:
 	title.text = "装备分解与词条重铸"
@@ -595,6 +666,11 @@ func _upgrade_selected_skill(kind: String) -> void:
 
 func build_stats() -> void:
 	title.text = "实时战斗统计"
+	var clear := Button.new()
+	clear.text = "清空本次统计"
+	clear.tooltip_text = "仅重置伤害、治疗、承伤、技能、击杀和统计时间；不影响任何成长与奖励。"
+	clear.pressed.connect(_clear_combat_stats)
+	content.add_child(clear)
 	var snap: Dictionary = battle.stats_snapshot()
 	var text := RichTextLabel.new(); text.bbcode_enabled = true; text.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	text.text = "本场实时统计 %.1f 秒　装备 %d 件　材料 %d 个　收益 %.1f 件/分钟\nDPS = 每秒平均伤害；换地图/重开后从零统计。\n\n" % [snap.duration, snap.resources.equipment, snap.resources.materials, snap.resources_per_minute]
@@ -603,18 +679,13 @@ func build_stats() -> void:
 		text.append_text("[b]%s[/b]　伤害 %.0f　DPS %.1f　普攻 %.0f　技能 %.0f　特效 %.0f　治疗 %.0f　承伤 %.0f　技能%d　击杀%d\n" % [battle.actors.get(actor_id, {"name": actor_id}).name, row.damage, row.dps, row.basic, row.skill, row.effect, row.healing, row.taken, row.skills, row.kills])
 	content.add_child(text)
 
-func exchange_actor(index: int, list: ItemList) -> void:
-	var id: String = list.get_item_metadata(index)
-	var cost: Array = battle.worlds_config.recruitment.costs[id]
-	if id in battle.progression.roster:
-		recruit_feedback = "%s已经加入冒险团。" % battle.actors[id].name
-	elif battle.progression.exchange_actor(id, cost[0], int(cost[1])):
-		selected_party_actor = id
-		recruit_feedback = "材料招募成功：%s。请选择下方位置上阵。" % battle.actors[id].name
-		battle.log_message.emit("定向招募：%s" % battle.actors[id].name)
-	else:
-		recruit_feedback = "%s不足，无法定向招募%s。" % [material_name(cost[0]), battle.actors[id].name]
+func _clear_combat_stats() -> void:
+	battle.reset_combat_stats()
 	refresh()
+
+func exchange_actor(index: int, list: ItemList) -> void:
+	selected_party_actor = str(list.get_item_metadata(index))
+	_recruit_selected_actor()
 
 func assign_selected_party(index: int) -> void:
 	if battle.progression.set_party_member(index, selected_party_actor):

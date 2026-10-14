@@ -58,6 +58,12 @@ var ai_trace: Array = []
 var ai_trace_timer := 0.0
 var ai_test_wave := 0
 var stage_transition_timer := -1.0
+var damage_trace: Array = []
+var zero_damage_streaks: Dictionary = {}
+var damage_anomalies: Array = []
+var suppress_combat_visuals := false
+var party_hud_dirty := false
+var party_hud_timer := 0.0
 
 func _ready() -> void:
 	actors = DataLoaderScript.load_json("res://data/actors.json")
@@ -145,10 +151,16 @@ func spawn_wave() -> void:
 		boss.enemy_type = "boss"
 		boss.monster_level = stage
 		if str(map_data.main_boss).begins_with("stage_guardian"):
-			boss.max_hp *= 1.0 + stage * 0.35
+			boss.max_hp *= difficulty_multiplier("guardian_health", stage)
 			boss.hp = boss.max_hp
-			boss.attack *= 1.0 + stage * 0.075
-			boss.defense *= 1.0 + stage * 0.055
+			boss.attack *= difficulty_multiplier("guardian_attack", stage)
+			boss.defense *= difficulty_multiplier("guardian_defense", stage)
+		else:
+			var final_scale: Dictionary = progression.progression_config.get("combat_difficulty", {}).get("final_boss", {}).get(str(stage), {})
+			boss.max_hp *= float(final_scale.get("health", 1.0))
+			boss.hp = boss.max_hp
+			boss.attack *= float(final_scale.get("attack", 1.0))
+			boss.defense *= float(final_scale.get("defense", 1.0))
 		log_message.emit("主线第 %d 关关底Boss登场：【%s】" % [stage, boss._name()])
 		wave += 1
 		return
@@ -160,9 +172,9 @@ func spawn_wave() -> void:
 		var enemy = spawn_unit(id, "enemies", pos)
 		var difficulty := int(map_data.get("difficulty_level", map_data.get("level", 1)))
 		enemy.monster_level = difficulty
-		enemy.max_hp *= 1.0 + (difficulty - 1) * 0.18
-		enemy.attack *= 1.0 + (difficulty - 1) * 0.11
-		enemy.defense *= 1.0 + (difficulty - 1) * 0.08
+		enemy.max_hp *= difficulty_multiplier("regular_health", difficulty)
+		enemy.attack *= difficulty_multiplier("regular_attack", difficulty)
+		enemy.defense *= difficulty_multiplier("regular_defense", difficulty)
 		if wave >= 2 and i == count - 1:
 			enemy.enemy_type = "elite"
 			enemy.max_hp *= 1.75
@@ -173,6 +185,11 @@ func spawn_wave() -> void:
 		enemy.attack *= 1.0 + (wave - 1) * 0.07
 	log_message.emit("第 %d 波敌人进入%s" % [wave, map_data.get("name", "地图")])
 	wave += 1
+
+func difficulty_multiplier(curve_id: String, stage: int) -> float:
+	var curve: Dictionary = progression.progression_config.get("combat_difficulty", {}).get(curve_id, {})
+	var step := maxf(0.0, float(stage - 1))
+	return 1.0 + step * float(curve.get("linear", 0.0)) + step * step * float(curve.get("quadratic", 0.0))
 
 func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary = {}):
 	var unit = BattleUnitScript.new()
@@ -201,6 +218,11 @@ func _process(delta: float) -> void:
 	if is_paused or game_over:
 		return
 	elapsed += delta
+	party_hud_timer = maxf(0.0, party_hud_timer - delta)
+	if party_hud_dirty and party_hud_timer <= 0.0:
+		party_hud_dirty = false
+		party_hud_timer = 0.1
+		party_changed.emit(heroes)
 	if stage_transition_timer >= 0.0:
 		stage_transition_timer -= delta
 		if stage_transition_timer <= 0.0:
@@ -402,8 +424,12 @@ func _on_unit_died(unit) -> void:
 func _on_combat_event(message: String) -> void:
 	log_message.emit(message)
 
-func _on_health_changed(_unit) -> void:
-	party_changed.emit(heroes)
+func _on_health_changed(unit) -> void:
+	# Enemy HP already redraws on its own unit. Rebuilding the full party HUD for
+	# every enemy hit (especially multi-hit/DoT) caused escalating UI work and
+	# made long battles look as if attacks no longer reached damage settlement.
+	if is_instance_valid(unit) and unit.faction == "heroes":
+		party_hud_dirty = true
 
 func _on_equipment_changed(actor_id: String) -> void:
 	for hero in heroes:
@@ -619,6 +645,34 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		if target.passive_data.get("effect", "") == "low_hp_rage": target.battle.note_passive(target.actor_id, target.passive_skill_id)
 		source.take_damage(amount * reflect_power, target, false, {"kind": "effect", "allow_triggers": false})
 
+func record_damage_resolution(source, target, result: Dictionary, context: Dictionary) -> void:
+	var source_id: String = source.actor_id if is_instance_valid(source) else ""
+	var target_id: String = target.actor_id if is_instance_valid(target) else ""
+	var row := {
+		"time":elapsed, "attacker":source_id, "target":target_id,
+		"target_hp":float(result.get("hp_before", 0.0)), "attack_type":str(context.get("kind", "unknown")),
+		"skill_id":str(context.get("skill_id", "")), "raw":float(result.get("raw", 0.0)),
+		"defense":float(result.get("defense", 0.0)), "reduction":float(result.get("reduction", 0.0)),
+		"shield_absorbed":float(result.get("shield_absorbed", 0.0)), "hp_damage":float(result.get("hp_damage", 0.0)),
+		"reason":str(result.get("reason", "unknown")), "stage":int(worlds_config.maps.get(current_map_id, {}).get("global_stage", 1)),
+		"wave":maxi(1, wave - 1)
+	}
+	damage_trace.append(row)
+	if damage_trace.size() > 600: damage_trace.pop_front()
+	if source_id.is_empty() or target_id.is_empty(): return
+	var key := source_id + "->" + target_id
+	var effective := float(row.hp_damage) + float(row.shield_absorbed)
+	if effective > 0.0 or row.reason in ["evaded", "target_dead"]:
+		zero_damage_streaks[key] = 0
+		return
+	zero_damage_streaks[key] = int(zero_damage_streaks.get(key, 0)) + 1
+	if int(zero_damage_streaks[key]) >= 3:
+		var diagnostic: Dictionary = row.duplicate(true)
+		diagnostic["streak"] = int(zero_damage_streaks[key])
+		damage_anomalies.append(diagnostic)
+		if damage_anomalies.size() > 60: damage_anomalies.pop_front()
+		push_warning("ZERO_DAMAGE_DIAGNOSTIC %s" % JSON.stringify(diagnostic))
+
 func on_heal(source, amount: float) -> void:
 	if is_instance_valid(source):
 		combat_stats.record_heal(source.actor_id, amount)
@@ -649,6 +703,10 @@ func propagate_poison(dead_unit) -> void:
 func stats_snapshot() -> Dictionary:
 	return combat_stats.snapshot(elapsed)
 
+func reset_combat_stats() -> void:
+	combat_stats.reset(elapsed)
+	log_message.emit("本次实时战斗统计已清空；战斗与永久成长不受影响。")
+
 func note_effect(id: String) -> void:
 	trigger_counts[id] = int(trigger_counts.get(id, 0)) + 1
 
@@ -664,6 +722,7 @@ func party_passive_value(effect: String) -> float:
 	return total
 
 func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
+	if suppress_combat_visuals: return
 	var line := Line2D.new()
 	line.points = PackedVector2Array([from, to])
 	line.width = 3.0
@@ -674,6 +733,7 @@ func spawn_tracer(from: Vector2, to: Vector2, color: Color) -> void:
 	tween.tween_callback(line.queue_free)
 
 func spawn_ring(at: Vector2, color: Color) -> void:
+	if suppress_combat_visuals: return
 	var ring = EffectRingScript.new()
 	ring.position = at
 	ring.tint = color

@@ -3,5 +3,15 @@
   "experience_curve": {"base": 180, "linear": 90, "quadratic": 25},
   "kill_experience": {"base": 3.0, "per_monster_level": 1.2, "elite_multiplier": 3.0, "boss_multiplier": 10.0},
   "low_stage_farm": {"free_level_gap": 2, "penalty_per_level": 0.16, "minimum_multiplier": 0.08},
-  "cap_storage_ratio": 0.25
+  "cap_storage_ratio": 0.25,
+  "general_skill_upgrade": {"max_level": 10, "gold_base": 80, "gold_linear": 55, "gold_quadratic": 10, "duplicate_book_recycle_gold": 45},
+  "combat_difficulty": {
+    "regular_health": {"linear": 0.17, "quadratic": 0.020},
+    "regular_attack": {"linear": 0.10, "quadratic": 0.012},
+    "regular_defense": {"linear": 0.08, "quadratic": 0.008},
+    "guardian_health": {"linear": 0.55, "quadratic": 0.060},
+    "guardian_attack": {"linear": 0.12, "quadratic": 0.012},
+    "guardian_defense": {"linear": 0.10, "quadratic": 0.008},
+    "final_boss": {"10": {"health": 2.4, "attack": 1.7, "defense": 1.5}, "20": {"health": 4.2, "attack": 2.5, "defense": 2.0}}
+  }
 }

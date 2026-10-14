@@ -133,7 +133,7 @@ func item_score(item: Dictionary, combat_role: String = "") -> float:
 	for stat_id in weights: score += float(stats.get(stat_id, 0.0)) * float(weights[stat_id])
 	return score
 
-func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: int = 3, combat_role: String = "") -> Array:
+func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: int = 9, combat_role: String = "") -> Array:
 	var choices: Array = []
 	var chosen_ids: Array = []
 	if not equipped.has(actor_id):
@@ -169,7 +169,7 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: i
 
 func apply_optimization(actor_id: String, choices: Array) -> int:
 	var applied := 0
-	for choice in choices.slice(0, 3):
+	for choice in choices:
 		var item = find_item(str(choice.instance_id))
 		if item == null or bool(item.get("locked", false)):
 			continue

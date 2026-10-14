@@ -114,6 +114,10 @@ func _ready() -> void:
 		call_deferred("finish_v061_economy_test")
 	elif "--v061-core-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v061_core_test")
+	elif "--v061-playtest-fixes-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_playtest_fixes_test")
+	elif "--v061-long-combat-test" in OS.get_cmdline_user_args():
+		call_deferred("finish_v061_long_combat_test")
 	elif "--v031-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v031_test")
 	elif "--v03-persist-write" in OS.get_cmdline_user_args():
@@ -1532,7 +1536,7 @@ func finish_v061_skill_test() -> void:
 	p.general_skill_levels.zhao_yun = {}
 	p.skill_books.clear()
 	p.gold = 5000
-	# 技能书是学习与升级的唯一入口；重复书用于升级，不生成第二份技能。
+	# 技能书只用于学习；升级只消耗金币，多余技能书可回收。
 	for skill_id in active_ids.slice(0, 4) + passive_ids.slice(0, 5): p.grant_skill_book(skill_id, 1, "test")
 	for index in range(4):
 		var skill_id: String = active_ids[index]
@@ -1546,8 +1550,12 @@ func finish_v061_skill_test() -> void:
 		failures.append("通用技能槽上限不是3主动+4被动")
 	var upgrade_id: String = active_ids[0]
 	p.grant_skill_book(upgrade_id, 1, "duplicate_test")
-	if not p.upgrade_general_skill("zhao_yun", upgrade_id) or p.general_skill_level("zhao_yun", upgrade_id) != 2 or p.skill_book_count(upgrade_id) != 0:
-		failures.append("重复技能书未正确用于技能升级")
+	var upgrade_cost: int = p.general_skill_upgrade_cost("zhao_yun", upgrade_id)
+	var gold_before_upgrade: int = p.gold
+	if not p.upgrade_general_skill("zhao_yun", upgrade_id) or p.general_skill_level("zhao_yun", upgrade_id) != 2 or p.skill_book_count(upgrade_id) != 1 or p.gold != gold_before_upgrade - upgrade_cost:
+		failures.append("通用技能未按仅金币规则升级或错误消耗技能书")
+	if p.recycle_skill_book(upgrade_id, 1) <= 0 or p.skill_book_count(upgrade_id) != 0:
+		failures.append("多余技能书无法回收")
 	# 商店技能书与战利品技能书进入同一个库存。
 	var books_before: int = p.skill_book_count("tk_triple_slash")
 	if battle.shop.buy("book_triple_slash", 1).is_empty() or p.skill_book_count("tk_triple_slash") != books_before + 1:
@@ -1737,12 +1745,17 @@ func finish_v061_economy_test() -> void:
 	for item in [purple_current, blue_upgrade, locked_best, other_owner]: inventory.add_item(item, false)
 	inventory.equip_item("zhao_yun", purple_current.instance_id, "main_hand")
 	inventory.equip_item("liu_bei", other_owner.instance_id, "main_hand")
-	var choices: Array = inventory.optimize_candidates("zhao_yun", 0, 3, "melee_dps")
-	if choices.size() > 3 or choices.is_empty(): failures.append("一键优化为空或超过3件")
+	for slot in battle.equipment_config.slots:
+		if slot == "main_hand": continue
+		var extra: Dictionary = battle.equipment_generator.generate(8, "全栏优化" + str(slot), "blue", str(slot))
+		extra.base_stats = {"attack":30.0,"health":40.0}
+		inventory.add_item(extra, false)
+	var choices: Array = inventory.optimize_candidates("zhao_yun", 0, 9, "melee_dps")
+	if choices.size() != 9: failures.append("一键优化未覆盖全部9个正收益栏位：%d/9" % choices.size())
 	var choice_ids: Array = choices.map(func(choice): return str(choice.instance_id))
 	if blue_upgrade.instance_id not in choice_ids: failures.append("蓝色装备属性更优时未被推荐")
 	if locked_best.instance_id in choice_ids or other_owner.instance_id in choice_ids: failures.append("一键优化使用了锁定或其他角色装备")
-	if inventory.apply_optimization("zhao_yun", choices) < 1 or inventory.get_equipped_item("zhao_yun", "main_hand").instance_id != blue_upgrade.instance_id:
+	if inventory.apply_optimization("zhao_yun", choices) != 9 or inventory.get_equipped_item("zhao_yun", "main_hand").instance_id != blue_upgrade.instance_id:
 		failures.append("一键优化没有真实替换装备")
 	inventory.add_item(sellable, false)
 	var health_item: Dictionary = {"base_stats":{"health":100.0}}
@@ -1783,7 +1796,7 @@ func finish_v061_economy_test() -> void:
 		failures.append("交易记录或背包出售结果未持久化")
 	reload_progress.free(); reload_inventory.free()
 	if failures.is_empty():
-		print("V061_ECONOMY_TEST_PASS optimize=all_quality role_scoring=true max3=true locked_excluded=true no_steal=true shop_filter=true live_refresh=true bottom_validation=true persistence=true")
+		print("V061_ECONOMY_TEST_PASS optimize=all_quality role_scoring=true all9=true locked_excluded=true no_steal=true shop_filter=true live_refresh=true bottom_validation=true persistence=true")
 	else:
 		for failure in failures: push_error("V061_ECONOMY_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
@@ -1857,6 +1870,181 @@ func finish_v061_core_test() -> void:
 		print("V061_CORE_TEST_PASS drop=true character_ui_equip=true replace=true unequip=true combat_stats_refresh=true equipment_persistence=true offline_once=true xp_isolated=true layouts=1440x768,1920x1080")
 	else:
 		for failure in failures: push_error("V061_CORE_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_playtest_fixes_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	# 护盾必须明确吸收并到期；多层减伤后有效命中仍至少结算1点，而非静默归零。
+	battle.clear_combatants()
+	var attacker = battle.spawn_unit("zhao_yun", "heroes", Vector2(200, 200))
+	var defender = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(250, 200))
+	defender.add_shield(100.0, 0.2)
+	var shield_result: Dictionary = defender.take_damage(50.0, attacker, false, {"kind":"skill", "skill_id":"test_shield", "allow_triggers":false})
+	if shield_result.reason != "shield_absorbed" or float(shield_result.shield_absorbed) <= 0.0 or defender.hp != defender.max_hp:
+		failures.append("护盾吸收未返回明确原因或错误扣除生命")
+	defender.shield_time = 0.01
+	defender._physics_process(0.02)
+	if defender.shield > 0.0: failures.append("限时护盾未正常消散")
+	defender.defense = 9999.0
+	defender.apply_damage_reduction(0.85, 2.0)
+	var reduced_result: Dictionary = defender.take_damage(10.0, attacker, false, {"kind":"basic", "allow_triggers":false})
+	if float(reduced_result.hp_damage) < 1.0 or reduced_result.reason != "applied": failures.append("多层减伤仍会把有效命中静默取整为0")
+	if battle.damage_trace.size() < 2:
+		failures.append("伤害诊断轨迹未记录护盾与最终生命扣除")
+	else:
+		var trace: Dictionary = battle.damage_trace.back()
+		for key in ["attacker","target","target_hp","attack_type","raw","defense","reduction","shield_absorbed","hp_damage","reason","stage","wave"]:
+			if not trace.has(key): failures.append("伤害诊断缺少字段：" + key)
+	# 招募单击只更新详情，不销毁列表；明确按钮负责实际招募。
+	p.roster = ["liu_bei"]; p.party = ["liu_bei", "", "", ""]; p.materials.three_kingdoms_token = 150; p.ensure_growth_layout()
+	v03_ui.open_view("recruit")
+	await get_tree().process_frame
+	var original_list: ItemList = v03_ui.recruit_list
+	var recruit_index := -1
+	for index in range(original_list.item_count):
+		if str(original_list.get_item_metadata(index)) == "zhang_fei": recruit_index = index; break
+	if recruit_index < 0:
+		failures.append("招募列表缺少张飞")
+	else:
+		v03_ui._select_recruit_actor(recruit_index, original_list)
+		if v03_ui.recruit_list != original_list or v03_ui.recruit_button.disabled or "40虎符" not in v03_ui.recruit_button.text:
+			failures.append("招募单击仍重建列表或按钮价格/可用状态错误")
+		v03_ui._recruit_selected_actor()
+		if "zhang_fei" not in p.roster or int(p.materials.three_kingdoms_token) != 110:
+			failures.append("明确招募按钮未真实扣材并获得角色")
+	# 全部功能页共用真实滚动容器，20关按钮均在可滚动内容树内。
+	v03_ui.open_view("world")
+	await get_tree().process_frame
+	var stage_buttons: Array[Node] = v03_ui.content.find_children("*", "Button", true, false)
+	if v03_ui.content.get_parent() != v03_ui.content_scroll or stage_buttons.size() != 20:
+		failures.append("世界页不是可滚动内容或未构建全部20关")
+	v03_ui.content_scroll.scroll_vertical = 100
+	v03_ui.refresh()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if int(v03_ui.scroll_positions.get("world", -1)) < 0: failures.append("页面刷新未保存滚动位置")
+	# 通用技能：书本学习、纯金币升级、重复书回收；UI说明取自真实配置。
+	p.roster = ["zhao_yun"]; p.party = ["zhao_yun", "", "", ""]; p.ensure_growth_layout()
+	p.learned_general_skills.zhao_yun = []; p.general_skill_levels.zhao_yun = {}; p.skill_books.clear(); p.gold = 1000
+	var skill_id := "tk_triple_slash"
+	p.grant_skill_book(skill_id, 1, "playtest")
+	if not p.learn_general_skill("zhao_yun", skill_id) or p.skill_book_count(skill_id) != 0: failures.append("技能书学习规则错误")
+	p.grant_skill_book(skill_id, 1, "duplicate")
+	var book_before: int = p.skill_book_count(skill_id)
+	var cost: int = p.general_skill_upgrade_cost("zhao_yun", skill_id)
+	var gold_before: int = p.gold
+	if not p.upgrade_general_skill("zhao_yun", skill_id) or p.gold != gold_before - cost or p.skill_book_count(skill_id) != book_before:
+		failures.append("通用技能升级未做到只扣金币")
+	if p.recycle_skill_book(skill_id, 1) <= 0: failures.append("重复技能书无明确回收用途")
+	character_ui.selected_actor = "zhao_yun"
+	var numeric_text: String = character_ui.skill_numeric_description(battle.general_skills_config[skill_id], 2, "active", false)
+	if "当前实际倍率" not in numeric_text or "基础冷却" not in numeric_text or "升级至Lv.3" not in numeric_text:
+		failures.append("技能详情未展示当前倍率、冷却与下级变化")
+	# 清空仅影响当前统计会话，下一次伤害立即重新计数。
+	battle.combat_stats.record_damage("zhao_yun", "stage_guardian_tk", 123.0, "skill")
+	battle.combat_stats.record_heal("liu_bei", 50.0)
+	var permanent_before := {"gold":p.gold, "roster":p.roster.duplicate(), "party":p.party.duplicate(), "completed":p.completed_stages.duplicate()}
+	battle.reset_combat_stats()
+	if not battle.combat_stats.actors.is_empty() or battle.combat_stats.resources.equipment != 0 or p.gold != permanent_before.gold or p.roster != permanent_before.roster or p.party != permanent_before.party or p.completed_stages != permanent_before.completed:
+		failures.append("清空统计影响永久成长或未清空会话计数")
+	defender.defense = 0.0; defender.temporary_reduction_time = 0.0; defender.shield = 0.0
+	defender.take_damage(20.0, attacker, false, {"kind":"basic", "allow_triggers":false})
+	if float(battle.combat_stats.actors.get("zhao_yun", {}).get("damage", 0.0)) <= 0.0: failures.append("清空后新伤害未重新计数")
+	# 原设计名称完整恢复，ID保持不变以兼容V0.6.1学习记录和槽位。
+	var expected_names := ["连环突刺","横扫千军","破甲斩","穿云箭","火攻计","震地击","背水一击","青囊术","休养生息","刮骨疗毒","挑衅","铁壁军阵","舍身护卫","疾步","烟幕","回身反击","兵刃精通","连战之势","破阵之力","乘胜追击","浴火战意","铜墙铁壁","越战越勇","仁心妙手","避实击虚","同袍协战","十万伏特","喷射火焰","冰冻光束","污泥炸弹","精神强念","岩崩","种子炸弹","治愈波动","生命水滴","青草场地","守住","铁壁","看我嘛","影子分身","高速移动","电光一闪","静电传导","火焰延烧","剧毒累积","冰晶碎裂","青草滋养","精神回响","属性亲和","坚硬外壳","高速回避","异常共鸣"]
+	var actual_names: Array = battle.general_skills_config.values().map(func(data): return str(data.name))
+	for expected in expected_names:
+		if expected not in actual_names: failures.append("缺少原设计技能名：" + expected)
+	var expected_bosses := ["张宝","华雄","高顺","颜良","张郃","黄盖","陆逊","张辽","夏侯渊","波波","巴大蝶","皮皮","可达鸭","小磁怪","鬼斯通","隆隆石","蔓藤怪","白海狮"]
+	for expected in expected_bosses:
+		var found := false
+		for map_data in battle.worlds_config.maps.values():
+			if str(map_data.get("boss_name", "")) == expected: found = true; break
+		if not found: failures.append("关底Boss身份未恢复：" + expected)
+	if failures.is_empty():
+		print("V061_PLAYTEST_FIXES_TEST_PASS damage_trace=true shield_expiry=true reduction_floor=true recruit_single_click=true scroll20=true skill_gold_only=true book_recycle=true numeric_descriptions=true stats_reset=true original52=true named_bosses=true")
+	else:
+		for failure in failures: push_error("V061_PLAYTEST_FIXES_TEST_FAIL: " + failure)
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+func finish_v061_long_combat_test() -> void:
+	var failures: Array[String] = []
+	var p = battle.progression
+	p.roster = ["zhang_fei", "zhao_yun", "pikachu", "liu_bei"]
+	p.party = p.roster.duplicate()
+	p.completed_stages = []
+	for stage in range(1, 21): p.completed_stages.append(stage)
+	p.ensure_growth_layout(); p.ensure_world_layout()
+	for actor_id in p.party: p.actor_levels[actor_id] = 20
+	p.auto_push = false
+	battle.suppress_combat_visuals = true
+	battle.clear_combatants(); battle.current_map_id = "hulao_pass"; battle.spawn_party()
+	var durable = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(390, 260), {"boss_id":"stress_target"})
+	durable.max_hp = 1000000000.0; durable.hp = durable.max_hp; durable.attack = 1.0; durable.defense = 18.0
+	var elapsed_start: float = battle.elapsed
+	var damage_events := 0
+	# 900个2秒结算步=30分钟。直接调用正式普攻、技能、治疗、状态和伤害管线，避免击杀存档I/O影响压力测试耗时。
+	for step in range(900):
+		battle.elapsed += 2.0
+		for hero in battle.heroes:
+			if not is_instance_valid(hero) or hero.dead: continue
+			if hero.actor_data.get("basic_action", "damage") == "heal":
+				var wounded = battle.heroes[0]
+				wounded.hp = maxf(1.0, wounded.hp - 4.0)
+				hero.target = wounded
+			else:
+				hero.target = durable
+			hero.basic_attack()
+		if step % 8 == 0:
+			battle.heroes[1].try_use_general_skill("tk_triple_slash")
+		if step % 10 == 0:
+			durable.apply_poison(3.0, 4.0, battle.heroes[1], 0)
+			durable.apply_burn(3.0, 4.0, battle.heroes[2])
+			durable.take_damage(durable.poison_damage, durable.poison_source, false, {"kind":"effect", "skill_id":"stress_poison", "allow_triggers":false})
+			durable.take_damage(durable.burn_damage, durable.burn_source, false, {"kind":"effect", "skill_id":"stress_burn", "allow_triggers":false})
+		if step % 30 == 0:
+			durable.add_shield(120.0, 2.0)
+			durable.apply_damage_reduction(0.35, 1.5)
+		if step % 150 == 149:
+			# 每5分钟模拟波次更换：旧目标失效，新目标必须被重新绑定。
+			durable.dead = true
+			battle.enemies.erase(durable)
+			durable = battle.spawn_unit("stage_guardian_tk", "enemies", Vector2(390, 260), {"boss_id":"stress_target_%d" % step})
+			durable.max_hp = 1000000000.0; durable.hp = durable.max_hp; durable.attack = 1.0; durable.defense = 18.0
+			for hero in battle.heroes:
+				hero._physics_process(0.01)
+				if hero.actor_data.get("basic_action", "damage") != "heal" and hero.target != durable: failures.append("新波次未重新绑定有效目标")
+		if not battle.damage_trace.is_empty() and float(battle.damage_trace.back().hp_damage) > 0.0: damage_events += 1
+	var hero_damage := 0.0
+	for actor_id in p.party: hero_damage += float(battle.combat_stats.actors.get(actor_id, {}).get("damage", 0.0))
+	if battle.elapsed - elapsed_start < 1799.0 or hero_damage <= 0.0 or damage_events < 25:
+		failures.append("30分钟确定性实战未持续产生生命伤害")
+	if not battle.damage_anomalies.is_empty():
+		failures.append("长时间战斗出现异常零伤害诊断：%s" % JSON.stringify(battle.damage_anomalies.back()))
+	# 实际切换多张地图，确认重建后可恢复自动索敌；第10/20关Boss验证死亡瞬间并发技能。
+	for map_id in ["xuchang_gate", "cerulean_cave"]:
+		battle.clear_combatants(); battle.current_map_id = map_id; battle.wave = 3; battle.stage_cleared = false
+		battle.spawn_party()
+		for hero in battle.heroes:
+			hero.attack *= 12.0; hero.max_hp *= 8.0; hero.hp = hero.max_hp; hero.defense *= 4.0
+		battle.spawn_wave()
+		if battle.enemies.size() != 1:
+			failures.append("终章Boss未正确生成：" + map_id)
+			continue
+		var boss = battle.enemies[0]
+		boss.hp = 2.0
+		for hero in battle.heroes:
+			hero.target = boss
+			if hero.actor_data.get("basic_action", "damage") != "heal": hero.basic_attack()
+		await get_tree().process_frame
+		for hero in battle.heroes:
+			if is_instance_valid(hero.target) and hero.target.dead: failures.append("Boss死亡后仍保留失效目标引用：" + map_id)
+	battle.suppress_combat_visuals = false
+	if failures.is_empty():
+		print("V061_LONG_COMBAT_TEST_PASS simulated_minutes=30 real_damage_pipeline=true shield_reduction_stack=true wave_retargets=6 damage_continuous=true zero_anomalies=0 boss10=true boss20=true target_rebind=true")
+	else:
+		for failure in failures: push_error("V061_LONG_COMBAT_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 

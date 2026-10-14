@@ -138,7 +138,7 @@ func build_center_column(parent: HBoxContainer) -> void:
 		portrait_box.add_child(button)
 		slot_buttons[slot] = button
 	var optimize := Button.new()
-	optimize.text = "一键优化（最多3件·按职业收益）"
+	optimize.text = "一键优化全部9栏（按职业收益）"
 	optimize.tooltip_text = "只使用未穿戴装备或当前角色自己的装备，不会拿走其他角色装备"
 	optimize.pressed.connect(_preview_optimization)
 	V035ThemeScript.button(optimize, "gold")
@@ -323,9 +323,13 @@ func refresh_skills() -> void:
 	if selected_actor.is_empty(): return
 	var p = battle.progression
 	var actor: Dictionary = battle.actors[selected_actor]
-	add_skill_heading("专属主动 · %s Lv.%d" % [battle.skills[actor.skill].name, p.skill_level(selected_actor, "active")], battle.skills[actor.skill].description)
+	var exclusive_active: Dictionary = battle.skills[actor.skill]
+	var exclusive_active_level: int = p.skill_level(selected_actor, "active")
+	add_skill_heading("专属主动 · %s Lv.%d" % [exclusive_active.name, exclusive_active_level], skill_numeric_description(exclusive_active, exclusive_active_level, "active", true))
 	add_skill_upgrade_button("升级专属主动", "active")
-	add_skill_heading("专属被动 · %s Lv.%d" % [battle.passives_config[actor.passive_skill].name, p.skill_level(selected_actor, "passive")], battle.passives_config[actor.passive_skill].description)
+	var exclusive_passive: Dictionary = battle.passives_config[actor.passive_skill]
+	var exclusive_passive_level: int = p.skill_level(selected_actor, "passive")
+	add_skill_heading("专属被动 · %s Lv.%d" % [exclusive_passive.name, exclusive_passive_level], skill_numeric_description(exclusive_passive, exclusive_passive_level, "passive", true))
 	add_skill_upgrade_button("升级专属被动", "passive")
 	var equipped: Dictionary = p.equipped_general_skills[selected_actor]
 	add_skill_heading("通用技能配置", "3个主动槽按从左到右顺序自动释放；4个被动槽同时生效。\n释放优先级：%s" % " → ".join(p.skill_priorities[selected_actor]))
@@ -351,7 +355,8 @@ func refresh_skills() -> void:
 		var row := HBoxContainer.new()
 		var label := Label.new()
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.text = "%s【%s】Lv.%d\n%s" % ["主动" if skill.category == "active" else "被动", skill.name, p.general_skill_level(selected_actor, skill_id), skill.description]
+		var general_level: int = p.general_skill_level(selected_actor, skill_id)
+		label.text = "%s【%s】Lv.%d\n%s" % ["主动" if skill.category == "active" else "被动", skill.name, general_level, skill_numeric_description(skill, general_level, str(skill.category), false)]
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
 		var action := Button.new()
@@ -362,10 +367,48 @@ func refresh_skills() -> void:
 		row.add_child(action)
 		if learned:
 			var upgrade := Button.new()
-			upgrade.text = "升级"
+			var max_level: int = p.general_skill_max_level()
+			var upgrade_cost: int = p.general_skill_upgrade_cost(selected_actor, skill_id)
+			upgrade.text = "已满级" if general_level >= max_level else "升级至Lv.%d｜%d金币（持有%d）" % [general_level + 1, upgrade_cost, p.gold]
+			upgrade.disabled = general_level >= max_level or p.gold < upgrade_cost
 			upgrade.pressed.connect(_upgrade_general.bind(skill_id))
 			row.add_child(upgrade)
+			if p.skill_book_count(skill_id) > 0:
+				var recycle := Button.new()
+				recycle.text = "回收技能书×1"
+				recycle.tooltip_text = "技能升级不消耗书；多余技能书可换金币。"
+				recycle.pressed.connect(_recycle_general_book.bind(skill_id))
+				row.add_child(recycle)
 		skills_box.add_child(row)
+
+func skill_numeric_description(data: Dictionary, level: int, category: String, exclusive: bool) -> String:
+	var lines: Array[String] = [str(data.get("description", ""))]
+	var max_level: int = 10 if exclusive else battle.progression.general_skill_max_level()
+	var current := 0.0
+	var next := 0.0
+	if category == "passive" and exclusive:
+		current = float(data.get("value", 0.0)) + float(data.get("per_level", 0.0)) * (level - 1)
+		next = current + float(data.get("per_level", 0.0))
+	else:
+		current = float(data.get("power", 0.0)) * (1.0 + float(data.get("power_per_level", 0.0)) * (level - 1))
+		next = float(data.get("power", 0.0)) * (1.0 + float(data.get("power_per_level", 0.0)) * level)
+	if current > 0.0:
+		lines.append("当前实际倍率：%.1f%%攻击/效果" % (current * 100.0))
+	if data.has("hits"): lines.append("段数：%d" % int(data.hits))
+	if data.has("targets"): lines.append("最多目标：%d" % int(data.targets))
+	if data.has("cooldown"):
+		var cooldown := float(data.cooldown)
+		if exclusive: cooldown *= 1.0 - float(data.get("cooldown_per_level", 0.0)) * (level - 1)
+		lines.append("基础冷却：%.2f秒（装备冷却缩减另行结算）" % cooldown)
+	if data.has("duration"): lines.append("持续：%.1f秒" % float(data.duration))
+	if data.has("chance"): lines.append("触发概率：%.1f%%" % (float(data.chance) * 100.0))
+	if data.has("shock_chance"): lines.append("麻痹概率：%.1f%%" % (float(data.shock_chance) * 100.0))
+	if data.has("armor_break"): lines.append("降低防御：%.1f%%" % (float(data.armor_break) * 100.0))
+	if data.has("slow"): lines.append("减速：%.1f%%" % (float(data.slow) * 100.0))
+	if data.has("dot_power"): lines.append("每秒持续伤害：%.1f%%攻击" % (float(data.dot_power) * 100.0))
+	if level < max_level and (next != current): lines.append("升级至Lv.%d：%.1f%% → %.1f%%" % [level + 1, current * 100.0, next * 100.0])
+	else: lines.append("已满级" if level >= max_level else "该效果不随等级变化")
+	return "\n".join(lines)
 
 func add_skill_heading(heading: String, detail: String = "") -> void:
 	var label := Label.new()
@@ -477,13 +520,13 @@ func _inventory_action(action: String) -> void:
 
 func _preview_optimization() -> void:
 	var role := str(battle.actors.get(selected_actor, {}).get("combat_role", ""))
-	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 3, role)
+	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 9, role)
 	if pending_optimization.is_empty():
 		feedback.text = "没有未锁定且能按当前职业定位提升属性的装备。"
 		return
 	var lines: Array[String] = []
 	for choice in pending_optimization: lines.append("%s → %s（评分 %+.1f）" % [choice.name, battle.equipment_config.slots[choice.slot], float(choice.gain)])
-	optimize_dialog.dialog_text = "比较所有品质并按当前职业计算实际收益；锁定装备和其他角色装备不会被使用。\n本次最多穿戴3件：\n\n" + "\n".join(lines)
+	optimize_dialog.dialog_text = "比较全部9个栏位及所有品质，按当前职业计算整体正收益；锁定装备和其他角色装备不会被使用。\n本次全部替换方案：\n\n" + "\n".join(lines)
 	optimize_dialog.popup_centered()
 
 func _apply_optimization() -> void:
@@ -517,9 +560,15 @@ func _unequip_general(category: String, slot_index: int) -> void:
 	refresh_all()
 
 func _upgrade_general(skill_id: String) -> void:
-	if battle.progression.upgrade_general_skill(selected_actor, skill_id): feedback.text = "通用技能升级成功。"
-	else: feedback.text = "通用技能升级失败：资源不足或已满级。"
+	var cost: int = battle.progression.general_skill_upgrade_cost(selected_actor, skill_id)
+	if battle.progression.upgrade_general_skill(selected_actor, skill_id): feedback.text = "通用技能升级成功，仅扣除%d金币。" % cost
+	else: feedback.text = "通用技能升级失败：金币不足或已满级。"
 	battle.rebuild_party()
+	refresh_all()
+
+func _recycle_general_book(skill_id: String) -> void:
+	var earned: int = battle.progression.recycle_skill_book(skill_id, 1)
+	feedback.text = "多余技能书已回收，获得%d金币。" % earned if earned > 0 else "没有可回收的技能书。"
 	refresh_all()
 
 func actor_power(actor_id: String) -> float:

@@ -1,32 +1,624 @@
 {
   "maps": {
-    "hulao_pass": {"name":"虎牢关前哨","world":"三国","chapter":1,"global_stage":1,"difficulty_level":1,"required_level":1,"level":1,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"黄巾渠帅","boss_skill":"boss_yellow_banner","boss_mechanic":"war_banner","first_clear_gold":35,"first_clear_material":8,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,2],"drop_chance":0.38,"color":"B9B06B"},
-    "guandu_road": {"name":"官渡驿道","world":"三国","chapter":2,"global_stage":2,"difficulty_level":2,"required_level":1,"level":2,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"官渡劫营将","boss_skill":"boss_guandu_raid","boss_mechanic":"high_threat_hunt","first_clear_gold":45,"first_clear_material":9,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,2],"drop_chance":0.39,"color":"B5A064"},
-    "bowang_slope": {"name":"博望坡","world":"三国","chapter":3,"global_stage":3,"difficulty_level":3,"required_level":2,"level":3,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"博望火军师","boss_skill":"boss_bowang_flame","boss_mechanic":"burning_aura","first_clear_gold":55,"first_clear_material":10,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,2],"drop_chance":0.40,"color":"AD9160"},
-    "xinye_gate": {"name":"新野城门","world":"三国","chapter":4,"global_stage":4,"difficulty_level":4,"required_level":2,"level":4,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"新野铁卫","boss_skill":"boss_xinye_guard","boss_mechanic":"stone_skin","first_clear_gold":65,"first_clear_material":11,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,2],"drop_chance":0.41,"color":"A9875E"},
-    "changban_slope": {"name":"长坂坡","world":"三国","chapter":5,"global_stage":5,"difficulty_level":5,"required_level":3,"level":5,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"长坂追骑","boss_skill":"boss_changban_charge","boss_mechanic":"backline_hunt","first_clear_gold":75,"first_clear_material":12,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,3],"drop_chance":0.42,"color":"B9855F"},
-    "chibi_shore": {"name":"赤壁江岸","world":"三国","chapter":6,"global_stage":6,"difficulty_level":6,"required_level":3,"level":6,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"赤壁火先锋","boss_skill":"boss_chibi_inferno","boss_mechanic":"burning_aura","first_clear_gold":85,"first_clear_material":13,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,3],"drop_chance":0.43,"color":"AF755A"},
-    "jingzhou_path": {"name":"荆州古道","world":"三国","chapter":7,"global_stage":7,"difficulty_level":7,"required_level":4,"level":7,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"荆州伏弩统领","boss_skill":"boss_jingzhou_ambush","boss_mechanic":"venom_strike","first_clear_gold":95,"first_clear_material":14,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[1,3],"drop_chance":0.44,"color":"A76B55"},
-    "hanzhong_pass": {"name":"汉中险关","world":"三国","chapter":8,"global_stage":8,"difficulty_level":8,"required_level":4,"level":8,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"汉中镇关将","boss_skill":"boss_hanzhong_roar","boss_mechanic":"counter_guard","first_clear_gold":105,"first_clear_material":15,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[2,3],"drop_chance":0.45,"color":"A06452"},
-    "luoyang_ruins": {"name":"洛阳残垣","world":"三国","chapter":9,"global_stage":9,"difficulty_level":9,"required_level":5,"level":9,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"stage_guardian_tk","boss_name":"废都狂将","boss_skill":"boss_luoyang_ruin","boss_mechanic":"berserk","first_clear_gold":120,"first_clear_material":18,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[2,4],"drop_chance":0.46,"color":"985C50"},
-    "xuchang_gate": {"name":"许昌决战","world":"三国","chapter":10,"global_stage":10,"difficulty_level":10,"required_level":5,"level":10,"waves_to_clear":3,"enemy_pool":["yellow_turban"],"main_boss":"lu_bu_boss","boss_id":"lu_bu","first_clear_gold":180,"first_clear_material":25,"material":"three_kingdoms_token","material_name":"虎符","material_drop":[2,4],"drop_chance":0.48,"color":"904850"},
-    "viridian_forest": {"name":"常青森林","world":"宝可梦","chapter":1,"global_stage":11,"difficulty_level":11,"required_level":6,"level":11,"waves_to_clear":3,"enemy_pool":["forest_bug","zubat"],"main_boss":"stage_guardian_pk","boss_name":"常青蜂后","boss_skill":"boss_forest_sting","boss_mechanic":"venom_strike","first_clear_gold":145,"first_clear_material":10,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[1,2],"drop_chance":0.44,"color":"68B875"},
-    "pewter_trail": {"name":"深灰山径","world":"宝可梦","chapter":2,"global_stage":12,"difficulty_level":12,"required_level":6,"level":12,"waves_to_clear":3,"enemy_pool":["forest_bug","zubat"],"main_boss":"stage_guardian_pk","boss_name":"深灰岩甲兽","boss_skill":"boss_pewter_crash","boss_mechanic":"stone_skin","first_clear_gold":160,"first_clear_material":11,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[1,2],"drop_chance":0.45,"color":"65AD73"},
-    "moon_mountain": {"name":"月见山","world":"宝可梦","chapter":3,"global_stage":13,"difficulty_level":13,"required_level":7,"level":13,"waves_to_clear":3,"enemy_pool":["zubat","forest_bug"],"main_boss":"stage_guardian_pk","boss_name":"月见音蝠王","boss_skill":"boss_moon_echo","boss_mechanic":"shock_strike","first_clear_gold":175,"first_clear_material":12,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[1,3],"drop_chance":0.46,"color":"619F79"},
-    "cerulean_river": {"name":"华蓝水岸","world":"宝可梦","chapter":4,"global_stage":14,"difficulty_level":14,"required_level":7,"level":14,"waves_to_clear":3,"enemy_pool":["zubat","forest_bug"],"main_boss":"stage_guardian_pk","boss_name":"华蓝巨浪龟","boss_skill":"boss_cerulean_tide","boss_mechanic":"regeneration","first_clear_gold":190,"first_clear_material":13,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[1,3],"drop_chance":0.47,"color":"5B9484"},
-    "power_plant": {"name":"无人发电厂","world":"宝可梦","chapter":5,"global_stage":15,"difficulty_level":15,"required_level":8,"level":15,"waves_to_clear":3,"enemy_pool":["zubat","forest_bug"],"main_boss":"stage_guardian_pk","boss_name":"过载电磁兽","boss_skill":"boss_power_surge","boss_mechanic":"shock_strike","first_clear_gold":205,"first_clear_material":14,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[1,3],"drop_chance":0.48,"color":"6A9E91"},
-    "lavender_tower": {"name":"紫苑高塔","world":"宝可梦","chapter":6,"global_stage":16,"difficulty_level":16,"required_level":8,"level":16,"waves_to_clear":3,"enemy_pool":["zubat","forest_bug"],"main_boss":"stage_guardian_pk","boss_name":"高塔诅咒灵","boss_skill":"boss_lavender_curse","boss_mechanic":"venom_strike","first_clear_gold":220,"first_clear_material":15,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[2,3],"drop_chance":0.49,"color":"718B9B"},
-    "saffron_street": {"name":"金黄市街","world":"宝可梦","chapter":7,"global_stage":17,"difficulty_level":17,"required_level":9,"level":17,"waves_to_clear":3,"enemy_pool":["forest_bug","zubat"],"main_boss":"stage_guardian_pk","boss_name":"金黄念力师","boss_skill":"boss_saffron_mind","boss_mechanic":"shield_cycle","first_clear_gold":235,"first_clear_material":16,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[2,3],"drop_chance":0.50,"color":"7A809F"},
-    "victory_road": {"name":"冠军之路","world":"宝可梦","chapter":8,"global_stage":18,"difficulty_level":18,"required_level":9,"level":18,"waves_to_clear":3,"enemy_pool":["forest_bug","zubat"],"main_boss":"stage_guardian_pk","boss_name":"冠军守门兽","boss_skill":"boss_victory_guard","boss_mechanic":"counter_guard","first_clear_gold":250,"first_clear_material":18,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[2,4],"drop_chance":0.51,"color":"7474A2"},
-    "unknown_depths": {"name":"未知洞窟","world":"宝可梦","chapter":9,"global_stage":19,"difficulty_level":19,"required_level":10,"level":19,"waves_to_clear":3,"enemy_pool":["zubat","forest_bug"],"main_boss":"stage_guardian_pk","boss_name":"洞窟暴走体","boss_skill":"boss_unknown_burst","boss_mechanic":"berserk","first_clear_gold":275,"first_clear_material":20,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[2,4],"drop_chance":0.52,"color":"6E6AA5"},
-    "cerulean_cave": {"name":"华蓝洞窟决战","world":"宝可梦","chapter":10,"global_stage":20,"difficulty_level":20,"required_level":10,"level":20,"waves_to_clear":3,"enemy_pool":["zubat","forest_bug"],"main_boss":"mewtwo_boss","boss_id":"mewtwo","first_clear_gold":400,"first_clear_material":30,"material":"pokemon_token","material_name":"精灵结晶","material_drop":[2,4],"drop_chance":0.54,"color":"6979A7"}
+    "hulao_pass": {
+      "name": "虎牢关前哨",
+      "world": "三国",
+      "chapter": 1,
+      "global_stage": 1,
+      "difficulty_level": 1,
+      "required_level": 1,
+      "level": 1,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "张宝",
+      "boss_skill": "boss_yellow_banner",
+      "boss_mechanic": "war_banner",
+      "first_clear_gold": 35,
+      "first_clear_material": 8,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        2
+      ],
+      "drop_chance": 0.38,
+      "color": "B9B06B"
+    },
+    "guandu_road": {
+      "name": "官渡驿道",
+      "world": "三国",
+      "chapter": 2,
+      "global_stage": 2,
+      "difficulty_level": 2,
+      "required_level": 1,
+      "level": 2,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "华雄",
+      "boss_skill": "boss_guandu_raid",
+      "boss_mechanic": "high_threat_hunt",
+      "first_clear_gold": 45,
+      "first_clear_material": 9,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        2
+      ],
+      "drop_chance": 0.39,
+      "color": "B5A064"
+    },
+    "bowang_slope": {
+      "name": "博望坡",
+      "world": "三国",
+      "chapter": 3,
+      "global_stage": 3,
+      "difficulty_level": 3,
+      "required_level": 2,
+      "level": 3,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "高顺",
+      "boss_skill": "boss_bowang_flame",
+      "boss_mechanic": "burning_aura",
+      "first_clear_gold": 55,
+      "first_clear_material": 10,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        2
+      ],
+      "drop_chance": 0.40,
+      "color": "AD9160"
+    },
+    "xinye_gate": {
+      "name": "新野城门",
+      "world": "三国",
+      "chapter": 4,
+      "global_stage": 4,
+      "difficulty_level": 4,
+      "required_level": 2,
+      "level": 4,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "颜良",
+      "boss_skill": "boss_xinye_guard",
+      "boss_mechanic": "stone_skin",
+      "first_clear_gold": 65,
+      "first_clear_material": 11,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        2
+      ],
+      "drop_chance": 0.41,
+      "color": "A9875E"
+    },
+    "changban_slope": {
+      "name": "长坂坡",
+      "world": "三国",
+      "chapter": 5,
+      "global_stage": 5,
+      "difficulty_level": 5,
+      "required_level": 3,
+      "level": 5,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "张郃",
+      "boss_skill": "boss_changban_charge",
+      "boss_mechanic": "backline_hunt",
+      "first_clear_gold": 75,
+      "first_clear_material": 12,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        3
+      ],
+      "drop_chance": 0.42,
+      "color": "B9855F"
+    },
+    "chibi_shore": {
+      "name": "赤壁江岸",
+      "world": "三国",
+      "chapter": 6,
+      "global_stage": 6,
+      "difficulty_level": 6,
+      "required_level": 3,
+      "level": 6,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "黄盖",
+      "boss_skill": "boss_chibi_inferno",
+      "boss_mechanic": "burning_aura",
+      "first_clear_gold": 85,
+      "first_clear_material": 13,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        3
+      ],
+      "drop_chance": 0.43,
+      "color": "AF755A"
+    },
+    "jingzhou_path": {
+      "name": "荆州古道",
+      "world": "三国",
+      "chapter": 7,
+      "global_stage": 7,
+      "difficulty_level": 7,
+      "required_level": 4,
+      "level": 7,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "陆逊",
+      "boss_skill": "boss_jingzhou_ambush",
+      "boss_mechanic": "venom_strike",
+      "first_clear_gold": 95,
+      "first_clear_material": 14,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        1,
+        3
+      ],
+      "drop_chance": 0.44,
+      "color": "A76B55"
+    },
+    "hanzhong_pass": {
+      "name": "汉中险关",
+      "world": "三国",
+      "chapter": 8,
+      "global_stage": 8,
+      "difficulty_level": 8,
+      "required_level": 4,
+      "level": 8,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "张辽",
+      "boss_skill": "boss_hanzhong_roar",
+      "boss_mechanic": "counter_guard",
+      "first_clear_gold": 105,
+      "first_clear_material": 15,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        2,
+        3
+      ],
+      "drop_chance": 0.45,
+      "color": "A06452"
+    },
+    "luoyang_ruins": {
+      "name": "洛阳残垣",
+      "world": "三国",
+      "chapter": 9,
+      "global_stage": 9,
+      "difficulty_level": 9,
+      "required_level": 5,
+      "level": 9,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "stage_guardian_tk",
+      "boss_name": "夏侯渊",
+      "boss_skill": "boss_luoyang_ruin",
+      "boss_mechanic": "berserk",
+      "first_clear_gold": 120,
+      "first_clear_material": 18,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        2,
+        4
+      ],
+      "drop_chance": 0.46,
+      "color": "985C50"
+    },
+    "xuchang_gate": {
+      "name": "许昌决战",
+      "world": "三国",
+      "chapter": 10,
+      "global_stage": 10,
+      "difficulty_level": 10,
+      "required_level": 5,
+      "level": 10,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "yellow_turban"
+      ],
+      "main_boss": "lu_bu_boss",
+      "boss_id": "lu_bu",
+      "first_clear_gold": 180,
+      "first_clear_material": 25,
+      "material": "three_kingdoms_token",
+      "material_name": "虎符",
+      "material_drop": [
+        2,
+        4
+      ],
+      "drop_chance": 0.48,
+      "color": "904850"
+    },
+    "viridian_forest": {
+      "name": "常青森林",
+      "world": "宝可梦",
+      "chapter": 1,
+      "global_stage": 11,
+      "difficulty_level": 11,
+      "required_level": 6,
+      "level": 11,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "forest_bug",
+        "zubat"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "波波",
+      "boss_skill": "boss_forest_sting",
+      "boss_mechanic": "venom_strike",
+      "first_clear_gold": 145,
+      "first_clear_material": 10,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        1,
+        2
+      ],
+      "drop_chance": 0.44,
+      "color": "68B875"
+    },
+    "pewter_trail": {
+      "name": "深灰山径",
+      "world": "宝可梦",
+      "chapter": 2,
+      "global_stage": 12,
+      "difficulty_level": 12,
+      "required_level": 6,
+      "level": 12,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "forest_bug",
+        "zubat"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "巴大蝶",
+      "boss_skill": "boss_pewter_crash",
+      "boss_mechanic": "stone_skin",
+      "first_clear_gold": 160,
+      "first_clear_material": 11,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        1,
+        2
+      ],
+      "drop_chance": 0.45,
+      "color": "65AD73"
+    },
+    "moon_mountain": {
+      "name": "月见山",
+      "world": "宝可梦",
+      "chapter": 3,
+      "global_stage": 13,
+      "difficulty_level": 13,
+      "required_level": 7,
+      "level": 13,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "zubat",
+        "forest_bug"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "皮皮",
+      "boss_skill": "boss_moon_echo",
+      "boss_mechanic": "shock_strike",
+      "first_clear_gold": 175,
+      "first_clear_material": 12,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        1,
+        3
+      ],
+      "drop_chance": 0.46,
+      "color": "619F79"
+    },
+    "cerulean_river": {
+      "name": "华蓝水岸",
+      "world": "宝可梦",
+      "chapter": 4,
+      "global_stage": 14,
+      "difficulty_level": 14,
+      "required_level": 7,
+      "level": 14,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "zubat",
+        "forest_bug"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "可达鸭",
+      "boss_skill": "boss_cerulean_tide",
+      "boss_mechanic": "regeneration",
+      "first_clear_gold": 190,
+      "first_clear_material": 13,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        1,
+        3
+      ],
+      "drop_chance": 0.47,
+      "color": "5B9484"
+    },
+    "power_plant": {
+      "name": "无人发电厂",
+      "world": "宝可梦",
+      "chapter": 5,
+      "global_stage": 15,
+      "difficulty_level": 15,
+      "required_level": 8,
+      "level": 15,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "zubat",
+        "forest_bug"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "小磁怪",
+      "boss_skill": "boss_power_surge",
+      "boss_mechanic": "shock_strike",
+      "first_clear_gold": 205,
+      "first_clear_material": 14,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        1,
+        3
+      ],
+      "drop_chance": 0.48,
+      "color": "6A9E91"
+    },
+    "lavender_tower": {
+      "name": "紫苑高塔",
+      "world": "宝可梦",
+      "chapter": 6,
+      "global_stage": 16,
+      "difficulty_level": 16,
+      "required_level": 8,
+      "level": 16,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "zubat",
+        "forest_bug"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "鬼斯通",
+      "boss_skill": "boss_lavender_curse",
+      "boss_mechanic": "venom_strike",
+      "first_clear_gold": 220,
+      "first_clear_material": 15,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        2,
+        3
+      ],
+      "drop_chance": 0.49,
+      "color": "718B9B"
+    },
+    "saffron_street": {
+      "name": "金黄市街",
+      "world": "宝可梦",
+      "chapter": 7,
+      "global_stage": 17,
+      "difficulty_level": 17,
+      "required_level": 9,
+      "level": 17,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "forest_bug",
+        "zubat"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "隆隆石",
+      "boss_skill": "boss_saffron_mind",
+      "boss_mechanic": "shield_cycle",
+      "first_clear_gold": 235,
+      "first_clear_material": 16,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        2,
+        3
+      ],
+      "drop_chance": 0.50,
+      "color": "7A809F"
+    },
+    "victory_road": {
+      "name": "冠军之路",
+      "world": "宝可梦",
+      "chapter": 8,
+      "global_stage": 18,
+      "difficulty_level": 18,
+      "required_level": 9,
+      "level": 18,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "forest_bug",
+        "zubat"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "蔓藤怪",
+      "boss_skill": "boss_victory_guard",
+      "boss_mechanic": "counter_guard",
+      "first_clear_gold": 250,
+      "first_clear_material": 18,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        2,
+        4
+      ],
+      "drop_chance": 0.51,
+      "color": "7474A2"
+    },
+    "unknown_depths": {
+      "name": "未知洞窟",
+      "world": "宝可梦",
+      "chapter": 9,
+      "global_stage": 19,
+      "difficulty_level": 19,
+      "required_level": 10,
+      "level": 19,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "zubat",
+        "forest_bug"
+      ],
+      "main_boss": "stage_guardian_pk",
+      "boss_name": "白海狮",
+      "boss_skill": "boss_unknown_burst",
+      "boss_mechanic": "berserk",
+      "first_clear_gold": 275,
+      "first_clear_material": 20,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        2,
+        4
+      ],
+      "drop_chance": 0.52,
+      "color": "6E6AA5"
+    },
+    "cerulean_cave": {
+      "name": "华蓝洞窟决战",
+      "world": "宝可梦",
+      "chapter": 10,
+      "global_stage": 20,
+      "difficulty_level": 20,
+      "required_level": 10,
+      "level": 20,
+      "waves_to_clear": 3,
+      "enemy_pool": [
+        "zubat",
+        "forest_bug"
+      ],
+      "main_boss": "mewtwo_boss",
+      "boss_id": "mewtwo",
+      "first_clear_gold": 400,
+      "first_clear_material": 30,
+      "material": "pokemon_token",
+      "material_name": "精灵结晶",
+      "material_drop": [
+        2,
+        4
+      ],
+      "drop_chance": 0.54,
+      "color": "6979A7"
+    }
   },
   "bosses": {
-    "lu_bu": {"name":"吕布挑战","actor":"lu_bu_boss","world":"三国","required_stage":10,"unlock_actor":"lu_bu","repeat_material":"three_kingdoms_token","repeat_amount":25},
-    "mewtwo": {"name":"超梦挑战","actor":"mewtwo_boss","world":"宝可梦","required_stage":20,"unlock_actor":"mewtwo","repeat_material":"pokemon_token","repeat_amount":25}
+    "lu_bu": {
+      "name": "吕布挑战",
+      "actor": "lu_bu_boss",
+      "world": "三国",
+      "required_stage": 10,
+      "unlock_actor": "lu_bu",
+      "repeat_material": "three_kingdoms_token",
+      "repeat_amount": 25
+    },
+    "mewtwo": {
+      "name": "超梦挑战",
+      "actor": "mewtwo_boss",
+      "world": "宝可梦",
+      "required_stage": 20,
+      "unlock_actor": "mewtwo",
+      "repeat_material": "pokemon_token",
+      "repeat_amount": 25
+    }
   },
   "recruitment": {
-    "starter_pool":["zhang_fei","dian_wei","zhao_yun","zhuge_liang","liu_bei","pikachu","snorlax","gengar"],
-    "costs":{"zhang_fei":["three_kingdoms_token",40],"dian_wei":["three_kingdoms_token",40],"zhao_yun":["three_kingdoms_token",40],"zhuge_liang":["three_kingdoms_token",50],"liu_bei":["three_kingdoms_token",40],"lu_bu":["three_kingdoms_token",120],"pikachu":["pokemon_token",40],"snorlax":["pokemon_token",40],"gengar":["pokemon_token",50],"mewtwo":["pokemon_token",120]}
+    "starter_pool": [
+      "zhang_fei",
+      "dian_wei",
+      "zhao_yun",
+      "zhuge_liang",
+      "liu_bei",
+      "pikachu",
+      "snorlax",
+      "gengar"
+    ],
+    "costs": {
+      "zhang_fei": [
+        "three_kingdoms_token",
+        40
+      ],
+      "dian_wei": [
+        "three_kingdoms_token",
+        40
+      ],
+      "zhao_yun": [
+        "three_kingdoms_token",
+        40
+      ],
+      "zhuge_liang": [
+        "three_kingdoms_token",
+        50
+      ],
+      "liu_bei": [
+        "three_kingdoms_token",
+        40
+      ],
+      "lu_bu": [
+        "three_kingdoms_token",
+        120
+      ],
+      "pikachu": [
+        "pokemon_token",
+        40
+      ],
+      "snorlax": [
+        "pokemon_token",
+        40
+      ],
+      "gengar": [
+        "pokemon_token",
+        50
+      ],
+      "mewtwo": [
+        "pokemon_token",
+        120
+      ]
+    }
   }
 }

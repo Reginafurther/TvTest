@@ -1,111 +1,127 @@
 extends SceneTree
 
-const PARTY := ["zhao_yun", "liu_bei", "zhang_fei", "zhuge_liang"]
-const TRIALS := 400
+const TRIALS := 120
+const SCENARIOS := [
+	{"id":"A", "label":"Lv7普通装/无通用技能", "level":7, "party":["zhao_yun","zhang_fei","dian_wei","pikachu"], "gear":1.0, "skills":0, "extra_heal":0.0, "survival":1.0},
+	{"id":"B", "label":"Lv7普通装/刘备治疗", "level":7, "party":["zhao_yun","zhang_fei","pikachu","liu_bei"], "gear":1.0, "skills":0, "extra_heal":0.0, "survival":1.0},
+	{"id":"C", "label":"Lv10普通装/基础技能", "level":10, "party":["zhao_yun","zhang_fei","pikachu","liu_bei"], "gear":1.0, "skills":1, "extra_heal":0.0, "survival":1.0},
+	{"id":"D", "label":"Lv10良装/完整技能", "level":10, "party":["zhao_yun","zhang_fei","pikachu","liu_bei"], "gear":1.7, "skills":2, "extra_heal":0.0, "survival":2.0},
+	{"id":"E", "label":"Lv15均衡队", "level":15, "party":["zhao_yun","zhang_fei","zhuge_liang","liu_bei"], "gear":1.5, "skills":2, "extra_heal":0.0, "survival":3.0},
+	{"id":"F", "label":"Lv20成型Build", "level":20, "party":["zhao_yun","zhang_fei","mewtwo","liu_bei"], "gear":2.2, "skills":3, "extra_heal":0.0, "survival":2.0},
+	{"id":"G", "label":"Lv12无治疗高输出", "level":12, "party":["zhao_yun","dian_wei","zhuge_liang","pikachu"], "gear":1.4, "skills":2, "extra_heal":0.0, "survival":2.0},
+	{"id":"H", "label":"Lv12多通用治疗", "level":12, "party":["zhao_yun","zhang_fei","zhuge_liang","liu_bei"], "gear":1.3, "skills":1, "extra_heal":25.0, "survival":3.0}
+]
+
+var actors: Dictionary
+var maps: Dictionary
+var difficulty: Dictionary
+var rng := RandomNumberGenerator.new()
 
 func load_json(path: String) -> Dictionary:
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
 	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 
 func _init() -> void:
-	var actors: Dictionary = load_json("res://data/actors.json")
-	var skills: Dictionary = load_json("res://data/skills.json")
-	var worlds: Dictionary = load_json("res://data/worlds.json").get("maps", {})
-	var maps: Array = worlds.keys()
-	maps.sort_custom(func(a, b): return int(worlds[a].global_stage) < int(worlds[b].global_stage))
-	var rng := RandomNumberGenerator.new(); rng.seed = 20261014
+	actors = load_json("res://data/actors.json")
+	maps = load_json("res://data/worlds.json").get("maps", {})
+	difficulty = load_json("res://data/progression.json").get("combat_difficulty", {})
+	rng.seed = 20261014
 	var failures: Array[String] = []
-	var previous_boss_hp := 0.0
-	print("BALANCE_TABLE stage avg_seconds p10 p90 survival boss_hp party_dps")
-	for map_id in maps:
-		var map_data: Dictionary = worlds[map_id]
-		var stage: int = int(map_data.global_stage)
-		var party_dps: float = estimated_party_dps(stage, actors, skills)
-		var healing: float = estimated_healing(stage, actors, skills)
-		var party_ehp: float = estimated_party_ehp(stage, actors)
-		var regular_hp: float = regular_wave_hp(stage, actors, map_data)
-		var boss_stats: Dictionary = stage_boss_stats(stage, actors, map_data)
-		var boss_hp: float = float(boss_stats.hp)
-		var boss_defense: float = float(boss_stats.defense)
-		var attack_factor: float = maxf(0.42, 1.0 - boss_defense * 0.55 / maxf(1.0, party_dps * 0.22))
-		var samples: Array[float] = []
-		var survival_samples: Array[float] = []
-		for _trial in range(TRIALS):
-			var output_roll: float = rng.randf_range(0.88, 1.12)
-			var mechanic_delay: float = rng.randf_range(1.5, 4.5) + stage * 0.08
-			var seconds: float = regular_hp / (party_dps * 1.28 * output_roll) + boss_hp / (party_dps * attack_factor * output_roll) + 4.4 + mechanic_delay
-			var incoming_dps: float = estimated_incoming_dps(stage, actors, map_data, boss_stats) * rng.randf_range(0.88, 1.14)
-			var sustainable: float = party_ehp + healing * seconds * 0.58
-			var pressure: float = incoming_dps * seconds
-			samples.append(seconds)
-			survival_samples.append(sustainable / maxf(1.0, pressure))
-		samples.sort(); survival_samples.sort()
-		var average: float = 0.0
-		for value in samples: average += value
-		average /= samples.size()
-		var survival: float = survival_samples[int(TRIALS * 0.1)]
-		print("BALANCE_STAGE %02d %.1f %.1f %.1f %.2f %.0f %.1f" % [stage, average, samples[int(TRIALS * 0.1)], samples[int(TRIALS * 0.9)], survival, boss_hp, party_dps])
-		if average < 12.0: failures.append("第%d关平均通关过快 %.1fs" % [stage, average])
-		if average > 150.0: failures.append("第%d关平均通关过慢 %.1fs" % [stage, average])
-		if survival < 0.9: failures.append("第%d关典型队伍生存裕量不足 %.2f" % [stage, survival])
-		if boss_hp <= previous_boss_hp: failures.append("第%d关Boss生命未递增" % stage)
-		previous_boss_hp = boss_hp
+	var results: Dictionary = {}
+	for scenario in SCENARIOS:
+		var first_block := 21
+		var scenario_rows: Dictionary = {}
+		for stage in range(1, 21):
+			var base: Dictionary = encounter_estimate(scenario, stage)
+			var clears := 0
+			var total_time := 0.0
+			var total_casualties := 0.0
+			for _trial in range(TRIALS):
+				var time := float(base.time) / rng.randf_range(0.88, 1.12)
+				var survival_margin := float(base.survival) * rng.randf_range(0.82, 1.16)
+				var success := time <= 180.0 and survival_margin >= 0.90
+				if success: clears += 1
+				total_time += minf(time, 180.0)
+				total_casualties += clampf((1.25 - survival_margin) * 2.2, 0.0, 4.0)
+			var row := {"pass_rate":float(clears) / TRIALS, "avg_time":total_time / TRIALS, "boss_time":float(base.boss_time), "casualties":total_casualties / TRIALS, "dps":float(base.dps), "healing":float(base.healing), "gear":float(base.gear_contribution), "skill":float(base.skill_contribution)}
+			scenario_rows[stage] = row
+			if first_block == 21 and float(row.pass_rate) < 0.50: first_block = stage
+		results[str(scenario.id)] = scenario_rows
+		print("BALANCE_SCENARIO %s first_block=%s stage10=%.2f stage15=%.2f stage18=%.2f stage20=%.2f label=%s" % [scenario.id, "none" if first_block == 21 else str(first_block), scenario_rows[10].pass_rate, scenario_rows[15].pass_rate, scenario_rows[18].pass_rate, scenario_rows[20].pass_rate, scenario.label])
+	if float(results.A[18].pass_rate) > 0.15 or float(results.B[18].pass_rate) > 0.25:
+		failures.append("Lv7普通装备阵容仍可轻松通过第18关")
+	if float(results.D[10].pass_rate) < 0.70:
+		failures.append("Lv10良装完整技能无法稳定完成第一世界")
+	if float(results.F[20].pass_rate) < 0.70:
+		failures.append("Lv20成型Build无法稳定完成第20关")
+	if float(results.H[20].pass_rate) > 0.50:
+		failures.append("多治疗组合在后期形成无成长需求的无限生存")
 	if failures.is_empty():
-		print("V061_BALANCE_TEST_PASS stages=20 trials_per_stage=%d curve=progressive avg_clear=12-150s survival_p10>=0.90" % TRIALS)
+		print("V061_BALANCE_MATRIX_PASS scenarios=8 stages=20 trials_per_cell=%d lv7_stage18_blocked=true lv10_world1_viable=true lv20_stage20_viable=true multi_heal_not_immortal=true" % TRIALS)
 	else:
-		for failure in failures: push_error("V061_BALANCE_TEST_FAIL: " + failure)
+		for failure in failures: push_error("V061_BALANCE_MATRIX_FAIL: " + failure)
 	quit(0 if failures.is_empty() else 1)
 
-func estimated_party_dps(stage: int, actors: Dictionary, skills: Dictionary) -> float:
-	var total := 0.0
-	for actor_id in PARTY:
+func curve_multiplier(id: String, stage: int) -> float:
+	var curve: Dictionary = difficulty.get(id, {})
+	var step := float(stage - 1)
+	return 1.0 + step * float(curve.get("linear", 0.0)) + step * step * float(curve.get("quadratic", 0.0))
+
+func encounter_estimate(scenario: Dictionary, stage: int) -> Dictionary:
+	var dps := 0.0
+	var healing := float(scenario.extra_heal)
+	var ehp := 0.0
+	var gear_contribution := 0.0
+	var skill_contribution := 0.0
+	for actor_id in scenario.party:
 		var actor: Dictionary = actors[actor_id]
-		var attack: float = float(actor.attack) * (1.0 + (stage - 1) * 0.06) + 8.0 + stage * 3.0
-		if actor.get("basic_action", "damage") != "heal": total += attack / float(actor.attack_interval)
-		var skill: Dictionary = skills[actor.skill]
-		if skill.type in ["damage", "area_damage", "chain"]: total += attack * float(skill.power) / float(skill.cooldown)
-	return total
-
-func estimated_healing(stage: int, actors: Dictionary, skills: Dictionary) -> float:
-	var actor: Dictionary = actors.liu_bei
-	var attack: float = float(actor.attack) * (1.0 + (stage - 1) * 0.06) + 8.0 + stage * 3.0
-	var skill: Dictionary = skills[actor.skill]
-	return attack * 0.72 / float(actor.attack_interval) + attack * float(skill.power) / float(skill.cooldown)
-
-func estimated_party_ehp(stage: int, actors: Dictionary) -> float:
-	var total := 0.0
-	for actor_id in PARTY:
-		var actor: Dictionary = actors[actor_id]
-		var hp: float = float(actor.max_hp) * (1.0 + (stage - 1) * 0.08) + 35.0 * stage
-		var defense: float = float(actor.defense) * (1.0 + (stage - 1) * 0.05) + 2.2 * stage
-		total += hp * (1.0 + defense * 0.012)
-	return total
-
-func regular_wave_hp(stage: int, actors: Dictionary, map_data: Dictionary) -> float:
+		var level := int(scenario.level)
+		var gear := float(scenario.gear)
+		var base_attack := float(actor.attack) * (1.0 + (level - 1) * 0.06)
+		var attack := base_attack + level * 2.5 * gear
+		var hp := float(actor.max_hp) * (1.0 + (level - 1) * 0.08) + level * 18.0 * gear
+		var defense := float(actor.defense) * (1.0 + (level - 1) * 0.05) + level * 1.1 * gear
+		gear_contribution += attack - base_attack
+		ehp += hp * (1.0 + defense * 0.012)
+		if actor.get("basic_action", "damage") == "heal":
+			healing += attack * 0.72 / float(actor.attack_interval)
+			if int(scenario.skills) > 0: healing += attack * 1.35 / 6.5
+		else:
+			var basic_dps := attack / float(actor.attack_interval)
+			dps += basic_dps
+			if int(scenario.skills) > 0:
+				var exclusive := attack * 1.4 / 6.0
+				dps += exclusive; skill_contribution += exclusive
+			if int(scenario.skills) > 1:
+				var general := attack * 0.8 / 8.0 * int(scenario.skills)
+				dps += general; skill_contribution += general
+	var map_data: Dictionary
+	for value in maps.values():
+		if int(value.global_stage) == stage: map_data = value; break
 	var pool: Array = map_data.enemy_pool
-	var base_hp: float = 0.0
-	for actor_id in pool: base_hp += float(actors[actor_id].max_hp)
-	base_hp /= pool.size()
-	var stage_scale: float = 1.0 + (stage - 1) * 0.18
-	# Wave 1 has four normals; wave 2 has four normals and one 1.75x elite.
-	return base_hp * stage_scale * (4.0 + (4.0 + 1.75) * 1.12)
-
-func stage_boss_stats(stage: int, actors: Dictionary, map_data: Dictionary) -> Dictionary:
-	var actor: Dictionary = actors[str(map_data.main_boss)]
+	var normal_hp := 0.0
+	var normal_dps := 0.0
+	for enemy_id in pool:
+		normal_hp += float(actors[enemy_id].max_hp)
+		normal_dps += float(actors[enemy_id].attack) / float(actors[enemy_id].attack_interval)
+	normal_hp /= pool.size(); normal_dps /= pool.size()
+	var regular_hp := normal_hp * curve_multiplier("regular_health", stage) * (4.0 + (4.0 + 1.75) * 1.12)
+	var boss: Dictionary = actors[str(map_data.main_boss)]
+	var boss_hp: float
+	var boss_attack: float
+	var boss_defense: float
 	if str(map_data.main_boss).begins_with("stage_guardian"):
-		return {"hp":float(actor.max_hp) * (1.0 + stage * 0.35), "attack":float(actor.attack) * (1.0 + stage * 0.075), "defense":float(actor.defense) * (1.0 + stage * 0.055), "interval":float(actor.attack_interval)}
-	return {"hp":float(actor.max_hp), "attack":float(actor.attack), "defense":float(actor.defense), "interval":float(actor.attack_interval)}
-
-func estimated_incoming_dps(stage: int, actors: Dictionary, map_data: Dictionary, boss: Dictionary) -> float:
-	var pool: Array = map_data.enemy_pool
-	var regular_attack: float = 0.0
-	var regular_interval: float = 0.0
-	for actor_id in pool:
-		regular_attack += float(actors[actor_id].attack)
-		regular_interval += float(actors[actor_id].attack_interval)
-	regular_attack = regular_attack / pool.size() * (1.0 + (stage - 1) * 0.11)
-	regular_interval /= pool.size()
-	var raw: float = regular_attack / regular_interval * 2.2 + float(boss.attack) / float(boss.interval)
-	var tank: Dictionary = actors.zhang_fei
-	var tank_defense: float = float(tank.defense) * (1.0 + (stage - 1) * 0.05) + 2.2 * stage
-	return raw * maxf(0.36, 1.0 - tank_defense * 0.009)
+		boss_hp = float(boss.max_hp) * curve_multiplier("guardian_health", stage)
+		boss_attack = float(boss.attack) / float(boss.attack_interval) * curve_multiplier("guardian_attack", stage)
+		boss_defense = float(boss.defense) * curve_multiplier("guardian_defense", stage)
+	else:
+		var final_scale: Dictionary = difficulty.final_boss[str(stage)]
+		boss_hp = float(boss.max_hp) * float(final_scale.health)
+		boss_attack = float(boss.attack) / float(boss.attack_interval) * float(final_scale.attack)
+		boss_defense = float(boss.defense) * float(final_scale.defense)
+	var defense_factor := maxf(0.25, 1.0 - boss_defense * 0.55 / maxf(1.0, dps * 0.9))
+	var boss_time := boss_hp / maxf(1.0, dps * defense_factor)
+	var total_time := regular_hp / maxf(1.0, dps * 1.15) + boss_time + 10.0
+	var incoming := normal_dps * curve_multiplier("regular_attack", stage) * 2.5 + boss_attack
+	var sustainable := (ehp + healing * total_time * 0.65) * float(scenario.survival)
+	return {"time":total_time, "boss_time":boss_time, "survival":sustainable / maxf(1.0, incoming * total_time), "dps":dps, "healing":healing, "gear_contribution":gear_contribution, "skill_contribution":skill_contribution}

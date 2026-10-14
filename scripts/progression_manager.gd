@@ -394,22 +394,41 @@ func equipped_skill_ids(actor_id: String, category: String) -> Array:
 func general_skill_level(actor_id: String, skill_id: String) -> int:
 	return maxi(1, int(general_skill_levels.get(actor_id, {}).get(skill_id, 1)))
 
+func general_skill_max_level() -> int:
+	return int(progression_config.get("general_skill_upgrade", {}).get("max_level", 10))
+
+func general_skill_upgrade_cost(actor_id: String, skill_id: String) -> int:
+	var level := general_skill_level(actor_id, skill_id)
+	var config: Dictionary = progression_config.get("general_skill_upgrade", {})
+	return int(config.get("gold_base", 80)) + level * int(config.get("gold_linear", 55)) + level * level * int(config.get("gold_quadratic", 10))
+
 func upgrade_general_skill(actor_id: String, skill_id: String) -> bool:
 	if skill_id not in learned_general_skills.get(actor_id, []):
 		return false
 	var level := general_skill_level(actor_id, skill_id)
-	if level >= 10:
+	if level >= general_skill_max_level():
 		return false
-	var cost_gold := 35 + level * 30
-	if gold < cost_gold or skill_book_count(skill_id) < 1:
+	var cost_gold := general_skill_upgrade_cost(actor_id, skill_id)
+	if gold < cost_gold:
 		return false
 	gold -= cost_gold
-	skill_books[skill_id] = skill_book_count(skill_id) - 1
 	general_skill_levels[actor_id][skill_id] = level + 1
-	record_transaction("通用技能升级", "%s:%s Lv.%d（技能书×1）" % [actor_id, skill_id, level + 1], -cost_gold)
+	record_transaction("通用技能升级", "%s:%s Lv.%d（仅金币）" % [actor_id, skill_id, level + 1], -cost_gold)
 	changed.emit()
 	save_to_disk()
 	return true
+
+func recycle_skill_book(skill_id: String, amount: int = 1) -> int:
+	if amount <= 0 or skill_book_count(skill_id) < amount:
+		return 0
+	var unit_gold := int(progression_config.get("general_skill_upgrade", {}).get("duplicate_book_recycle_gold", 45))
+	var earned := unit_gold * amount
+	skill_books[skill_id] = skill_book_count(skill_id) - amount
+	gold += earned
+	record_transaction("回收技能书", "%s ×%d" % [skill_id, amount], earned)
+	changed.emit()
+	save_to_disk()
+	return earned
 
 func toggle_skill_priority(actor_id: String) -> void:
 	if skill_priorities.get(actor_id, ["exclusive", "general"])[0] == "exclusive":
