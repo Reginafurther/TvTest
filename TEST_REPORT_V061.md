@@ -9,9 +9,11 @@
 | `--v061-exclusive-skill-test` | PASS | 10专属主动、10专属被动、升级、UI与存档 |
 | `--v061-skill-test` | PASS | 32通用主动、20通用被动真实触发，槽位、书本升级与重载 |
 | `--v061-progression-test` | PASS | 20关Boss、顺序解锁、自动推进/重复/终局循环、动态等级上限、首通去重 |
-| `--v061-economy-test` | PASS | 全品质职业评分、最多3件、不偷装/锁定、出售过滤、技能书来源 |
+| `--v061-economy-test` | PASS | 全品质职业评分、一次9件、不偷装/锁定、出售过滤、技能书来源 |
 | `--v061-core-test` | PASS | 掉落→角色页穿戴→替换→卸下、战斗属性刷新、装备重载、离线收益一次性领取、双分辨率边界 |
-| `tests/balance_simulation.gd` | PASS | 20关×400次固定种子模拟，递增Boss生命、通关时间与生存门禁 |
+| `--v061-playtest-fixes-test` | PASS | 伤害轨迹、限时盾、减伤、单击招募、20关滚动、金币升级、书本回收、数值说明、统计清空、技能/Boss校准 |
+| `--v061-long-combat-test` | PASS | 30分钟真实结算管线、6次目标替换、状态叠加、第10/20关Boss、异常零伤害=0 |
+| `tests/balance_simulation.gd` | PASS | 8阵容×20关×120次；Lv7第18关阻断、Lv20成型第20关可通、多治疗不无限生存 |
 
 命令模板：
 

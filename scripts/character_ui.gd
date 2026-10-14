@@ -389,13 +389,26 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 	if category == "passive" and exclusive:
 		current = float(data.get("value", 0.0)) + float(data.get("per_level", 0.0)) * (level - 1)
 		next = current + float(data.get("per_level", 0.0))
+	elif category == "passive":
+		current = float(data.get("power", 0.0)) + float(data.get("power_per_level", 0.0)) * (level - 1)
+		next = current + float(data.get("power_per_level", 0.0))
 	else:
 		current = float(data.get("power", 0.0)) * (1.0 + float(data.get("power_per_level", 0.0)) * (level - 1))
 		next = float(data.get("power", 0.0)) * (1.0 + float(data.get("power_per_level", 0.0)) * level)
-	if current > 0.0:
-		lines.append("当前实际倍率：%.1f%%攻击/效果" % (current * 100.0))
+	var effect := str(data.get("effect", data.get("type", "")))
+	if effect == "stat_guard":
+		var health_now := float(data.get("health", 0.0)) + float(data.get("power_per_level", 0.0)) * (level - 1)
+		var defense_now := float(data.get("defense", 0.0)) + float(data.get("power_per_level", 0.0)) * (level - 1)
+		lines.append("当前实际效果：生命 +%.1f%%，防御 +%.1f%%" % [health_now * 100.0, defense_now * 100.0])
+		if level < max_level: lines.append("升级至Lv.%d：生命/防御各再提高 %.1f%%" % [level + 1, float(data.get("power_per_level", 0.0)) * 100.0])
+	elif current > 0.0:
+		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect == "regeneration" else "攻击/效果"
+		lines.append("当前实际倍率：%.1f%% %s" % [current * 100.0, unit_name])
 	if data.has("hits"): lines.append("段数：%d" % int(data.hits))
 	if data.has("targets"): lines.append("最多目标：%d" % int(data.targets))
+	elif effect == "area_damage": lines.append("最多目标：6")
+	elif effect == "chain": lines.append("最多目标：3")
+	elif effect in ["heal", "hot", "cleanse", "damage", "armor_break", "burn", "poison", "shock", "freeze", "stun", "low_hp_damage"]: lines.append("目标：1")
 	if data.has("cooldown"):
 		var cooldown := float(data.cooldown)
 		if exclusive: cooldown *= 1.0 - float(data.get("cooldown_per_level", 0.0)) * (level - 1)
@@ -406,8 +419,11 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 	if data.has("armor_break"): lines.append("降低防御：%.1f%%" % (float(data.armor_break) * 100.0))
 	if data.has("slow"): lines.append("减速：%.1f%%" % (float(data.slow) * 100.0))
 	if data.has("dot_power"): lines.append("每秒持续伤害：%.1f%%攻击" % (float(data.dot_power) * 100.0))
-	if level < max_level and (next != current): lines.append("升级至Lv.%d：%.1f%% → %.1f%%" % [level + 1, current * 100.0, next * 100.0])
-	else: lines.append("已满级" if level >= max_level else "该效果不随等级变化")
+	if data.has("regen"): lines.append("基础每秒恢复：%.1f生命" % float(data.regen))
+	if effect == "low_hp_damage": lines.append("自身生命≤40%%时，本次伤害额外×1.65")
+	if effect != "stat_guard":
+		if level < max_level and (next != current): lines.append("升级至Lv.%d：%.1f%% → %.1f%%" % [level + 1, current * 100.0, next * 100.0])
+		else: lines.append("已满级" if level >= max_level else "该效果不随等级变化")
 	return "\n".join(lines)
 
 func add_skill_heading(heading: String, detail: String = "") -> void:

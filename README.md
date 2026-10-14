@@ -24,6 +24,12 @@ Windows 安装 Godot 4.7 标准版，在项目管理器导入本目录的 `proje
 godot --path .
 ```
 
+Windows 4.7 完整自动回归：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\verify_v061_playtest.ps1 -GodotBin 'D:\Tools\Godot_v4.7-stable_win64_console.exe'
+```
+
 常用按键：`B` 打开统一角色页，空格暂停/继续，左键设置集结点。顶部功能入口可进入招募、商店、技能策略、目标与统计。
 
 ## 数据配置
@@ -46,5 +52,9 @@ godot --path .
 - [数值模拟报告](BALANCE_REPORT_V061.md)
 - [Windows Godot 4.7 检查表](WINDOWS_GODOT47_CHECKLIST_V061.md)
 - [美术接入说明](ART_INTEGRATION_V061.md)
+- [实机验收修复报告](PLAYTEST_FIX_REPORT_V061_1.md)
+- [52技能校准表](SKILL_ALIGNMENT_V061_1.md)
+- [20关Boss校准表](BOSS_ALIGNMENT_V061_1.md)
+- [实机反馈后难度报告](BALANCE_REPORT_V061_1.md)
 
 云端回归使用 Godot 4.6.3 headless；目标配置为 Godot 4.7。云机没有图形显示服务，因此 1440×768、1920×1080 已做布局边界断言，但最终像素级目视检查须按 Windows 4.7 清单执行。

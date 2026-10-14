@@ -514,7 +514,7 @@ func try_use_skill() -> bool:
 				var victims: Array = battle.enemies_near(target.position, faction, 145.0, 3)
 				for i in range(victims.size()):
 					var victim = victims[i]
-					victim.take_damage(attack * power * (1.0 + elemental_damage) * (1.0 - i * 0.18), self, false, {"kind": "skill", "allow_triggers": true})
+					victim.take_damage(attack * power * (1.0 + elemental_damage) * (1.0 - i * 0.18), self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 					battle.spawn_tracer(position if i == 0 else victims[i - 1].position, victim.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】，命中 %d 个目标" % [_name(), _skill_name(), victims.size()])
@@ -522,7 +522,7 @@ func try_use_skill() -> bool:
 				return true
 		"damage":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", attack_range)):
-				target.take_damage(attack * power * (1.0 + physical_damage), self, false, {"kind": "skill", "allow_triggers": true})
+				target.take_damage(attack * power * (1.0 + physical_damage), self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				battle.spawn_ring(target.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
@@ -530,7 +530,7 @@ func try_use_skill() -> bool:
 				return true
 		"poison":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 210)):
-				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "allow_triggers": true})
+				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				var poison_bonus := passive_value() if passive_data.get("effect", "") == "poison_master" else 0.0
 				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, 0)
 				if poison_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
@@ -546,7 +546,7 @@ func try_use_skill() -> bool:
 					if passive_data.get("effect", "") == "boss_slayer" and victim.actor_data.has("boss_id"):
 						damage *= 1.0 + passive_value()
 						battle.note_passive(actor_id, passive_skill_id)
-					victim.take_damage(damage, self, false, {"kind": "skill", "allow_triggers": true})
+					victim.take_damage(damage, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				if actor_data.get("boss_id", "") == "mewtwo":
 					add_shield(max_hp * 0.12)
 				skill_timer = cooldown
