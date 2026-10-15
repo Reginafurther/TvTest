@@ -21,7 +21,7 @@ func _initialize() -> void:
 	battle.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("V081_MAINLINE_WAVE_VALIDATION_PASS stages=40 late_world_pools=20 stage23_orders=3 stage29_to_30=true max_waves=3 rewards=true")
+		print("V081_MAINLINE_WAVE_VALIDATION_PASS stages=60 late_world_pools=40 stage23_orders=3 stage29_to_30=true max_waves=3 rewards=true")
 		quit(0)
 		return
 	for failure in failures:
@@ -45,8 +45,8 @@ func _validate_all_stage_pools() -> void:
 		if stage >= 21:
 			late_stage_count += 1
 			if pool.is_empty(): failures.append("第%d关没有普通怪" % stage)
-	if seen_stages.size() != 40 or late_stage_count != 20:
-		failures.append("主线关卡数量不是1—40")
+	if seen_stages.size() != 60 or late_stage_count != 40:
+		failures.append("主线关卡数量不是1—60")
 	# Exercise both a regular wave and the configured final wave for every stage.
 	for map_id in battle.worlds_config.maps:
 		var map_data: Dictionary = battle.worlds_config.maps[map_id]
