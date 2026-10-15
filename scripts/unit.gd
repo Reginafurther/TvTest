@@ -54,6 +54,7 @@ var dead := false
 var facing := 1.0
 var rally_target := Vector2.ZERO
 var has_rally := false
+var rally_timeout := 0.0
 var special_effects: Array = []
 var shield := 0.0
 var shield_time := 0.0
@@ -218,6 +219,7 @@ func _physics_process(delta: float) -> void:
 	for general_id in general_active_timers:
 		general_active_timers[general_id] = maxf(0.0, float(general_active_timers[general_id]) - delta)
 	target_refresh_timer = maxf(0.0, target_refresh_timer - delta)
+	rally_timeout = maxf(0.0, rally_timeout - delta)
 	repath_timer -= delta
 	hit_flash = maxf(0.0, hit_flash - delta)
 	taunt_timer = maxf(0.0, taunt_timer - delta)
@@ -284,7 +286,10 @@ func _physics_process(delta: float) -> void:
 		target = battle.select_combat_target(self)
 		target_refresh_timer = 0.65
 	if has_rally:
-		if position.distance_to(rally_target) < 22.0:
+		# A rally order is a short reposition command, not a permanent combat lock.
+		# Nearby threats immediately return control to normal role AI.
+		var threat_in_range := is_instance_valid(target) and position.distance_to(target.position) <= attack_range
+		if position.distance_to(rally_target) < 22.0 or rally_timeout <= 0.0 or threat_in_range:
 			has_rally = false
 			nav_path.clear()
 		else:
@@ -301,19 +306,26 @@ func _physics_process(delta: float) -> void:
 	var distance := position.distance_to(target.position)
 	if faction == "heroes" and actor_data.get("combat_style", "melee") == "ranged":
 		var minimum_safe := float(actor_data.get("minimum_safe_distance", attack_range * 0.5))
-		if distance < minimum_safe:
-			current_action = "retreat"
-			move_toward_point(battle.tactical_ranged_point(self, target), delta)
-			return
 		if distance <= attack_range:
 			if try_auto_skills(): return
-			velocity = Vector2.ZERO
-			current_action = "hold_range"
-			if attack_timer <= 0.0: basic_attack()
+			# Fire before repositioning. This prevents ranged heroes from spending
+			# every ready frame retreating without ever performing a basic attack.
+			if attack_timer <= 0.0:
+				basic_attack()
+				return
+			var retreat_limit := minimum_safe + (18.0 if current_action == "retreat" else 0.0)
+			if distance < retreat_limit:
+				current_action = "retreat"
+				move_away_from_point(target.position)
+			else:
+				velocity = Vector2.ZERO
+				current_action = "hold_range"
 			return
 		if try_auto_skills(): return
 		current_action = "seek_firing_position"
-		move_toward_point(battle.tactical_ranged_point(self, target), delta)
+		# Outside attack range, pursue the live target directly. Preferred spacing
+		# resumes after entering range, avoiding boundary-seeking deadlocks.
+		move_toward_point(target.position, delta)
 		return
 	if faction == "heroes" and actor_data.get("combat_role", "") == "tank" and distance <= 150.0:
 		var threatened_role := str(target.target.actor_data.get("combat_role", "")) if is_instance_valid(target.target) else ""
@@ -332,19 +344,12 @@ func _physics_process(delta: float) -> void:
 		move_toward_point(target.position, delta)
 
 func move_toward_point(point: Vector2, _delta: float) -> void:
-	var goal_shifted := nav_goal.distance_to(point) > 28.0
-	if nav_path.is_empty() or path_index >= nav_path.size() or (repath_timer <= 0.0 and goal_shifted):
-		nav_path = battle.find_path(position, point)
-		path_index = 0
-		nav_goal = point
-		repath_timer = 0.38 + randf() * 0.14
-	# AStarGrid includes the current cell centre as its first point. Slow units used
-	# to walk backwards toward that point until the next repath, causing a loop.
-	# Skip waypoints within roughly one grid cell so every repath advances.
-	while path_index < nav_path.size() and position.distance_to(nav_path[path_index]) < 36.0:
-		path_index += 1
-	var next_point := point if path_index >= nav_path.size() else nav_path[path_index]
-	var direction := position.direction_to(next_point)
+	var clamped_point := Vector2(
+		clampf(point.x, 18.0, BattleMapScript.ARENA_SIZE.x - 18.0),
+		clampf(point.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
+	)
+	nav_goal = clamped_point
+	var direction := position.direction_to(clamped_point)
 	var speed_factor := (1.0 + haste_power if haste_time > 0.0 else 1.0) * (1.0 - slow_power if slow_time > 0.0 else 1.0)
 	velocity = direction * move_speed * maxf(0.15, speed_factor)
 	if absf(direction.x) > 0.05:
@@ -1149,9 +1154,12 @@ func show_number(value: String, tint: Color) -> void:
 	add_child(number)
 
 func set_rally(point: Vector2) -> void:
-	rally_target = point
+	rally_target = Vector2(
+		clampf(point.x, 18.0, BattleMapScript.ARENA_SIZE.x - 18.0),
+		clampf(point.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
+	)
 	has_rally = true
-	target = null
+	rally_timeout = 3.0
 	nav_path.clear()
 
 func set_special_effects(effects: Array) -> void:

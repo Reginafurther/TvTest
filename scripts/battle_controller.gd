@@ -148,16 +148,8 @@ func _ready() -> void:
 func setup_navigation() -> void:
 	astar.region = Rect2i(0, 0, 34, 17)
 	astar.cell_size = Vector2(32, 32)
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ALWAYS
 	astar.update()
-	for rect in battle_map.obstacles:
-		var start := world_to_cell(rect.position - Vector2(16, 16))
-		var finish := world_to_cell(rect.end + Vector2(16, 16))
-		for x in range(start.x, finish.x + 1):
-			for y in range(start.y, finish.y + 1):
-				var cell := Vector2i(x, y)
-				if astar.is_in_boundsv(cell):
-					astar.set_point_solid(cell, true)
 
 func spawn_party() -> void:
 	var ids: Array = progression.party
@@ -431,11 +423,6 @@ func tactical_ranged_point(unit, threat) -> Vector2:
 	var desired: Vector2 = threat.position + away.normalized() * preferred
 	desired.x = clampf(desired.x, 28.0, BattleMapScript.ARENA_SIZE.x - 28.0)
 	desired.y = clampf(desired.y, 38.0, BattleMapScript.ARENA_SIZE.y - 28.0)
-	if point_blocked(desired):
-		var side := Vector2(-away.y, away.x) * (70.0 if hash(unit.actor_id) % 2 == 0 else -70.0)
-		desired += side
-		desired.x = clampf(desired.x, 28.0, BattleMapScript.ARENA_SIZE.x - 28.0)
-		desired.y = clampf(desired.y, 38.0, BattleMapScript.ARENA_SIZE.y - 28.0)
 	return desired
 
 func record_ai_snapshot() -> void:
@@ -468,11 +455,10 @@ func enemies_near(center: Vector2, source_faction: String, radius: float, limit:
 	return found
 
 func find_path(from: Vector2, to: Vector2) -> PackedVector2Array:
-	var start := nearest_open_cell(world_to_cell(from))
-	var finish := nearest_open_cell(world_to_cell(to))
-	if not astar.is_in_boundsv(start) or not astar.is_in_boundsv(finish):
-		return PackedVector2Array([to])
-	return astar.get_point_path(start, finish)
+	# With fixed blockers removed, a direct path is both more stable and cheaper.
+	# Keep the method as the single movement API for compatibility with tests and
+	# future temporary mechanics.
+	return PackedVector2Array([to])
 
 func nearest_open_cell(cell: Vector2i) -> Vector2i:
 	cell.x = clampi(cell.x, 0, 33)
@@ -491,10 +477,7 @@ func world_to_cell(point: Vector2) -> Vector2i:
 	return Vector2i(floori(point.x / 32.0), floori(point.y / 32.0))
 
 func point_blocked(point: Vector2) -> bool:
-	for rect in battle_map.obstacles:
-		if rect.grow(18).has_point(point):
-			return true
-	return false
+	return not Rect2(Vector2(18, 28), BattleMapScript.ARENA_SIZE - Vector2(36, 46)).has_point(point)
 
 func _on_unit_died(unit) -> void:
 	if unit.faction == "enemies":
