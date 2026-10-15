@@ -49,6 +49,10 @@ func _draw() -> void:
 		draw_line(rally_position - Vector2(0, 8), rally_position + Vector2(0, 8), Color.WHITE, 2)
 
 func world_palette() -> Array[Color]:
+	if map_id in ["elwynn_forest","deadmines","scarlet_monastery","stratholme","molten_core","naxxramas","ulduar","shadow_council","dragon_soul","frozen_throne"]:
+		return [Color("#44505A"), Color("#3C4852"), Color("#4C5963"), Color("#597D8A")]
+	if map_id in ["niujia_night","baituo_manor","ancient_tomb_edge","xiangyang_outskirts","emei_summit","bright_peak_passage","shaolin_temple","swallow_manor","black_wood_path","black_wood_summit"]:
+		return [Color("#8B9274"), Color("#81896B"), Color("#959C7F"), Color("#6B91A0")]
 	if map_id in ["cassell_academy","bronze_city_outskirts","tokyo_paradise","nibelungen_gate","bronze_throne","bronze_city_depths","underground_dragon_lair","nibelungen_core","white_king_relic","black_king_throne"]:
 		return [Color("#424958"), Color("#3B4352"), Color("#4A5262"), Color("#7B493E")]
 	if map_id in ["wuyang_outer","wuyang_tunnel","wuyang_gate","wuyang_inner","thunder_music_array","wuyang_final","mirror_outer","mirror_illusion","mirror_forbidden","mirror_summit"]:

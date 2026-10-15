@@ -13,7 +13,11 @@
     "dragon_pack": {"name":"龙血结晶小包","world":"龙族","type":"material","material_id":"dragon_blood_crystal","amount":5,"price":95,"required_stage":20,"icon":"dragon_blood_crystal","description":"龙族定向招募资源；数量受金币循环约束。"},
     "book_dragon_flame": {"name":"技能书·龙焰爆发","world":"龙族","type":"skill_book","skill_id":"dz_dragon_flame","amount":1,"price":360,"required_stage":20,"icon":"skill_book","description":"龙族通用主动技能书。"},
     "jianghu_pack": {"name":"江湖令小包","world":"逆水寒","type":"material","material_id":"jianghu_token","amount":5,"price":125,"required_stage":30,"icon":"jianghu_token","description":"逆水寒职业招募资源。"},
-    "book_breeze_heal": {"name":"技能书·清风回春","world":"逆水寒","type":"skill_book","skill_id":"nh_breeze_heal","amount":1,"price":440,"required_stage":30,"icon":"skill_book","description":"逆水寒通用治疗技能书。"}
+    "book_breeze_heal": {"name":"技能书·清风回春","world":"逆水寒","type":"skill_book","skill_id":"nh_breeze_heal","amount":1,"price":440,"required_stage":30,"icon":"skill_book","description":"逆水寒通用治疗技能书。"},
+    "azeroth_pack": {"name":"艾泽拉斯徽记小包","world":"魔兽世界","type":"material","material_id":"azeroth_token","amount":5,"price":155,"required_stage":40,"icon":"azeroth_token","description":"魔兽世界角色定向招募资源。"},
+    "book_pyroblast": {"name":"技能书·炎爆术","world":"魔兽世界","type":"skill_book","skill_id":"wow_pyroblast","amount":1,"price":520,"required_stage":40,"icon":"skill_book","description":"魔兽世界通用元素主动技能书。"},
+    "wuxia_pack": {"name":"侠义令小包","world":"金庸","type":"material","material_id":"wuxia_token","amount":5,"price":185,"required_stage":50,"icon":"wuxia_token","description":"金庸角色定向招募资源。"},
+    "book_finger_flick": {"name":"技能书·弹指神通","world":"金庸","type":"skill_book","skill_id":"jy_finger_flick","amount":1,"price":620,"required_stage":50,"icon":"skill_book","description":"金庸通用物理主动技能书。"}
   },
   "rules": {"max_quantity": 20, "sell_ratio_hint": "装备售价由等级与品质计算；穿戴中的装备不可出售。"}
 }

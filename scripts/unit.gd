@@ -36,6 +36,7 @@ var cooldown_reduction := 0.0
 var physical_damage := 0.0
 var elemental_damage := 0.0
 var life_regen := 0.0
+var emergency_regen := 0.0
 var final_damage := 0.0
 var damage_reduction := 0.0
 var healing_effect := 0.0
@@ -209,11 +210,12 @@ func _physics_process(delta: float) -> void:
 		if hot_tick >= 1.0:
 			hot_tick -= 1.0
 			heal(hot_amount, hot_source, false)
-	if life_regen > 0.0 and hp < max_hp:
+	var current_regen := life_regen + (emergency_regen if hp / maxf(1.0, max_hp) <= 0.35 else 0.0)
+	if current_regen > 0.0 and hp < max_hp:
 		regen_accumulator += delta
 		if regen_accumulator >= 1.0:
 			regen_accumulator -= 1.0
-			heal(life_regen, self, false)
+			heal(current_regen, self, false)
 	if not is_instance_valid(target) or target.dead:
 		target = null
 	if faction == "heroes" and taunt_timer <= 0.0 and target_refresh_timer <= 0.0:
@@ -476,6 +478,17 @@ func try_use_general_skill(skill_id: String) -> bool:
 				var low_hp_multiplier := 1.65 if hp / maxf(1.0, max_hp) <= 0.4 else 1.0
 				enemy.take_damage(attack * power * low_hp_multiplier, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
 				used = true
+		"leech_damage":
+			if valid_enemy_in_range(enemy, cast_range):
+				var dealt := attack * power
+				enemy.take_damage(dealt, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+				heal(active_heal_amount(dealt * clampf(float(data.get("leech", 0.12)), 0.0, 0.20)), self, false)
+				used = true
+		"self_cost_damage":
+			if valid_enemy_in_range(enemy, cast_range) and hp > max_hp * 0.18:
+				hp = maxf(1.0, hp - max_hp * clampf(float(data.get("health_cost", 0.06)), 0.0, 0.10))
+				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+				used = true
 		"multi_hit":
 			if valid_enemy_in_range(enemy, cast_range):
 				var bonus := 1.0 + passive_effect_total("multi_hit_bonus")
@@ -640,6 +653,9 @@ func try_use_skill() -> bool:
 						if hp / maxf(1.0, max_hp) <= 0.30: damage *= 1.28; haste_power = 0.25; haste_time = 6.0
 					elif actor_data.get("boss_mechanic", "") == "star_sword_phases" and hp / maxf(1.0, max_hp) <= 0.5:
 						damage *= 1.24; victim.apply_slow(0.22, 3.0)
+					elif actor_data.get("boss_mechanic", "") == "final_burst_phases":
+						if hp / maxf(1.0, max_hp) <= 0.55: damage *= 1.18; haste_power = 0.16; haste_time = 5.0
+						if hp / maxf(1.0, max_hp) <= 0.25: damage *= 1.24; temporary_evasion = 0.10; temporary_evasion_time = 3.0
 					if passive_data.get("effect", "") == "boss_slayer" and victim.actor_data.has("boss_id"):
 						damage *= 1.0 + passive_value()
 						battle.note_passive(actor_id, passive_skill_id)
@@ -1036,6 +1052,10 @@ func on_boss_skill_cast() -> void:
 			for victim in battle.enemies_near(position, faction, 280.0, 8): victim.apply_shock(2.5)
 		"illusion_decoy": add_shield(max_hp * 0.1, 4.0); temporary_evasion = 0.2; temporary_evasion_time = 4.0
 		"dual_phase": temporary_counter = 0.3; temporary_counter_time = 5.0; add_shield(max_hp * 0.06, 4.0)
+		"final_burst_phases":
+			haste_power = 0.18 if hp / maxf(1.0, max_hp) > 0.25 else 0.32
+			haste_time = 5.0
+			if hp / maxf(1.0, max_hp) <= 0.55: add_shield(max_hp * 0.05, 3.0)
 	if "elemental" in rift_affixes:
 		for victim in battle.enemies_near(position, faction, 260.0, 8): victim.take_damage(attack * 0.18, self, false, {"kind":"effect","allow_triggers":false})
 	if "summon" in rift_affixes:
@@ -1062,6 +1082,8 @@ func boss_minion_actor_id() -> String:
 		"三国": return "yellow_turban"
 		"龙族": return "dragon_deadpool"
 		"逆水寒": return "jianghu_raider"
+		"魔兽世界": return "wow_ghoul"
+		"金庸": return "jy_assassin"
 	return "zubat"
 
 func apply_hard_control(duration: float) -> float:
@@ -1097,6 +1119,7 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	damage_reduction = clampf(float(stats.get("damage_reduction", 0)), 0.0, float(rules.get("max_damage_reduction", 0.45)))
 	healing_effect = clampf(float(stats.get("healing_effect", 0)), 0.0, float(rules.get("max_healing_effect", 1.0)))
 	life_regen = 0.0
+	emergency_regen = 0.0
 	for row in general_passive_datas:
 		var general_id: String = row.id
 		var general_data: Dictionary = row.data
@@ -1110,6 +1133,7 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 			"cooldown_reduction": cooldown_reduction += value
 			"critical": crit_chance += value
 			"regeneration": life_regen += max_hp * value
+			"low_hp_regeneration": emergency_regen += max_hp * value
 			"move_speed": move_speed = float(actor_data.get("move_speed", 80)) * (1.0 + value)
 	match passive_data.get("effect", ""):
 		"health_regen":
@@ -1170,7 +1194,11 @@ func passive_status_mastery(status: String) -> float:
 func trigger_general_on_hit(victim) -> void:
 	if not is_instance_valid(victim) or victim.dead: return
 	for row in general_passive_datas:
-		if str(row.data.get("effect", "")) != "on_hit_status": continue
+		var effect := str(row.data.get("effect", ""))
+		if effect == "life_steal":
+			heal(basic_heal_amount(attack * clampf(general_passive_value(str(row.id), row.data), 0.0, 0.10)), self, false)
+			continue
+		if effect != "on_hit_status": continue
 		var chance := general_passive_value(str(row.id), row.data)
 		if randf() > chance: continue
 		match str(row.data.get("status", "")):
@@ -1210,12 +1238,12 @@ func combat_snapshot() -> Dictionary:
 func _draw() -> void:
 	var base := Color(actor_data.get("color", "FFFFFF"))
 	var accent := _accent_color()
+	var true_boss := is_true_boss_unit()
 	if hit_flash > 0:
 		base = Color.WHITE
-	if actor_data.has("boss_id"):
+	if true_boss:
 		draw_circle(Vector2.ZERO, 34, Color(accent, 0.16))
 		draw_arc(Vector2.ZERO, 34, 0, TAU, 36, accent, 4)
-		draw_string(ThemeDB.fallback_font, Vector2(-28, -58), "BOSS", HORIZONTAL_ALIGNMENT_CENTER, 56, 14, Color("#FFE08A"))
 	# Soft shadow, oversized head and compact body form the placeholder chibi silhouette.
 	draw_chibi_ellipse(Vector2(0, 17), Vector2(21, 8), Color(0.05, 0.08, 0.08, 0.22))
 	var artwork: Texture2D = ArtCatalogScript.texture("units", actor_id)
@@ -1241,6 +1269,13 @@ func _draw() -> void:
 		draw_circle(Vector2(-7, -17), 2.2, Color("#17202A"))
 		draw_circle(Vector2(7, -17), 2.2, Color("#17202A"))
 		draw_arc(Vector2(0, -9), 5, 0.2, PI - 0.2, 12, accent, 2)
+	if true_boss:
+		var boss_name := boss_display_name()
+		var boss_font_size := clampi(16 - maxi(0, boss_name.length() - 4), 11, 16)
+		var boss_label_y := health_bar_y - 13.0
+		# Draw a compact shadow first so long Chinese names stay readable over art.
+		draw_string(ThemeDB.fallback_font, Vector2(-91, boss_label_y + 1), boss_name, HORIZONTAL_ALIGNMENT_CENTER, 182, boss_font_size, Color("#2A1808"))
+		draw_string(ThemeDB.fallback_font, Vector2(-90, boss_label_y), boss_name, HORIZONTAL_ALIGNMENT_CENTER, 180, boss_font_size, Color("#FFE08A"))
 	draw_arc(Vector2.ZERO, 17, 0, TAU, 24, accent, 3)
 	if faction == "heroes":
 		draw_circle(Vector2(0, faction_marker_y), 4, Color("#68D6FF"))
@@ -1253,6 +1288,12 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, 28, 0, TAU, 24, Color("#80C8FF"), 3)
 	if poison_time > 0:
 		draw_circle(Vector2(23, -37), 5, Color("#C58DFF"))
+
+func is_true_boss_unit() -> bool:
+	return faction == "enemies" and enemy_type == "boss" and actor_data.has("boss_id")
+
+func boss_display_name() -> String:
+	return _name() if is_true_boss_unit() else ""
 
 func draw_chibi_ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
 	var points := PackedVector2Array()

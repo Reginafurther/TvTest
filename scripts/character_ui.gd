@@ -362,7 +362,7 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 	var p = battle.progression
 	var actor: Dictionary = battle.actors[selected_actor]
 	var filter_row := HBoxContainer.new(); skills_box.add_child(filter_row)
-	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒"]:
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸"]:
 		var button := Button.new(); button.text = world; button.disabled = skill_world_filter == world; button.pressed.connect(_set_skill_world_filter.bind(world)); filter_row.add_child(button)
 	var category_row := HBoxContainer.new(); skills_box.add_child(category_row)
 	for category_name in ["全部", "主动", "被动"]:
@@ -496,13 +496,13 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 		lines.append("当前实际效果：生命 +%.1f%%，防御 +%.1f%%" % [health_now * 100.0, defense_now * 100.0])
 		if level < max_level: lines.append("升级至Lv.%d：生命/防御各再提高 %.1f%%" % [level + 1, float(data.get("power_per_level", 0.0)) * 100.0])
 	elif current > 0.0:
-		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect == "regeneration" else "攻击/效果"
+		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect in ["regeneration", "low_hp_regeneration"] else "普攻吸血" if effect == "life_steal" else "攻击/效果"
 		lines.append("当前实际倍率：%.1f%% %s" % [current * 100.0, unit_name])
 	if data.has("hits"): lines.append("段数：%d" % int(data.hits))
 	if data.has("targets"): lines.append("最多目标：%d" % int(data.targets))
 	elif effect == "area_damage": lines.append("最多目标：6")
 	elif effect == "chain": lines.append("最多目标：3")
-	elif effect in ["heal", "hot", "cleanse", "damage", "armor_break", "burn", "poison", "shock", "freeze", "stun", "low_hp_damage"]: lines.append("目标：1")
+	elif effect in ["heal", "hot", "cleanse", "damage", "armor_break", "burn", "poison", "shock", "freeze", "stun", "low_hp_damage", "leech_damage", "self_cost_damage"]: lines.append("目标：1")
 	if data.has("cooldown"):
 		var cooldown := float(data.cooldown)
 		if exclusive: cooldown *= 1.0 - float(data.get("cooldown_per_level", 0.0)) * (level - 1)

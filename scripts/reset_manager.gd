@@ -52,7 +52,7 @@ func create_verified_backup() -> Dictionary:
 		if DirAccess.copy_absolute(source, destination) != OK or not _files_identical(source, destination):
 			last_error = "备份文件复制校验失败：" + file_name
 			return {"ok": false, "path": backup_path, "files": names}
-	var manifest := {"version": "0.8.1", "created_unix": int(Time.get_unix_time_from_system()), "source_files": names}
+	var manifest := {"version": "0.9", "created_unix": int(Time.get_unix_time_from_system()), "source_files": names}
 	var manifest_path := backup_absolute.path_join("backup_manifest.json")
 	var manifest_file := FileAccess.open(manifest_path, FileAccess.WRITE)
 	if manifest_file == null:
@@ -69,7 +69,7 @@ func create_verified_backup() -> Dictionary:
 func _write_reset_marker(path: String, backup_path: String) -> bool:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null: return false
-	file.store_string(JSON.stringify({"version": "0.8.1", "reset_unix": int(Time.get_unix_time_from_system()), "backup_path": backup_path}, "  "))
+	file.store_string(JSON.stringify({"version": "0.9", "reset_unix": int(Time.get_unix_time_from_system()), "backup_path": backup_path}, "  "))
 	file.close()
 	return typeof(JSON.parse_string(FileAccess.get_file_as_string(path))) == TYPE_DICTIONARY
 

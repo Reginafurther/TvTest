@@ -38,7 +38,7 @@ var character_button: Button
 var camp_ui
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.8.1")
+	DisplayServer.window_set_title("万界冒险团 V0.9")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -95,6 +95,8 @@ func _ready() -> void:
 		call_deferred("_save_v06_character_preview", Vector2i(1440, 768), "v06_character_1440.png")
 	elif "--v06-preview-character-1920" in OS.get_cmdline_user_args():
 		call_deferred("_save_v06_character_preview", Vector2i(1920, 1080), "v06_character_1920.png")
+	elif "--v09-preview-boss" in OS.get_cmdline_user_args():
+		call_deferred("_save_v09_boss_preview")
 	elif "--v05-core-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v05_core_test")
 	elif "--v05-shop-test" in OS.get_cmdline_user_args():
@@ -386,6 +388,32 @@ func _save_v06_character_preview(window_size: Vector2i, file_name: String) -> vo
 		return
 	image.save_png(path)
 	print("V06_PREVIEW " + ProjectSettings.globalize_path(path))
+	get_tree().quit()
+
+func _save_v09_boss_preview() -> void:
+	get_window().size = Vector2i(1440, 768)
+	battle.clear_combatants()
+	battle.progression.completed_stages = range(1, 50)
+	battle.progression.ensure_world_layout()
+	battle.current_map_id = "frozen_throne"
+	battle.battle_map.map_id = battle.current_map_id
+	battle.battle_map.queue_redraw()
+	battle.wave = 3
+	battle.stage_cleared = false
+	battle.spawn_party()
+	battle.spawn_wave()
+	_update_world(battle.current_map_id)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_layout_ui()
+	var path := "user://v09_boss_name.png"
+	var image := get_viewport().get_texture().get_image()
+	if image == null or image.is_empty():
+		push_error("V09_BOSS_PREVIEW_FAIL rendering texture unavailable")
+		get_tree().quit(1)
+		return
+	image.save_png(path)
+	print("V09_BOSS_PREVIEW " + ProjectSettings.globalize_path(path))
 	get_tree().quit()
 
 func update_stats(kills: int, elapsed: float, wave: int) -> void:

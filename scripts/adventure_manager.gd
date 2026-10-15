@@ -14,9 +14,10 @@ func setup(owner_battle) -> void:
 	battle = owner_battle
 	config = JSON.parse_string(FileAccess.get_file_as_string("res://data/adventure.json"))
 	if typeof(config) != TYPE_DICTIONARY: config = {}
-	var v08 = JSON.parse_string(FileAccess.get_file_as_string("res://data/v08_content.json"))
-	if typeof(v08) == TYPE_DICTIONARY:
-		config.rift.worlds.merge(v08.get("rift_worlds", {}), true)
+	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json"]:
+		var content = JSON.parse_string(FileAccess.get_file_as_string(content_path))
+		if typeof(content) == TYPE_DICTIONARY:
+			config.rift.worlds.merge(content.get("rift_worlds", {}), true)
 	active_encounter = battle.progression.encounter_state.get("active", {}).duplicate(true)
 	if not active_encounter.is_empty():
 		if str(active_encounter.get("type", "")) == "wandering_merchant":
@@ -168,7 +169,7 @@ func reward_for_encounter(event_id: String) -> Dictionary:
 	var stage := maxi(1, battle.progression.completed_stages.size())
 	var reward := {"gold":20 + stage * 5,"material":2 + stage / 5}
 	battle.progression.gold += int(reward.gold)
-	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token" if stage <= 20 else "dragon_blood_crystal" if stage <= 30 else "jianghu_token"
+	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token" if stage <= 20 else "dragon_blood_crystal" if stage <= 30 else "jianghu_token" if stage <= 40 else "azeroth_token" if stage <= 50 else "wuxia_token"
 	battle.progression.materials[material_id] = int(battle.progression.materials.get(material_id, 0)) + int(reward.material)
 	battle.combat_stats.resources.materials += int(reward.material)
 	if event_id in ["rare_elite", "chest_mimic", "hidden_boss"]:
@@ -272,7 +273,11 @@ func achievement_ready(id: String) -> bool:
 		"stage": return battle.progression.completed_stages.size() >= int(row.target)
 		"encounter_hidden_boss": return int(battle.progression.encounter_counts.get("hidden_boss", 0)) >= int(row.target)
 		"encounter_chest_mimic": return int(battle.progression.encounter_counts.get("chest_mimic", 0)) >= int(row.target)
-		"rift_floor": return maxi(int(battle.progression.rift_progress.three_kingdoms.highest_clear), int(battle.progression.rift_progress.pokemon.highest_clear)) >= int(row.target)
+		"rift_floor":
+			var highest := 0
+			for world_id in battle.progression.rift_progress:
+				highest = maxi(highest, int(battle.progression.rift_progress[world_id].get("highest_clear", 0)))
+			return highest >= int(row.target)
 		"roster_world":
 			var count := 0
 			for actor_id in battle.progression.roster:

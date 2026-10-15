@@ -87,14 +87,15 @@ func _ready() -> void:
 	shop_config = DataLoaderScript.load_json("res://data/shop.json")
 	passives_config = DataLoaderScript.load_json("res://data/passives.json")
 	general_skills_config = DataLoaderScript.load_json("res://data/general_skills.json")
-	var v08: Dictionary = DataLoaderScript.load_json("res://data/v08_content.json")
-	actors.merge(v08.get("actors", {}), true)
-	skills.merge(v08.get("skills", {}), true)
-	passives_config.merge(v08.get("passives", {}), true)
-	general_skills_config.merge(v08.get("general_skills", {}), true)
-	worlds_config.maps.merge(v08.get("maps", {}), true)
-	worlds_config.bosses.merge(v08.get("bosses", {}), true)
-	worlds_config.recruitment.costs.merge(v08.get("recruitment", {}), true)
+	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json"]:
+		var content: Dictionary = DataLoaderScript.load_json(content_path)
+		actors.merge(content.get("actors", {}), true)
+		skills.merge(content.get("skills", {}), true)
+		passives_config.merge(content.get("passives", {}), true)
+		general_skills_config.merge(content.get("general_skills", {}), true)
+		worlds_config.maps.merge(content.get("maps", {}), true)
+		worlds_config.bosses.merge(content.get("bosses", {}), true)
+		worlds_config.recruitment.costs.merge(content.get("recruitment", {}), true)
 	for skill_id in general_skills_config:
 		if not general_skills_config[skill_id].has("function_type"):
 			general_skills_config[skill_id].function_type = infer_skill_function(str(general_skills_config[skill_id].get("effect", "")))
@@ -106,7 +107,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var v061_write_test := false
 	for value in args:
-		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read", "--v081-reset-read"]: v061_write_test = true
+		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-") or str(value).begins_with("--v09-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read", "--v081-reset-read"]: v061_write_test = true
 	if "--equipment-test" in args or "--persistence-write" in args or "--v03-test" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or v061_write_test:
 		inventory.clear_test_save()
 	inventory.load_from_disk()
@@ -114,6 +115,8 @@ func _ready() -> void:
 	progression = ProgressionManagerScript.new()
 	progression.setup()
 	add_child(progression)
+	for boss_id in worlds_config.bosses:
+		if not progression.boss_first_clear.has(boss_id): progression.boss_first_clear[boss_id] = false
 	progression.changed.connect(func(): progression_changed.emit())
 	reset_manager = ResetManagerScript.new()
 	if worlds_config.maps.has(progression.last_stage_id):
@@ -187,7 +190,7 @@ func spawn_wave() -> void:
 		var boss = spawn_unit(str(map_data.main_boss), "enemies", Vector2(875, 260), overrides)
 		boss.enemy_type = "boss"
 		boss.monster_level = stage
-		if str(map_data.main_boss).begins_with("stage_guardian"):
+		if str(map_data.main_boss).begins_with("stage_guardian") or stage > 40:
 			boss.max_hp *= difficulty_multiplier("guardian_health", stage)
 			boss.hp = boss.max_hp
 			boss.attack *= difficulty_multiplier("guardian_attack", stage)
@@ -243,7 +246,14 @@ func current_stage_wave() -> int:
 func difficulty_multiplier(curve_id: String, stage: int) -> float:
 	var curve: Dictionary = progression.progression_config.get("combat_difficulty", {}).get(curve_id, {})
 	var step := maxf(0.0, float(stage - 1))
-	return 1.0 + step * float(curve.get("linear", 0.0)) + step * step * float(curve.get("quadratic", 0.0))
+	var linear := float(curve.get("linear", 0.0))
+	var quadratic := float(curve.get("quadratic", 0.0))
+	if stage <= 40:
+		return 1.0 + step * linear + step * step * quadratic
+	var stage_40_step := 39.0
+	var stage_40_value := 1.0 + stage_40_step * linear + stage_40_step * stage_40_step * quadratic
+	var stage_40_slope := linear + 2.0 * stage_40_step * quadratic
+	return stage_40_value + float(stage - 40) * stage_40_slope * 0.60
 
 func custom_difficulty_profile(value: float = -1.0) -> Dictionary:
 	var coefficient: float = progression.combat_difficulty if value < 0.0 else snappedf(clampf(value, 0.5, 5.0), 0.1)
@@ -847,7 +857,11 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 		elif stage == 30:
 			log_message.emit("★ 龙族第30关通关！逆水寒世界已永久开放。")
 		elif stage == 40:
-			log_message.emit("★ 全40关主线通关！四世界秘境上限已开放至40层。")
+			log_message.emit("★ 逆水寒第40关通关！魔兽世界已永久开放。")
+		elif stage == 50:
+			log_message.emit("★ 魔兽世界第50关通关！金庸世界已永久开放。")
+		elif stage == 60:
+			log_message.emit("★ 全60关主线通关！六世界秘境上限已开放至60层。")
 		else:
 			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
 		battle_state_changed.emit("主线第%d关已通关" % stage)
@@ -859,7 +873,7 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 
 func continue_after_stage() -> void:
 	var stage := int(worlds_config.maps.get(current_map_id, {}).get("global_stage", 1))
-	if progression.auto_push and stage < 40:
+	if progression.auto_push and stage < progression.main_stage_limit():
 		var next_id := stage_id_for_number(stage + 1)
 		if not next_id.is_empty() and progression.can_enter_stage(stage + 1):
 			switch_map(next_id)

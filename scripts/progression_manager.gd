@@ -3,19 +3,21 @@ extends Node
 
 signal changed
 
-const VERSION := "0.8"
-const NORMAL_PATH := "user://wanjie_v08_progress.json"
+const VERSION := "0.9"
+const NORMAL_PATH := "user://wanjie_v09_progress.json"
+const LEGACY_V08_PATH := "user://wanjie_v08_progress.json"
 const LEGACY_PATH := "user://wanjie_v07_progress.json"
 const LEGACY_V061_PATH := "user://wanjie_v061_progress.json"
-const MIGRATION_BACKUP_PATH := "user://wanjie_v07_progress.pre_v08_backup.json"
-const TEST_PATH := "user://wanjie_v08_test_progress.json"
+const MIGRATION_BACKUP_PATH := "user://wanjie_v08_progress.pre_v09_backup.json"
+const TEST_PATH := "user://wanjie_v09_test_progress.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const DIFFICULTY_CONFIG_VERSION := 2
 const LEGACY_DIFFICULTY_BASE := 2.5
-const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits"]
+const MAIN_STAGE_LIMIT := 60
+const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying"]
 
 var save_path := NORMAL_PATH
-var materials := {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0}
+var materials := {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0}
 var gold := 0
 var guide_step := 0
 var guide_finished := false
@@ -23,7 +25,7 @@ var guide_skipped := false
 var guide_replay := false
 var roster: Array = ["liu_bei"]
 var party: Array = ["liu_bei", "", "", ""]
-var boss_first_clear := {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false}
+var boss_first_clear := {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false}
 var strategy_presets := {
 	"稳健": {"self_hp": 0.45, "ally_hp": 0.65, "enemy_count": 1},
 	"猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}
@@ -33,7 +35,7 @@ var actor_levels: Dictionary = {}
 var actor_experience: Dictionary = {}
 var skill_levels: Dictionary = {}
 var transaction_log: Array = []
-var pending_offline := {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal":0, "jianghu_token":0}
+var pending_offline := {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal":0, "jianghu_token":0, "azeroth_token":0, "wuxia_token":0}
 var last_seen_unix := 0
 var completed_stages: Array = []
 var pokemon_world_unlocked := false
@@ -51,6 +53,8 @@ var rift_progress: Dictionary = {
 	"pokemon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
 	"dragon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
 	"nsh": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+	,"wow": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+	,"jinyong": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 }
 var encounter_state: Dictionary = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
 var encounter_log: Array = []
@@ -93,7 +97,7 @@ func setup() -> void:
 	var args := OS.get_cmdline_user_args()
 	var test_mode := false
 	for value in args:
-		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-"):
+		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-") or str(value).begins_with("--v09-"):
 			test_mode = true
 			break
 	if test_mode:
@@ -147,13 +151,13 @@ func ensure_world_layout() -> void:
 	var sanitized: Array = []
 	for value in completed_stages:
 		var stage := int(value)
-		if stage >= 1 and stage <= 40 and stage not in sanitized:
+		if stage >= 1 and stage <= MAIN_STAGE_LIMIT and stage not in sanitized:
 			sanitized.append(stage)
 	sanitized.sort()
 	# A stage is valid only when every earlier main stage was completed. This
 	# prevents hand-edited/old entry points from skipping the campaign lock.
 	var contiguous: Array = []
-	for stage in range(1, 41):
+	for stage in range(1, MAIN_STAGE_LIMIT + 1):
 		if stage in sanitized:
 			contiguous.append(stage)
 		else:
@@ -169,6 +173,8 @@ func ensure_adventure_layout() -> void:
 		"pokemon":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]},
 		"dragon":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]},
 		"nsh":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
+		,"wow":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
+		,"jinyong":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
 	}
 	for world_id in defaults:
 		if typeof(rift_progress.get(world_id, {})) != TYPE_DICTIONARY: rift_progress[world_id] = {}
@@ -184,19 +190,22 @@ func ensure_adventure_layout() -> void:
 
 func highest_unlocked_stage() -> int:
 	ensure_world_layout()
-	return mini(40, completed_stages.size() + 1)
+	return mini(MAIN_STAGE_LIMIT, completed_stages.size() + 1)
+
+func main_stage_limit() -> int:
+	return MAIN_STAGE_LIMIT
 
 func is_stage_complete(stage: int) -> bool:
 	return stage in completed_stages
 
 func can_enter_stage(stage: int) -> bool:
 	ensure_world_layout()
-	if stage < 1 or stage > 40:
+	if stage < 1 or stage > MAIN_STAGE_LIMIT:
 		return false
 	return stage <= highest_unlocked_stage()
 
 func world_unlocked(world_name: String) -> bool:
-	var required: int = int({"三国":0, "宝可梦":10, "龙族":20, "逆水寒":30}.get(world_name, 9999))
+	var required: int = int({"三国":0, "宝可梦":10, "龙族":20, "逆水寒":30, "魔兽世界":40, "金庸":50}.get(world_name, 9999))
 	return required == 0 or is_stage_complete(int(required))
 
 func complete_stage(stage: int) -> bool:
@@ -525,6 +534,8 @@ func calculate_offline_rewards(now_unix: int) -> Dictionary:
 	pending_offline.pokemon_token = maxi(int(pending_offline.get("pokemon_token", 0)), seconds / 300)
 	if is_stage_complete(20): pending_offline.dragon_blood_crystal = maxi(int(pending_offline.get("dragon_blood_crystal", 0)), seconds / 360)
 	if is_stage_complete(30): pending_offline.jianghu_token = maxi(int(pending_offline.get("jianghu_token", 0)), seconds / 420)
+	if is_stage_complete(40): pending_offline.azeroth_token = maxi(int(pending_offline.get("azeroth_token", 0)), seconds / 480)
+	if is_stage_complete(50): pending_offline.wuxia_token = maxi(int(pending_offline.get("wuxia_token", 0)), seconds / 540)
 	return pending_offline
 
 func claim_offline_rewards() -> Dictionary:
@@ -536,7 +547,9 @@ func claim_offline_rewards() -> Dictionary:
 	materials["pokemon_token"] = int(materials.get("pokemon_token", 0)) + int(reward.get("pokemon_token", 0))
 	materials["dragon_blood_crystal"] = int(materials.get("dragon_blood_crystal", 0)) + int(reward.get("dragon_blood_crystal", 0))
 	materials["jianghu_token"] = int(materials.get("jianghu_token", 0)) + int(reward.get("jianghu_token", 0))
-	pending_offline = {"seconds":0,"gold":0,"three_kingdoms_token":0,"pokemon_token":0,"dragon_blood_crystal":0,"jianghu_token":0}
+	materials["azeroth_token"] = int(materials.get("azeroth_token", 0)) + int(reward.get("azeroth_token", 0))
+	materials["wuxia_token"] = int(materials.get("wuxia_token", 0)) + int(reward.get("wuxia_token", 0))
+	pending_offline = {"seconds":0,"gold":0,"three_kingdoms_token":0,"pokemon_token":0,"dragon_blood_crystal":0,"jianghu_token":0,"azeroth_token":0,"wuxia_token":0}
 	last_seen_unix = int(Time.get_unix_time_from_system())
 	record_transaction("离线收益", "%d秒" % int(reward.seconds), int(reward.gold))
 	changed.emit()
@@ -551,7 +564,7 @@ func set_combat_difficulty(value: float, autosave: bool = true) -> float:
 	return combat_difficulty
 
 func reset_to_new_game() -> bool:
-	materials = {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0}
+	materials = {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0}
 	gold = 0
 	guide_step = 0
 	guide_finished = false
@@ -559,14 +572,14 @@ func reset_to_new_game() -> bool:
 	guide_replay = false
 	roster = ["liu_bei"]
 	party = ["liu_bei", "", "", ""]
-	boss_first_clear = {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false}
+	boss_first_clear = {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false}
 	strategy_presets = {"稳健": {"self_hp": 0.45, "ally_hp": 0.65, "enemy_count": 1}, "猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}}
 	active_strategy = "稳健"
 	actor_levels = {}
 	actor_experience = {}
 	skill_levels = {}
 	transaction_log = []
-	pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0}
+	pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token":0, "wuxia_token":0}
 	last_seen_unix = int(Time.get_unix_time_from_system())
 	completed_stages = []
 	pokemon_world_unlocked = false
@@ -584,6 +597,8 @@ func reset_to_new_game() -> bool:
 		"pokemon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
 		"dragon": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
 		"nsh": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+		,"wow": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+		,"jinyong": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 	}
 	encounter_state = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
 	encounter_log = []
@@ -614,7 +629,11 @@ func save_to_disk() -> bool:
 
 func load_from_disk() -> bool:
 	var source_path := save_path
-	if not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and not FileAccess.file_exists(RESET_MARKER_PATH) and FileAccess.file_exists(LEGACY_PATH):
+	if not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and not FileAccess.file_exists(RESET_MARKER_PATH) and FileAccess.file_exists(LEGACY_V08_PATH):
+		if not FileAccess.file_exists(MIGRATION_BACKUP_PATH):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(LEGACY_V08_PATH), ProjectSettings.globalize_path(MIGRATION_BACKUP_PATH))
+		source_path = LEGACY_V08_PATH
+	elif not FileAccess.file_exists(source_path) and save_path == NORMAL_PATH and not FileAccess.file_exists(RESET_MARKER_PATH) and FileAccess.file_exists(LEGACY_PATH):
 		if not FileAccess.file_exists(MIGRATION_BACKUP_PATH):
 			DirAccess.copy_absolute(ProjectSettings.globalize_path(LEGACY_PATH), ProjectSettings.globalize_path(MIGRATION_BACKUP_PATH))
 		source_path = LEGACY_PATH
@@ -628,7 +647,7 @@ func apply_payload(parsed) -> bool:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
 	var payload_version := str(parsed.get("version", ""))
-	if payload_version not in [VERSION, "0.7", "0.6.1"]:
+	if payload_version not in [VERSION, "0.8", "0.7", "0.6.1"]:
 		return false
 	materials.merge(parsed.get("materials", {}), true)
 	gold = maxi(0, int(parsed.get("gold", 0)))
