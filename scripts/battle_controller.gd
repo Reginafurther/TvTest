@@ -497,21 +497,16 @@ func _on_unit_died(unit) -> void:
 			# Delayed damage may outlive its source node. Preserve attribution, but
 			# never invoke on-kill effects on a dead/freed unit.
 			combat_stats.record_kill(str(unit.last_damage_source_id))
-		var leveled_actors: Array[String] = []
-		for actor_id in progression.party:
-			if str(actor_id).is_empty():
-				continue
-			var reward_type := combat_enemy_type(unit)
-			var earned_xp: int = progression.experience_for_kill(unit.monster_level, reward_type, progression.actor_level(actor_id))
-			if progression.add_actor_experience(actor_id, earned_xp, false, "%s Lv.%d" % [reward_type, unit.monster_level]):
-				leveled_actors.append(actor_id)
-				log_message.emit("★ %s升级至Lv.%d" % [actors.get(actor_id, {}).get("name", actor_id), progression.actor_level(actor_id)])
+		var reward_type := combat_enemy_type(unit)
+		var earned_xp: int = progression.experience_for_kill(unit.monster_level, reward_type, progression.team_level)
+		var team_leveled: bool = progression.add_team_experience(earned_xp, false, "%s Lv.%d" % [reward_type, unit.monster_level])
+		if team_leveled:
+			log_message.emit("★ 冒险团等级提升至 Lv.%d" % progression.team_level)
+			for hero in heroes:
+				if is_instance_valid(hero):
+					hero.refresh_progression_stats()
 		progression.changed.emit()
 		progression.save_to_disk()
-		for actor_id in leveled_actors:
-			var leveled_hero = get_hero(actor_id)
-			if leveled_hero != null:
-				leveled_hero.refresh_progression_stats()
 		roll_skill_book_drop(unit)
 		if adventure.on_enemy_defeated(unit):
 			log_message.emit("★ 奇遇完成，奖励已进入同一背包与资源存档。")

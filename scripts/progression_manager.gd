@@ -10,11 +10,13 @@ const LEGACY_V08_PATH := "user://wanjie_v08_progress.json"
 const LEGACY_PATH := "user://wanjie_v07_progress.json"
 const LEGACY_V061_PATH := "user://wanjie_v061_progress.json"
 const MIGRATION_BACKUP_PATH := "user://wanjie_v09_progress.pre_v10_backup.json"
+const TEAM_MIGRATION_BACKUP_PATH := "user://wanjie_v10_progress.pre_team_backup.json"
 const TEST_PATH := "user://wanjie_v10_test_progress.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const DIFFICULTY_CONFIG_VERSION := 2
 const LEGACY_DIFFICULTY_BASE := 2.5
 const MAIN_STAGE_LIMIT := 80
+const TEAM_PROGRESSION_VERSION := 1
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade"]
 
 var save_path := NORMAL_PATH
@@ -32,6 +34,12 @@ var strategy_presets := {
 	"猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}
 }
 var active_strategy := "稳健"
+# Shared progression is authoritative. These dictionaries are synchronized
+# compatibility mirrors for older validation/debug callers and are never saved.
+var team_level := 1
+var team_exp := 0
+var team_progression_version := TEAM_PROGRESSION_VERSION
+var team_level_history: Array = []
 var actor_levels: Dictionary = {}
 var actor_experience: Dictionary = {}
 var skill_levels: Dictionary = {}
@@ -124,14 +132,13 @@ func clear_test_save() -> void:
 
 func ensure_growth_layout() -> void:
 	for actor_id in HERO_IDS:
-		actor_levels[actor_id] = maxi(1, int(actor_levels.get(actor_id, 1)))
-		actor_experience[actor_id] = maxi(0, int(actor_experience.get(actor_id, 0)))
+		actor_levels[actor_id] = team_level
+		actor_experience[actor_id] = team_exp
 		if not skill_levels.has(actor_id) or typeof(skill_levels.get(actor_id, {})) != TYPE_DICTIONARY:
 			skill_levels[actor_id] = {}
 		skill_levels[actor_id]["active"] = clampi(int(skill_levels[actor_id].get("active", 1)), 1, 10)
 		skill_levels[actor_id]["passive"] = clampi(int(skill_levels[actor_id].get("passive", 1)), 1, 10)
-		if not level_history.has(actor_id) or typeof(level_history.get(actor_id, [])) != TYPE_ARRAY:
-			level_history[actor_id] = []
+		level_history[actor_id] = team_level_history.duplicate(true)
 		if not learned_general_skills.has(actor_id) or typeof(learned_general_skills.get(actor_id, [])) != TYPE_ARRAY:
 			learned_general_skills[actor_id] = []
 		if not equipped_general_skills.has(actor_id) or typeof(equipped_general_skills.get(actor_id, {})) != TYPE_DICTIONARY:
@@ -328,40 +335,51 @@ func active_party() -> Array:
 		if not str(actor_id).is_empty(): result.append(actor_id)
 	return result
 
-func add_actor_experience(actor_id: String, amount: int, autosave: bool = true, source: String = "combat") -> bool:
-	if actor_id not in HERO_IDS or amount <= 0:
+func add_team_experience(amount: int, autosave: bool = true, source: String = "combat") -> bool:
+	if amount <= 0:
 		return false
 	ensure_growth_layout()
 	var cap := actor_level_cap()
-	var current_level := int(actor_levels[actor_id])
-	if current_level >= cap:
-		var storage_limit := floori(experience_to_next(current_level) * float(progression_config.get("cap_storage_ratio", 0.25)))
-		actor_experience[actor_id] = mini(storage_limit, int(actor_experience[actor_id]) + amount)
+	if team_level >= cap:
+		var storage_limit := floori(experience_to_next(team_level) * float(progression_config.get("cap_storage_ratio", 0.25)))
+		team_exp = mini(storage_limit, team_exp + amount)
+		_sync_team_progression_mirrors()
 		if autosave: changed.emit(); save_to_disk()
 		return false
-	actor_experience[actor_id] = int(actor_experience[actor_id]) + amount
+	team_exp += amount
 	var leveled := false
 	var maximum := int(progression_config.get("max_actor_level", 80))
-	while int(actor_levels[actor_id]) < mini(maximum, cap):
-		var needed := experience_to_next(int(actor_levels[actor_id]))
-		if int(actor_experience[actor_id]) < needed:
+	while team_level < mini(maximum, cap):
+		var needed := experience_to_next(team_level)
+		if team_exp < needed:
 			break
-		actor_experience[actor_id] = int(actor_experience[actor_id]) - needed
-		actor_levels[actor_id] = int(actor_levels[actor_id]) + 1
-		level_history[actor_id].push_front({"level": int(actor_levels[actor_id]), "time": int(Time.get_unix_time_from_system()), "source": source})
-		if level_history[actor_id].size() > 20:
-			level_history[actor_id].resize(20)
+		team_exp -= needed
+		team_level += 1
+		team_level_history.push_front({"level": team_level, "time": int(Time.get_unix_time_from_system()), "source": source})
+		if team_level_history.size() > 20:
+			team_level_history.resize(20)
 		leveled = true
-	if int(actor_levels[actor_id]) >= cap:
-		actor_experience[actor_id] = mini(int(actor_experience[actor_id]), floori(experience_to_next(int(actor_levels[actor_id])) * float(progression_config.get("cap_storage_ratio", 0.25))))
+	if team_level >= cap:
+		team_exp = mini(team_exp, floori(experience_to_next(team_level) * float(progression_config.get("cap_storage_ratio", 0.25))))
+	_sync_team_progression_mirrors()
 	if autosave:
 		changed.emit()
 		save_to_disk()
 	return leveled
 
-func experience_to_next(level: int) -> int:
+func add_actor_experience(actor_id: String, amount: int, autosave: bool = true, source: String = "combat") -> bool:
+	# Compatibility entry point: actor_id is validated but never selects a
+	# separate experience pool.
+	if actor_id not in HERO_IDS:
+		return false
+	return add_team_experience(amount, autosave, source)
+
+func base_experience_to_next(level: int) -> int:
 	var curve: Dictionary = progression_config.get("experience_curve", {})
 	return int(curve.get("base", 180)) + level * int(curve.get("linear", 90)) + level * level * int(curve.get("quadratic", 25))
+
+func experience_to_next(level: int) -> int:
+	return ceili(base_experience_to_next(level) * 1.5)
 
 func actor_level_cap() -> int:
 	return clampi(maxi(1, completed_stages.size()), 1, int(progression_config.get("max_actor_level", 80)))
@@ -381,17 +399,17 @@ func experience_for_kill(monster_level: int, enemy_type: String, hero_level: int
 		farm_multiplier = maxf(float(farm.get("minimum_multiplier", 0.08)), 1.0 - (level_gap - free_gap) * float(farm.get("penalty_per_level", 0.16)))
 	return maxi(1, roundi(base * type_multiplier * farm_multiplier))
 
-func actor_level(actor_id: String) -> int:
-	return maxi(1, int(actor_levels.get(actor_id, 1)))
+func actor_level(_actor_id: String = "") -> int:
+	return maxi(1, team_level)
 
 func party_average_level() -> float:
-	var active := active_party()
-	if active.is_empty():
-		return 1.0
-	var total := 0.0
-	for actor_id in active:
-		total += actor_level(actor_id)
-	return total / active.size()
+	return float(team_level)
+
+func _sync_team_progression_mirrors() -> void:
+	for actor_id in HERO_IDS:
+		actor_levels[actor_id] = team_level
+		actor_experience[actor_id] = team_exp
+		level_history[actor_id] = team_level_history.duplicate(true)
 
 func skill_level(actor_id: String, kind: String) -> int:
 	ensure_growth_layout()
@@ -584,6 +602,10 @@ func reset_to_new_game() -> bool:
 	boss_first_clear = {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false, "donghuang_taiyi": false, "madara": false}
 	strategy_presets = {"稳健": {"self_hp": 0.45, "ally_hp": 0.65, "enemy_count": 1}, "猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}}
 	active_strategy = "稳健"
+	team_level = 1
+	team_exp = 0
+	team_progression_version = TEAM_PROGRESSION_VERSION
+	team_level_history = []
 	actor_levels = {}
 	actor_experience = {}
 	skill_levels = {}
@@ -629,7 +651,7 @@ func reset_to_new_game() -> bool:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "actor_levels": actor_levels, "actor_experience": actor_experience, "skill_levels": skill_levels, "level_history": level_history, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "team_progression_version": TEAM_PROGRESSION_VERSION, "team_level": team_level, "team_exp": team_exp, "team_level_history": team_level_history, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "skill_levels": skill_levels, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -637,6 +659,36 @@ func save_to_disk() -> bool:
 	file.store_string(JSON.stringify(payload, "  "))
 	file.close()
 	return true
+
+func _migrate_legacy_team_progression(parsed: Dictionary) -> void:
+	var legacy_levels = parsed.get("actor_levels", {})
+	var legacy_experience = parsed.get("actor_experience", {})
+	if typeof(legacy_levels) != TYPE_DICTIONARY:
+		legacy_levels = {}
+	if typeof(legacy_experience) != TYPE_DICTIONARY:
+		legacy_experience = {}
+	var source_actor := ""
+	var source_ratio := -1.0
+	team_level = 1
+	for actor_id in legacy_levels:
+		var legacy_level := maxi(1, int(legacy_levels[actor_id]))
+		var legacy_needed := maxf(1.0, float(base_experience_to_next(legacy_level)))
+		var ratio := clampf(float(legacy_experience.get(actor_id, 0)) / legacy_needed, 0.0, 0.999999)
+		if legacy_level > team_level or (legacy_level == team_level and ratio > source_ratio):
+			team_level = legacy_level
+			source_actor = str(actor_id)
+			source_ratio = ratio
+	team_level = clampi(team_level, 1, int(progression_config.get("max_actor_level", 80)))
+	team_exp = roundi(maxf(0.0, source_ratio) * experience_to_next(team_level))
+	team_exp = mini(team_exp, maxi(0, experience_to_next(team_level) - 1))
+	team_level_history = []
+	var legacy_history = parsed.get("level_history", {})
+	if not source_actor.is_empty() and typeof(legacy_history) == TYPE_DICTIONARY:
+		var source_history = legacy_history.get(source_actor, [])
+		if typeof(source_history) == TYPE_ARRAY:
+			team_level_history = source_history.duplicate(true)
+	if team_level_history.size() > 20:
+		team_level_history.resize(20)
 
 func load_from_disk() -> bool:
 	var source_path := save_path
@@ -656,7 +708,13 @@ func load_from_disk() -> bool:
 		source_path = LEGACY_V061_PATH
 	if not FileAccess.file_exists(source_path):
 		return false
-	return apply_payload(JSON.parse_string(FileAccess.get_file_as_string(source_path)))
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(source_path))
+	if typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("team_progression_version", 0)) < TEAM_PROGRESSION_VERSION and save_path == NORMAL_PATH and not FileAccess.file_exists(TEAM_MIGRATION_BACKUP_PATH):
+		var backup_error := DirAccess.copy_absolute(ProjectSettings.globalize_path(source_path), ProjectSettings.globalize_path(TEAM_MIGRATION_BACKUP_PATH))
+		if backup_error != OK:
+			push_error("无法备份旧等级存档，已取消共享等级迁移。错误码：%d" % backup_error)
+			return false
+	return apply_payload(parsed)
 
 func apply_payload(parsed) -> bool:
 	if typeof(parsed) != TYPE_DICTIONARY:
@@ -675,10 +733,20 @@ func apply_payload(parsed) -> bool:
 	boss_first_clear.merge(parsed.get("boss_first_clear", {}), true)
 	strategy_presets.merge(parsed.get("strategy_presets", {}), true)
 	active_strategy = parsed.get("active_strategy", active_strategy)
-	actor_levels = parsed.get("actor_levels", {})
-	actor_experience = parsed.get("actor_experience", {})
+	var migrated_team_progression := int(parsed.get("team_progression_version", 0)) < TEAM_PROGRESSION_VERSION
+	if migrated_team_progression:
+		_migrate_legacy_team_progression(parsed)
+	else:
+		team_level = clampi(int(parsed.get("team_level", 1)), 1, int(progression_config.get("max_actor_level", 80)))
+		team_exp = maxi(0, int(parsed.get("team_exp", 0)))
+		team_level_history = parsed.get("team_level_history", [])
+		if typeof(team_level_history) != TYPE_ARRAY:
+			team_level_history = []
+	team_progression_version = TEAM_PROGRESSION_VERSION
+	actor_levels = {}
+	actor_experience = {}
 	skill_levels = parsed.get("skill_levels", {})
-	level_history = parsed.get("level_history", {})
+	level_history = {}
 	learned_general_skills = parsed.get("learned_general_skills", {})
 	equipped_general_skills = parsed.get("equipped_general_skills", {})
 	general_skill_levels = parsed.get("general_skill_levels", {})
@@ -708,6 +776,8 @@ func apply_payload(parsed) -> bool:
 	if str(auto_equipment_settings.priority) not in ["dismantle", "sell"]:
 		auto_equipment_settings.priority = "dismantle"
 	transaction_log = parsed.get("transaction_log", [])
+	if migrated_team_progression:
+		record_transaction("等级系统迁移", "原角色最高等级已转换为冒险团共享Lv.%d" % team_level, 0)
 	var stored_difficulty_version := int(parsed.get("difficulty_config_version", 1))
 	if stored_difficulty_version < DIFFICULTY_CONFIG_VERSION:
 		var legacy_difficulty := float(parsed.get("combat_difficulty", 1.5))

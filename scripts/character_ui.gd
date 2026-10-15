@@ -157,6 +157,7 @@ func build_center_column(parent: HBoxContainer) -> void:
 	exp_bar = ProgressBar.new()
 	exp_bar.custom_minimum_size = Vector2(390, 20)
 	exp_bar.show_percentage = false
+	exp_bar.tooltip_text = "全体角色（包括未招募角色）共享同一冒险团等级与经验。"
 	box.add_child(exp_bar)
 	exp_label = Label.new()
 	exp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -300,14 +301,14 @@ func refresh_party_controls() -> void:
 func refresh_center() -> void:
 	if selected_actor.is_empty(): return
 	var data: Dictionary = battle.actors.get(selected_actor, {})
-	var level: int = battle.progression.actor_level(selected_actor)
-	var xp := int(battle.progression.actor_experience.get(selected_actor, 0))
+	var level: int = battle.progression.team_level
+	var xp: int = int(battle.progression.team_exp)
 	var needed: int = battle.progression.experience_to_next(level)
 	actor_name.text = "%s  Lv.%d" % [data.get("name", selected_actor), level]
 	actor_role.text = "%s · %s · %s · %s" % [data.get("world", ""), data.get("role", ""), basic_attack_label(data), "上阵中" if selected_actor in battle.progression.party else "未上阵，可正常培养"]
 	exp_bar.max_value = needed
 	exp_bar.value = xp
-	exp_label.text = "Lv.%d / 上限Lv.%d　经验 %d / %d（%.1f%%）" % [level, battle.progression.actor_level_cap(), xp, needed, 100.0 * xp / maxf(1.0, needed)]
+	exp_label.text = "冒险团 Lv.%d / 上限Lv.%d　共享经验 %d / %d（%.1f%%）" % [level, battle.progression.actor_level_cap(), xp, needed, 100.0 * xp / maxf(1.0, needed)]
 	var layout := ArtCatalogScript.layout("portraits", selected_actor)
 	var scale := clampf(float(layout.get("scale", 1.0)), 0.25, 2.5)
 	var portrait_size := Vector2(170, 270) * scale
@@ -339,7 +340,7 @@ func refresh_stats() -> void:
 	for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
 	var live = battle.get_hero(selected_actor)
 	if live != null: final = live.combat_snapshot()
-	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n等级 Lv.%d / 当前上限 Lv.%d　当前经验 %d / %d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [data.name, level, battle.progression.actor_level_cap(), int(battle.progression.actor_experience[selected_actor]), battle.progression.experience_to_next(level), stat_rows(base, gear, final)]
+	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n冒险团共享等级 Lv.%d / 当前上限 Lv.%d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [data.name, level, battle.progression.actor_level_cap(), stat_rows(base, gear, final)]
 
 func stat_rows(base: Dictionary, gear: Dictionary, final: Dictionary) -> String:
 	var labels := {"health":"[基础] 生命", "attack":"[基础] 攻击", "defense":"[基础] 防御", "crit_chance":"[攻击] 暴击率", "crit_damage":"[攻击] 暴击伤害", "attack_speed":"[攻击] 攻击速度", "physical_damage":"[攻击] 物理增伤", "elemental_damage":"[攻击] 元素增伤", "final_damage":"[攻击] 最终伤害", "damage_reduction":"[防御] 减伤", "healing_effect":"[治疗] 治疗效果", "cooldown_reduction":"[特殊] 冷却缩减"}
@@ -570,10 +571,10 @@ func refresh_item_detail() -> void:
 func refresh_growth() -> void:
 	if selected_actor.is_empty(): return
 	var data: Dictionary = battle.actors[selected_actor]
-	var history: Array = battle.progression.level_history[selected_actor]
+	var history: Array = battle.progression.team_level_history
 	var lines: Array[String] = []
 	for entry in history.slice(0, 8): lines.append("Lv.%d · %s" % [int(entry.level), entry.get("source", "战斗")])
-	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n\n当前培养：角色Lv.%d / 当前上限Lv.%d；专属主动Lv.%d；专属被动Lv.%d\n\n[b]最近升级历程[/b]\n%s" % [data.name, data.role, ai_description(data), position_description(data), battle.progression.actor_level(selected_actor), battle.progression.actor_level_cap(), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
+	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n\n当前培养：冒险团共享Lv.%d / 当前上限Lv.%d；专属主动Lv.%d；专属被动Lv.%d\n\n[b]冒险团最近升级历程[/b]\n%s" % [data.name, data.role, ai_description(data), position_description(data), battle.progression.team_level, battle.progression.actor_level_cap(), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
 
 func _select_actor(index: int) -> void:
 	selected_actor = str(actor_list.get_item_metadata(index))
