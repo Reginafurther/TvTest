@@ -932,7 +932,7 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		source.trigger_general_on_hit(target)
 	if context.get("critical", false) and is_instance_valid(source) and source.has_special("crit_lightning"):
 		trigger_lightning(source, target)
-	if is_instance_valid(source) and (target.has_special("thorn_reflect") or (target.passive_data.get("effect", "") == "low_hp_rage" and target.hp / target.max_hp < 0.5)):
+	if is_instance_valid(source) and (target.has_special("thorn_reflect") or (target.passive_skill_id == "low_hp_rage" and target.hp / target.max_hp < 0.5)):
 		trigger_counts.thorn_reflect += 1
 		var reflect_power: float = target.passive_value() if target.passive_data.get("effect", "") == "low_hp_rage" else float(special_config.effects.thorn_reflect.power)
 		if target.passive_data.get("effect", "") == "low_hp_rage": target.battle.note_passive(target.actor_id, target.passive_skill_id)

@@ -1,5 +1,6 @@
 {
-  "tk_whirlwind": {"damage_type":"physical",
+  "tk_whirlwind": {
+    "damage_type": "physical",
     "name": "横扫千军",
     "world": "三国",
     "category": "active",
@@ -10,7 +11,8 @@
     "range": 135,
     "description": "对周围最多6名敌人造成范围物理伤害。"
   },
-  "tk_triple_slash": {"damage_type":"physical",
+  "tk_triple_slash": {
+    "damage_type": "physical",
     "name": "连环突刺",
     "world": "三国",
     "category": "active",
@@ -22,7 +24,8 @@
     "range": 95,
     "description": "快速攻击当前目标3次。"
   },
-  "tk_armor_break": {"damage_type":"physical",
+  "tk_armor_break": {
+    "damage_type": "physical",
     "name": "破甲斩",
     "world": "三国",
     "category": "active",
@@ -35,7 +38,8 @@
     "range": 120,
     "description": "造成伤害并使目标防御降低28%。"
   },
-  "tk_flame_arrow": {"damage_type":"physical",
+  "tk_flame_arrow": {
+    "damage_type": "physical",
     "name": "穿云箭",
     "world": "三国",
     "category": "active",
@@ -43,12 +47,11 @@
     "cooldown": 9.0,
     "power": 0.72,
     "power_per_level": 0.045,
-    "dot_power": 0.16,
-    "duration": 5.0,
     "range": 220,
     "description": "远距离贯穿射击，对单体造成物理伤害。"
   },
-  "tk_poison_dart": {"damage_type":"elemental",
+  "tk_poison_dart": {
+    "damage_type": "elemental",
     "name": "火攻计",
     "world": "三国",
     "category": "active",
@@ -61,7 +64,8 @@
     "range": 210,
     "description": "造成伤害并附加持续燃烧。"
   },
-  "tk_thunder_talisman": {"damage_type":"physical",
+  "tk_thunder_talisman": {
+    "damage_type": "physical",
     "name": "震地击",
     "world": "三国",
     "category": "active",
@@ -69,12 +73,12 @@
     "cooldown": 10.0,
     "power": 1.0,
     "power_per_level": 0.055,
-    "shock_chance": 0.35,
     "duration": 1.5,
     "range": 210,
-    "description": "震击目标并造成短暂硬直。"
+    "description": "震击目标并确定造成1.5秒硬直（Boss受控制抗性与累计上限约束）。"
   },
-  "tk_frost_strategy": {"damage_type":"physical",
+  "tk_frost_strategy": {
+    "damage_type": "physical",
     "name": "背水一击",
     "world": "三国",
     "category": "active",
@@ -82,12 +86,11 @@
     "cooldown": 11.0,
     "power": 0.75,
     "power_per_level": 0.04,
-    "slow": 0.55,
-    "duration": 3.0,
     "range": 205,
-    "description": "造成重击，自身低生命时威力提高。"
+    "description": "造成重击，自身生命不高于40%时本次伤害提高65%。"
   },
-  "tk_benevolent_heal": {"damage_type":"none",
+  "tk_benevolent_heal": {
+    "damage_type": "none",
     "name": "青囊术",
     "world": "三国",
     "category": "active",
@@ -98,7 +101,8 @@
     "range": 280,
     "description": "立即治疗生命比例最低的队友。"
   },
-  "tk_recovery_banner": {"damage_type":"none",
+  "tk_recovery_banner": {
+    "damage_type": "none",
     "name": "休养生息",
     "world": "三国",
     "category": "active",
@@ -110,7 +114,8 @@
     "range": 280,
     "description": "使生命最低的队友在6秒内持续恢复。"
   },
-  "tk_purify": {"damage_type":"none",
+  "tk_purify": {
+    "damage_type": "none",
     "name": "刮骨疗毒",
     "world": "三国",
     "category": "active",
@@ -121,7 +126,8 @@
     "range": 300,
     "description": "清除队友的负面状态并恢复少量生命。"
   },
-  "tk_challenge_shout": {"damage_type":"none",
+  "tk_challenge_shout": {
+    "damage_type": "none",
     "name": "挑衅",
     "world": "三国",
     "category": "active",
@@ -133,7 +139,8 @@
     "range": 190,
     "description": "嘲讽周围敌人并获得护盾。"
   },
-  "tk_iron_wall": {"damage_type":"none",
+  "tk_iron_wall": {
+    "damage_type": "none",
     "name": "铁壁军阵",
     "world": "三国",
     "category": "active",
@@ -144,7 +151,8 @@
     "targets": 4,
     "description": "为全队附加基于施法者生命的护盾。"
   },
-  "tk_guard_order": {"damage_type":"none",
+  "tk_guard_order": {
+    "damage_type": "none",
     "name": "舍身护卫",
     "world": "三国",
     "category": "active",
@@ -153,10 +161,11 @@
     "power": 0.22,
     "power_per_level": 0.012,
     "duration": 5.0,
-    "targets": 4,
-    "description": "为生命最低的队友分担部分伤害。"
+    "targets": 1,
+    "description": "为生命最低的一名队友分担部分伤害。"
   },
-  "tk_shared_fate": {"damage_type":"none",
+  "tk_shared_fate": {
+    "damage_type": "none",
     "name": "疾步",
     "world": "三国",
     "category": "active",
@@ -165,10 +174,10 @@
     "power": 0.28,
     "power_per_level": 0.01,
     "duration": 5.0,
-    "targets": 4,
     "description": "短时间提高自身移动与攻击速度。"
   },
-  "tk_swift_step": {"damage_type":"none",
+  "tk_swift_step": {
+    "damage_type": "none",
     "name": "烟幕",
     "world": "三国",
     "category": "active",
@@ -179,7 +188,8 @@
     "duration": 4.0,
     "description": "短时间大幅提高自身闪避。"
   },
-  "tk_counter_stance": {"damage_type":"physical",
+  "tk_counter_stance": {
+    "damage_type": "physical",
     "name": "回身反击",
     "world": "三国",
     "category": "active",
@@ -190,7 +200,8 @@
     "duration": 5.0,
     "description": "进入反击架势，受击时反伤攻击者。"
   },
-  "pk_thunder_chain": {"damage_type":"elemental",
+  "pk_thunder_chain": {
+    "damage_type": "elemental",
     "name": "十万伏特",
     "world": "宝可梦",
     "category": "active",
@@ -202,7 +213,8 @@
     "targets": 4,
     "description": "雷电在最多4名敌人之间弹射。"
   },
-  "pk_quick_combo": {"damage_type":"physical",
+  "pk_quick_combo": {
+    "damage_type": "physical",
     "name": "电光一闪",
     "world": "宝可梦",
     "category": "active",
@@ -214,7 +226,8 @@
     "range": 110,
     "description": "以极快速度连续攻击4次。"
   },
-  "pk_psychic_wave": {"damage_type":"elemental",
+  "pk_psychic_wave": {
+    "damage_type": "elemental",
     "name": "精神强念",
     "world": "宝可梦",
     "category": "active",
@@ -225,7 +238,8 @@
     "range": 175,
     "description": "对目标周围敌人造成精神范围伤害。"
   },
-  "pk_rock_break": {"damage_type":"physical",
+  "pk_rock_break": {
+    "damage_type": "physical",
     "name": "岩崩",
     "world": "宝可梦",
     "category": "active",
@@ -238,7 +252,8 @@
     "range": 105,
     "description": "落石造成伤害并短暂硬直。"
   },
-  "pk_ember": {"damage_type":"elemental",
+  "pk_ember": {
+    "damage_type": "elemental",
     "name": "喷射火焰",
     "world": "宝可梦",
     "category": "active",
@@ -251,7 +266,8 @@
     "range": 210,
     "description": "喷射烈焰并持续灼烧目标。"
   },
-  "pk_toxic": {"damage_type":"elemental",
+  "pk_toxic": {
+    "damage_type": "elemental",
     "name": "污泥炸弹",
     "world": "宝可梦",
     "category": "active",
@@ -264,7 +280,8 @@
     "range": 220,
     "description": "施加强力剧毒，持续伤害逐步加深。"
   },
-  "pk_paralyze": {"damage_type":"physical",
+  "pk_paralyze": {
+    "damage_type": "physical",
     "name": "种子炸弹",
     "world": "宝可梦",
     "category": "active",
@@ -272,12 +289,11 @@
     "cooldown": 9.5,
     "power": 0.55,
     "power_per_level": 0.035,
-    "shock_chance": 0.55,
-    "duration": 4.0,
     "range": 230,
-    "description": "投掷种子炸弹造成单体伤害。"
+    "description": "投掷种子炸弹造成单体物理伤害。"
   },
-  "pk_ice_beam": {"damage_type":"elemental",
+  "pk_ice_beam": {
+    "damage_type": "elemental",
     "name": "冰冻光束",
     "world": "宝可梦",
     "category": "active",
@@ -290,7 +306,8 @@
     "range": 235,
     "description": "冰冻光束造成伤害并强力减速。"
   },
-  "pk_life_dew": {"damage_type":"none",
+  "pk_life_dew": {
+    "damage_type": "none",
     "name": "生命水滴",
     "world": "宝可梦",
     "category": "active",
@@ -301,7 +318,8 @@
     "range": 290,
     "description": "用生命水滴治疗最虚弱的队友。"
   },
-  "pk_aqua_ring": {"damage_type":"none",
+  "pk_aqua_ring": {
+    "damage_type": "none",
     "name": "治愈波动",
     "world": "宝可梦",
     "category": "active",
@@ -313,7 +331,8 @@
     "range": 290,
     "description": "为队友附加持续恢复的水流环。"
   },
-  "pk_refresh": {"damage_type":"none",
+  "pk_refresh": {
+    "damage_type": "none",
     "name": "青草场地",
     "world": "宝可梦",
     "category": "active",
@@ -326,7 +345,8 @@
     "duration": 6.0,
     "targets": 4
   },
-  "pk_follow_me": {"damage_type":"none",
+  "pk_follow_me": {
+    "damage_type": "none",
     "name": "看我嘛",
     "world": "宝可梦",
     "category": "active",
@@ -338,7 +358,8 @@
     "range": 210,
     "description": "吸引周围敌人攻击自己并获得护盾。"
   },
-  "pk_light_screen": {"damage_type":"none",
+  "pk_light_screen": {
+    "damage_type": "none",
     "name": "铁壁",
     "world": "宝可梦",
     "category": "active",
@@ -349,7 +370,8 @@
     "targets": 4,
     "description": "展开光墙，为全队吸收伤害。"
   },
-  "pk_protect": {"damage_type":"none",
+  "pk_protect": {
+    "damage_type": "none",
     "name": "守住",
     "world": "宝可梦",
     "category": "active",
@@ -361,7 +383,8 @@
     "targets": 1,
     "description": "短时间大幅降低自身受到的伤害。"
   },
-  "pk_agility": {"damage_type":"none",
+  "pk_agility": {
+    "damage_type": "none",
     "name": "高速移动",
     "world": "宝可梦",
     "category": "active",
@@ -372,7 +395,8 @@
     "duration": 5.0,
     "description": "提高自身移动与攻击速度。"
   },
-  "pk_time_warp": {"damage_type":"none",
+  "pk_time_warp": {
+    "damage_type": "none",
     "name": "影子分身",
     "world": "宝可梦",
     "category": "active",
@@ -380,8 +404,7 @@
     "cooldown": 15.0,
     "power": 0.3,
     "power_per_level": 0.015,
-    "targets": 4,
-    "description": "制造分身，短时间提高自身闪避。",
+    "description": "制造视觉分身，短时间提高自身闪避；不会生成攻击实体。",
     "duration": 4.0
   },
   "tk_battle_focus": {

@@ -97,6 +97,20 @@ func _validate_targeted_mechanics() -> void:
 	zhao.try_use_skill()
 	if zhao.position == old_position: failures.append("赵云七进七出没有实际突进")
 
+	fixture = _combat_fixture("huang_zhong")
+	var huang = fixture.hero; enemy = fixture.enemy
+	enemy.temporary_evasion = 1.0; enemy.temporary_evasion_time = 10.0
+	var guaranteed_hp: float = enemy.hp
+	huang.try_use_skill()
+	if enemy.hp >= guaranteed_hp: failures.append("黄忠百步穿杨没有绕过普通闪避")
+
+	fixture = _combat_fixture("lucario")
+	var lucario = fixture.hero; enemy = fixture.enemy
+	enemy.temporary_evasion = 1.0; enemy.temporary_evasion_time = 10.0
+	guaranteed_hp = enemy.hp
+	lucario.try_use_skill()
+	if enemy.hp >= guaranteed_hp: failures.append("路卡利欧波导弹没有绕过普通闪避")
+
 	fixture = _combat_fixture("zhang_fei")
 	var zhang = fixture.hero
 	zhang.try_use_skill()
@@ -145,3 +159,15 @@ func _validate_targeted_mechanics() -> void:
 	ally.apply_poison(2.0, 5.0, enemy, 0)
 	plain.try_use_skill()
 	if ally.hot_time <= 0.0 or ally.poison_time > 0.0: failures.append("素问彩翼没有持续治疗或有限净化")
+
+	fixture = _combat_fixture("zhao_yun")
+	zhao = fixture.hero; enemy = fixture.enemy
+	zhao.general_passive_datas = [{"id":"nh_sustained_assault", "data":{"effect":"combo", "power":2.0, "power_per_level":0.0}}]
+	enemy.hp = 10000.0; enemy.max_hp = 10000.0; enemy.defense = 0.0
+	zhao.attack = 50.0; zhao.crit_chance = 0.0; zhao.target = enemy
+	var combo_hp: float = enemy.hp
+	zhao.basic_attack()
+	if combo_hp - enemy.hp > 100.0: failures.append("三击连击被动错误地在第一击触发")
+	zhao.attack_timer = 0.0; zhao.basic_attack(); zhao.attack_timer = 0.0
+	var before_third: float = enemy.hp; zhao.basic_attack()
+	if before_third - enemy.hp <= 100.0: failures.append("同目标第三次普攻没有触发连击强化")
