@@ -35,12 +35,16 @@
     "party_four":{"name":"四人同行","condition":"party_size","target":4,"reward":{"furniture":"small_table"}},
     "clear_tk":{"name":"平定三国","condition":"stage","target":10,"reward":{"furniture":"lu_bu_trophy"}},
     "clear_pk":{"name":"跨越双界","condition":"stage","target":20,"reward":{"furniture":"mewtwo_trophy"}},
+    "clear_qin":{"name":"问鼎阴阳","condition":"stage","target":70,"reward":{"gold":700}},
+    "clear_naruto":{"name":"八界远征","condition":"stage","target":80,"reward":{"collectible":"eight_world_badge"}},
     "orange_item":{"name":"橙光初现","condition":"orange_item","target":1,"reward":{"gold":120}},
     "hidden_boss":{"name":"发现裂隙领主","condition":"encounter_hidden_boss","target":1,"reward":{"collectible":"rift_core"}},
     "mimic":{"name":"会咬人的宝箱","condition":"encounter_chest_mimic","target":1,"reward":{"furniture":"mimic_chest"}},
     "rift_10":{"name":"秘境十层","condition":"rift_floor","target":10,"reward":{"furniture":"rift_beacon"}},
     "all_tk":{"name":"三国群英","condition":"roster_world","world":"三国","target":10,"reward":{"collectible":"tk_roster_badge"}},
     "all_pk":{"name":"宝可梦伙伴","condition":"roster_world","world":"宝可梦","target":10,"reward":{"collectible":"pk_roster_badge"}},
+    "all_qin":{"name":"诸子百家","condition":"roster_world","world":"秦时明月","target":10,"reward":{"collectible":"qin_roster_badge"}},
+    "all_naruto":{"name":"忍界同盟","condition":"roster_world","world":"火影忍者","target":10,"reward":{"collectible":"naruto_roster_badge"}},
     "furniture_8":{"name":"温馨营地","condition":"furniture_count","target":8,"reward":{"gold":180}}
   }
 }

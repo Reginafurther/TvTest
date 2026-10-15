@@ -38,7 +38,7 @@ var character_button: Button
 var camp_ui
 
 func _ready() -> void:
-	DisplayServer.window_set_title("万界冒险团 V0.9")
+	DisplayServer.window_set_title("万界冒险团 V1.0")
 	build_background()
 	battle = BattleControllerScript.new()
 	battle.position = Vector2(190, 70)
@@ -97,6 +97,8 @@ func _ready() -> void:
 		call_deferred("_save_v06_character_preview", Vector2i(1920, 1080), "v06_character_1920.png")
 	elif "--v09-preview-boss" in OS.get_cmdline_user_args():
 		call_deferred("_save_v09_boss_preview")
+	elif "--v10-preview-stats" in OS.get_cmdline_user_args():
+		call_deferred("_save_v10_stats_preview")
 	elif "--v05-core-test" in OS.get_cmdline_user_args():
 		call_deferred("finish_v05_core_test")
 	elif "--v05-shop-test" in OS.get_cmdline_user_args():
@@ -195,7 +197,7 @@ func build_ui() -> void:
 
 	var title := Label.new()
 	title.name = "GameTitle"
-	title.text = "万界冒险团  V0.8.1"
+	title.text = "万界冒险团  V1.0"
 	V035ThemeScript.label(title, 26, Color("#FFF1C7"))
 	add_child(title)
 
@@ -414,6 +416,37 @@ func _save_v09_boss_preview() -> void:
 		return
 	image.save_png(path)
 	print("V09_BOSS_PREVIEW " + ProjectSettings.globalize_path(path))
+	get_tree().quit()
+
+func _save_v10_stats_preview() -> void:
+	get_window().size = Vector2i(1440, 768)
+	battle.progression.roster = ["zhou_yu", "zhao_yun", "liu_bei", "nine_spirits"]
+	battle.progression.party = ["zhou_yu", "zhao_yun", "liu_bei", "nine_spirits"]
+	battle.progression.ensure_growth_layout()
+	battle.combat_stats.reset(0.0)
+	battle.combat_stats.record_damage("zhou_yu", "preview_enemy", 58200.0, "skill", "red_cliff_flames")
+	battle.combat_stats.record_damage("zhou_yu", "preview_enemy", 24600.0, "effect", "red_cliff_flames:burn")
+	battle.combat_stats.record_damage("zhou_yu", "preview_enemy", 31400.0, "basic", "basic")
+	battle.combat_stats.record_damage("zhou_yu", "preview_enemy", 11640.0, "skill", "tk_poison_dart")
+	battle.combat_stats.record_damage("zhao_yun", "preview_enemy", 72600.0, "skill", "spear_flurry")
+	battle.combat_stats.record_damage("zhao_yun", "preview_enemy", 18400.0, "basic", "basic")
+	battle.combat_stats.record_heal("liu_bei", 48600.0)
+	battle.combat_stats.record_damage("nine_spirits", "preview_enemy", 33500.0, "basic", "summon:medicine_avatar")
+	battle.elapsed = 60.0
+	v03_ui.open_view("stats")
+	v03_ui.stats_expanded["zhou_yu"] = true
+	v03_ui.update_stats_view()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_layout_ui()
+	await get_tree().process_frame
+	var path := "res://screenshots/v10_skill_damage_stats.png"
+	var image := get_viewport().get_texture().get_image()
+	if image == null or image.is_empty() or image.save_png(path) != OK:
+		push_error("V10_STATS_PREVIEW_FAIL rendering texture unavailable")
+		get_tree().quit(1)
+		return
+	print("V10_STATS_PREVIEW " + ProjectSettings.globalize_path(path))
 	get_tree().quit()
 
 func update_stats(kills: int, elapsed: float, wave: int) -> void:

@@ -251,7 +251,11 @@ func _physics_process(delta: float) -> void:
 	if passive_skill_id == "wow_metamorphosis" and hp / maxf(1.0, max_hp) <= 0.40 and metamorphosis_time <= 0.0 and metamorphosis_cooldown <= 0.0:
 		metamorphosis_time = 7.0
 		metamorphosis_cooldown = 18.0
-		show_number("恶魔变形", Color("#B477FF"))
+	elif passive_skill_id == "naruto_sage_affinity" and hp / maxf(1.0, max_hp) <= 0.85 and metamorphosis_time <= 0.0 and metamorphosis_cooldown <= 0.0 and is_instance_valid(battle.find_closest_enemy(self)):
+		metamorphosis_time = 7.0
+		metamorphosis_cooldown = 18.0
+		battle.note_passive(actor_id, passive_skill_id)
+		show_number("仙人模式", Color("#E8B85A"))
 	if poison_time > 0.0:
 		poison_time -= delta
 		poison_tick += delta
@@ -679,6 +683,16 @@ func try_use_general_skill(skill_id: String) -> bool:
 			var cost := max_hp * float(data.get("health_cost", 0.08))
 			hp = maxf(1.0, hp - cost)
 			temporary_attack_bonus = power; temporary_attack_bonus_time = float(data.get("duration", 6.0)); haste_power = power * 0.5; haste_time = float(data.get("duration", 6.0)); used = true
+		"summon_clone":
+			var clone_count := 0
+			var clone_pool: Array = battle.heroes if faction == "heroes" else battle.enemies
+			for member in clone_pool:
+				if is_instance_valid(member) and member.is_summon and member.summon_owner_id == actor_id and member.actor_id == "naruto_shadow_clone_unit": clone_count += 1
+			if clone_count < int(data.get("summon_cap", 1)):
+				var group := "heroes" if faction == "heroes" else "enemies"
+				var clone = battle.spawn_unit("naruto_shadow_clone_unit", group, position + Vector2(34, 24), {"summoned":true})
+				clone.is_summon = true; clone.summon_owner_id = actor_id; clone.summon_lifetime = float(data.get("duration", 9.0)); clone.max_hp = max_hp * 0.25; clone.hp = clone.max_hp; clone.attack = attack * power; clone.defense = defense * 0.35
+				used = true
 	if not used: return false
 	var echo_chance := passive_effect_total("skill_echo")
 	if echo_chance > 0.0 and randf() < echo_chance and is_instance_valid(enemy):
@@ -1000,6 +1014,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		battle.record_damage_resolution(live_source, self, result, safe_context)
 		return result
 	var evasion := passive_effect_total("evasion") + (passive_value() if passive_data.get("effect", "") == "evasion" else 0.0) + (temporary_evasion if temporary_evasion_time > 0.0 else 0.0)
+	if live_source != null:
+		evasion = maxf(0.0, evasion - live_source.passive_effect_total("armor_ignore") * 0.5)
 	if live_source != null and live_source.has_general_passive("dz_golden_eye"):
 		evasion = maxf(0.0, evasion - live_source.general_passive_by_id("dz_golden_eye"))
 	if not bool(safe_context.get("bypass_evasion", false)) and randf() < minf(0.75, evasion):
@@ -1032,6 +1048,11 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		typed_amount *= 1.0 + live_source.passive_value()
 	if live_source != null and live_source.temporary_attack_bonus_time > 0.0:
 		typed_amount *= 1.0 + live_source.temporary_attack_bonus
+	if live_source != null:
+		typed_amount += defense * 0.55 * minf(0.75, live_source.passive_effect_total("armor_ignore"))
+		if live_source.passive_skill_id == "naruto_sage_affinity" and live_source.metamorphosis_time > 0.0:
+			typed_amount *= 1.0 + live_source.passive_value()
+			battle.note_passive(live_source.actor_id, live_source.passive_skill_id)
 	var amount := float(preview_damage(typed_amount))
 	# Final damage is an independent post-defense offensive multiplier.
 	amount *= 1.0 + float(source_snapshot.get("final_damage", 0.0))
@@ -1324,6 +1345,8 @@ func boss_minion_actor_id() -> String:
 		"逆水寒": return "jianghu_raider"
 		"魔兽世界": return "wow_ghoul"
 		"金庸": return "jy_assassin"
+		"秦时明月": return "qin_mechanism_beast"
+		"火影忍者": return "naruto_rogue_ninja"
 	return "zubat"
 
 func apply_hard_control(duration: float) -> float:

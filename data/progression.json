@@ -1,5 +1,5 @@
 {
-  "max_actor_level": 60,
+  "max_actor_level": 80,
   "experience_curve": {"base": 180, "linear": 90, "quadratic": 25},
   "kill_experience": {"base": 3.0, "per_monster_level": 1.2, "elite_multiplier": 3.0, "boss_multiplier": 10.0},
   "low_stage_farm": {"free_level_gap": 2, "penalty_per_level": 0.16, "minimum_multiplier": 0.08},

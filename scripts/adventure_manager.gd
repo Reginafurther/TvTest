@@ -14,7 +14,7 @@ func setup(owner_battle) -> void:
 	battle = owner_battle
 	config = JSON.parse_string(FileAccess.get_file_as_string("res://data/adventure.json"))
 	if typeof(config) != TYPE_DICTIONARY: config = {}
-	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json"]:
+	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json", "res://data/v10_qin_content.json", "res://data/v10_naruto_content.json"]:
 		var content = JSON.parse_string(FileAccess.get_file_as_string(content_path))
 		if typeof(content) == TYPE_DICTIONARY:
 			config.rift.worlds.merge(content.get("rift_worlds", {}), true)
@@ -169,7 +169,7 @@ func reward_for_encounter(event_id: String) -> Dictionary:
 	var stage := maxi(1, battle.progression.completed_stages.size())
 	var reward := {"gold":20 + stage * 5,"material":2 + stage / 5}
 	battle.progression.gold += int(reward.gold)
-	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token" if stage <= 20 else "dragon_blood_crystal" if stage <= 30 else "jianghu_token" if stage <= 40 else "azeroth_token" if stage <= 50 else "wuxia_token"
+	var material_id := "three_kingdoms_token" if stage <= 10 else "pokemon_token" if stage <= 20 else "dragon_blood_crystal" if stage <= 30 else "jianghu_token" if stage <= 40 else "azeroth_token" if stage <= 50 else "wuxia_token" if stage <= 60 else "qin_moon_token" if stage <= 70 else "ninja_scroll"
 	battle.progression.materials[material_id] = int(battle.progression.materials.get(material_id, 0)) + int(reward.material)
 	battle.combat_stats.resources.materials += int(reward.material)
 	if event_id in ["rare_elite", "chest_mimic", "hidden_boss"]:

@@ -361,8 +361,8 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 	if selected_actor.is_empty(): return
 	var p = battle.progression
 	var actor: Dictionary = battle.actors[selected_actor]
-	var filter_row := HBoxContainer.new(); skills_box.add_child(filter_row)
-	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸"]:
+	var filter_row := FlowContainer.new(); skills_box.add_child(filter_row)
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者"]:
 		var button := Button.new(); button.text = world; button.disabled = skill_world_filter == world; button.pressed.connect(_set_skill_world_filter.bind(world)); filter_row.add_child(button)
 	var category_row := HBoxContainer.new(); skills_box.add_child(category_row)
 	for category_name in ["全部", "主动", "被动"]:
@@ -573,7 +573,7 @@ func refresh_growth() -> void:
 	var history: Array = battle.progression.level_history[selected_actor]
 	var lines: Array[String] = []
 	for entry in history.slice(0, 8): lines.append("Lv.%d · %s" % [int(entry.level), entry.get("source", "战斗")])
-	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n\n当前培养：角色Lv.%d / 上限Lv.60；专属主动Lv.%d；专属被动Lv.%d\n\n[b]最近升级历程[/b]\n%s" % [data.name, data.role, ai_description(data), position_description(data), battle.progression.actor_level(selected_actor), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
+	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n\n当前培养：角色Lv.%d / 当前上限Lv.%d；专属主动Lv.%d；专属被动Lv.%d\n\n[b]最近升级历程[/b]\n%s" % [data.name, data.role, ai_description(data), position_description(data), battle.progression.actor_level(selected_actor), battle.progression.actor_level_cap(), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
 
 func _select_actor(index: int) -> void:
 	selected_actor = str(actor_list.get_item_metadata(index))

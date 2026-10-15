@@ -311,7 +311,7 @@ func refresh_resource_category(category: String) -> void:
 	detail.text = "[b]%s[/b]\n共 %d 类物品；本页与角色、商店、秘境、奇遇和营地共用同一份真实存档。" % [category, rows.size()]
 
 func material_name(id: String) -> String:
-	return {"salvage_dust":"分解粉尘", "three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "rift_crystal":"秘境结晶", "rare_wood":"稀有木材"}.get(id, id)
+	return {"salvage_dust":"分解粉尘", "three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "qin_moon_token":"苍龙令", "ninja_scroll":"忍界卷轴", "rift_crystal":"秘境结晶", "rare_wood":"稀有木材"}.get(id, id)
 
 func special_item_name(id: String) -> String:
 	return {"recruit_ticket":"招募令", "camp_coupon":"营地券", "rift_key":"秘境钥匙"}.get(id, id)

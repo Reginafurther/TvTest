@@ -39,6 +39,10 @@ func _draw() -> void:
 		draw_line(rally_position - Vector2(0, 8), rally_position + Vector2(0, 8), Color.WHITE, 2)
 
 func world_palette() -> Array[Color]:
+	if map_id.begins_with("naruto_"):
+		return [Color("#59676A"), Color("#516064"), Color("#637276"), Color("#779DA5")]
+	if map_id.begins_with("qin_"):
+		return [Color("#777266"), Color("#6F6A5E"), Color("#817B6E"), Color("#7695A0")]
 	if map_id in ["elwynn_forest","deadmines","scarlet_monastery","stratholme","molten_core","naxxramas","ulduar","shadow_council","dragon_soul","frozen_throne"]:
 		return [Color("#44505A"), Color("#3C4852"), Color("#4C5963"), Color("#597D8A")]
 	if map_id in ["niujia_night","baituo_manor","ancient_tomb_edge","xiangyang_outskirts","emei_summit","bright_peak_passage","shaolin_temple","swallow_manor","black_wood_path","black_wood_summit"]:

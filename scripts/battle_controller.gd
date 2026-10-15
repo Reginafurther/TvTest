@@ -87,7 +87,7 @@ func _ready() -> void:
 	shop_config = DataLoaderScript.load_json("res://data/shop.json")
 	passives_config = DataLoaderScript.load_json("res://data/passives.json")
 	general_skills_config = DataLoaderScript.load_json("res://data/general_skills.json")
-	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json"]:
+	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json", "res://data/v10_qin_content.json", "res://data/v10_naruto_content.json"]:
 		var content: Dictionary = DataLoaderScript.load_json(content_path)
 		actors.merge(content.get("actors", {}), true)
 		skills.merge(content.get("skills", {}), true)
@@ -107,7 +107,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var v061_write_test := false
 	for value in args:
-		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-") or str(value).begins_with("--v09-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read", "--v081-reset-read"]: v061_write_test = true
+		if (str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-") or str(value).begins_with("--v09-") or str(value).begins_with("--v10-")) and str(value) not in ["--v061-persist-read", "--v07-persist-read", "--v08-persist-read", "--v081-reset-read"]: v061_write_test = true
 	if "--equipment-test" in args or "--persistence-write" in args or "--v03-test" in args or "--v031-test" in args or "--v05-test" in args or "--v05-core-test" in args or "--v05-shop-test" in args or "--v05-skill-test" in args or "--v05-system-test" in args or v061_write_test:
 		inventory.clear_test_save()
 	inventory.load_from_disk()
@@ -848,7 +848,11 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 		elif stage == 50:
 			log_message.emit("★ 魔兽世界第50关通关！金庸世界已永久开放。")
 		elif stage == 60:
-			log_message.emit("★ 全60关主线通关！六世界秘境上限已开放至60层。")
+			log_message.emit("★ 金庸第60关通关！秦时明月世界已永久开放。")
+		elif stage == 70:
+			log_message.emit("★ 秦时明月第70关通关！火影忍者世界已永久开放。")
+		elif stage == 80:
+			log_message.emit("★ 全80关主线通关！八世界秘境上限已开放至80层。")
 		else:
 			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
 		battle_state_changed.emit("主线第%d关已通关" % stage)
