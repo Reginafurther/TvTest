@@ -21,7 +21,9 @@
     "qin_moon_pack": {"name":"苍龙令小包","world":"秦时明月","type":"material","material_id":"qin_moon_token","amount":5,"price":215,"required_stage":60,"icon":"qin_moon_token","description":"秦时明月角色定向招募资源。"},
     "book_vertical_sword": {"name":"技能书·纵剑势","world":"秦时明月","type":"skill_book","skill_id":"qin_vertical_sword","amount":1,"price":700,"required_stage":60,"icon":"skill_book","description":"秦时明月通用物理主动技能书。"},
     "ninja_scroll_pack": {"name":"忍界卷轴小包","world":"火影忍者","type":"material","material_id":"ninja_scroll","amount":5,"price":245,"required_stage":70,"icon":"ninja_scroll","description":"火影忍者角色定向招募资源。"},
-    "book_fireball": {"name":"技能书·豪火球之术","world":"火影忍者","type":"skill_book","skill_id":"naruto_fireball","amount":1,"price":780,"required_stage":70,"icon":"skill_book","description":"火影忍者通用元素主动技能书。"}
+    "book_fireball": {"name":"技能书·豪火球之术","world":"火影忍者","type":"skill_book","skill_id":"naruto_fireball","amount":1,"price":780,"required_stage":70,"icon":"skill_book","description":"火影忍者通用元素主动技能书。"},
+    "huangyi_token_pack": {"name":"战神令小包","world":"黄易","type":"material","material_id":"huangyi_token","amount":5,"price":275,"required_stage":80,"icon":"huangyi_token","description":"黄易世界角色定向招募资源。"},
+    "book_heaven_blade": {"name":"技能书·天刀八诀","world":"黄易","type":"skill_book","skill_id":"hy_heaven_blade_eight","amount":1,"price":860,"required_stage":80,"icon":"skill_book","description":"黄易世界通用物理主动技能书。"}
   },
   "rules": {"max_quantity": 20, "sell_ratio_hint": "装备售价由等级与品质计算；穿戴中的装备不可出售。"}
 }
