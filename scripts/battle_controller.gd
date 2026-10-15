@@ -928,6 +928,8 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 	combat_stats.record_damage(source_id, target_id, amount, context.get("kind", "skill"))
 	if not context.get("allow_triggers", true):
 		return
+	if is_instance_valid(source) and is_instance_valid(target) and str(context.get("kind", "")) == "skill":
+		source.trigger_general_on_hit(target)
 	if context.get("critical", false) and is_instance_valid(source) and source.has_special("crit_lightning"):
 		trigger_lightning(source, target)
 	if is_instance_valid(source) and (target.has_special("thorn_reflect") or (target.passive_data.get("effect", "") == "low_hp_rage" and target.hp / target.max_hp < 0.5)):
@@ -971,6 +973,7 @@ func on_heal(source, amount: float, source_snapshot: Dictionary = {}) -> void:
 
 func on_skill(source) -> void:
 	combat_stats.record_skill(stats_actor_id(source))
+	source.on_skill_casted()
 	source.on_boss_skill_cast()
 
 func stats_actor_id(unit) -> String:

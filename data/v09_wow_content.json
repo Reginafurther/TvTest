@@ -25,21 +25,21 @@
     "wow_boss_lich_king":{"name":"巫妖王·阿尔萨斯","world":"魔兽世界","role":"冰冠最终首领","enemy_type":"boss","max_hp":3600,"attack":118,"defense":55,"move_speed":90,"attack_range":195,"attack_interval":0.88,"color":"273348","accent":"A7E9FF","skill":"wow_boss_frostfire","boss_id":"lich_king","boss_mechanic":"final_burst_phases"}
   },
   "skills": {
-    "wow_shield_wall":{"damage_type":"none","name":"盾墙","type":"taunt","power":0.24,"power_per_level":0.018,"cooldown":10.0,"range":230,"duration":4.5,"function_type":"defense","description":"嘲讽周围敌人并获得护盾。"},
+    "wow_shield_wall":{"damage_type":"none","name":"盾墙","type":"taunt","power":0.24,"power_per_level":0.018,"cooldown":10.0,"range":230,"duration":4.5,"damage_reduction":0.26,"function_type":"defense","description":"嘲讽周围敌人，获得护盾并在4.5秒内减伤26%。"},
     "wow_divine_hymn":{"damage_type":"none","name":"神圣赞美诗","type":"team_hot","power":1.65,"power_per_level":0.08,"cooldown":10.5,"duration":7.0,"targets":4,"function_type":"healing","description":"为全队施加持续圣光治疗。"},
-    "wow_bloodlust":{"damage_type":"none","name":"嗜血","type":"team_haste","power":0.28,"power_per_level":0.018,"cooldown":11.0,"function_type":"support","description":"压缩全队当前技能冷却。"},
+    "wow_bloodlust":{"damage_type":"none","name":"嗜血","type":"team_haste","power":0.28,"power_per_level":0.018,"cooldown":11.0,"duration":6.0,"function_type":"support","description":"压缩全队当前技能冷却，并在6秒内提高攻击速度。"},
     "wow_howling_blast":{"damage_type":"elemental","name":"凛风冲击","type":"multi_hit_slow","power":0.55,"power_per_level":0.055,"hits":3,"cooldown":7.5,"range":185,"slow":0.35,"duration":4.0,"function_type":"damage","description":"冰霜多段攻击并减速目标。"},
     "wow_eye_beam":{"damage_type":"elemental","name":"眼棱","type":"multi_hit","power":0.48,"power_per_level":0.05,"hits":5,"cooldown":7.0,"range":175,"function_type":"damage","description":"以邪能眼棱快速连续攻击。"},
-    "wow_blizzard":{"damage_type":"elemental","name":"暴风雪","type":"burn_area","power":1.20,"power_per_level":0.07,"dot_power":0.18,"cooldown":8.2,"range":245,"duration":5.0,"function_type":"damage","description":"范围冰霜风暴造成持续元素伤害。"},
+    "wow_blizzard":{"damage_type":"elemental","name":"暴风雪","type":"burn_area","power":1.20,"power_per_level":0.07,"dot_power":0.18,"cooldown":8.2,"range":245,"duration":5.0,"function_type":"damage","description":"在目标区域造成冰霜范围伤害，附加5秒冰霜持续伤害与减速（不视为燃烧）。"},
     "wow_boss_assault":{"damage_type":"physical","name":"首领强袭","type":"boss_area","power":1.0,"cooldown":6.8,"range":220},
     "wow_boss_frostfire":{"damage_type":"elemental","name":"首领秘法","type":"boss_area","power":1.04,"cooldown":6.5,"range":260}
   },
   "passives": {
-    "wow_second_wind":{"name":"复苏之风","effect":"damage_reduction","value":0.10,"per_level":0.008,"description":"稳定降低所受伤害。"},
+    "wow_second_wind":{"name":"复苏之风","effect":"second_wind","value":0.018,"per_level":0.0015,"description":"生命不高于35%时每秒恢复最大生命，脱离危机后停止。"},
     "wow_surge_of_light":{"name":"圣光涌动","effect":"healing","value":0.16,"per_level":0.014,"description":"提高所有治疗效果。"},
     "wow_windfury_weapon":{"name":"风怒武器","effect":"combo","value":0.20,"per_level":0.012,"description":"每第三次普攻触发额外元素连击。"},
     "wow_killing_machine":{"name":"杀戮机器","effect":"critical","value":0.12,"per_level":0.010,"description":"提高暴击率，强化冰霜爆发。"},
-    "wow_metamorphosis":{"name":"恶魔变形","effect":"low_hp_rage","value":0.28,"per_level":0.018,"description":"低生命时提高输出。"},
+    "wow_metamorphosis":{"name":"恶魔变形","effect":"metamorphosis","value":0.28,"per_level":0.018,"description":"生命不高于40%时变形7秒提高输出，18秒内至多触发一次。"},
     "wow_fingers_of_frost":{"name":"寒冰指","effect":"status_amplifier","value":0.18,"per_level":0.014,"description":"攻击异常状态目标时增伤。"}
   },
   "general_skills": {

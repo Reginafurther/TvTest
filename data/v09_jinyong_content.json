@@ -35,10 +35,10 @@
     "jy_jade_maiden_sword":{"damage_type":"physical","name":"玉女素心剑","type":"multi_hit","power":0.42,"power_per_level":0.045,"hits":5,"cooldown":6.5,"range":95,"function_type":"damage","description":"轻灵迅捷的五段剑击。"},
     "jy_taiji_fist":{"damage_type":"physical","name":"太极拳","type":"dive_guard","power":1.08,"power_per_level":0.06,"cooldown":8.0,"range":150,"duration":4.0,"function_type":"defense","description":"近身攻击并短时减伤。"},
     "jy_white_bone_claw":{"damage_type":"physical","name":"九阴白骨爪","type":"multi_hit_slow","power":0.50,"power_per_level":0.05,"hits":4,"cooldown":7.0,"range":105,"slow":0.20,"duration":4.0,"function_type":"damage","description":"连续爪击并限制目标行动。"},
-    "jy_dragon_capturing":{"damage_type":"physical","name":"擒龙功","type":"gravity_taunt","power":0.18,"power_per_level":0.012,"cooldown":8.0,"range":190,"slow":0.40,"duration":2.5,"function_type":"control","description":"以内力牵引并控制敌人。"},
+    "jy_dragon_capturing":{"damage_type":"physical","name":"擒龙功","type":"gravity_taunt","power":0.18,"power_per_level":0.012,"cooldown":8.0,"range":190,"slow":0.40,"duration":2.5,"function_type":"control","description":"以内力伤害并牵引周围敌人，施加减速与控制。"},
     "jy_six_meridian_sword":{"damage_type":"elemental","name":"六脉神剑","type":"multi_hit","power":0.47,"power_per_level":0.05,"hits":5,"cooldown":7.2,"range":285,"function_type":"damage","description":"远程释放多段无形剑气。"},
     "jy_dugu_swords":{"damage_type":"physical","name":"独孤九剑","type":"piercing_shot","power":1.48,"power_per_level":0.075,"cooldown":7.2,"range":150,"armor_ignore":0.48,"function_type":"damage","description":"识破招式并无视部分防御。"},
-    "jy_pure_music_blade":{"damage_type":"elemental","name":"清心普善咒·琴刃","type":"burn_area","power":1.18,"power_per_level":0.065,"dot_power":0.14,"cooldown":8.5,"range":245,"duration":5.0,"function_type":"control","description":"琴音化刃范围攻击并持续扰乱敌人。"},
+    "jy_pure_music_blade":{"damage_type":"elemental","name":"清心普善咒·琴刃","type":"burn_area","power":1.18,"power_per_level":0.065,"dot_power":0.14,"cooldown":8.5,"range":245,"duration":5.0,"function_type":"control","description":"琴音化刃攻击目标区域，并施加减速与短暂扰乱；不会附加燃烧。"},
     "jy_boss_combo":{"damage_type":"physical","name":"武学绝招","type":"boss_area","power":1.08,"cooldown":6.0,"range":225},
     "jy_boss_elemental":{"damage_type":"elemental","name":"内力绝学","type":"boss_area","power":1.08,"cooldown":6.2,"range":260}
   },
