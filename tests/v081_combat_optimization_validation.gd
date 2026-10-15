@@ -21,7 +21,7 @@ class FakeBattle extends Node:
 	var last_heal := 0.0
 	func record_damage_resolution(_source, _target, _result: Dictionary, _context: Dictionary) -> void: pass
 	func on_damage(_source, _target, _amount: float, _context: Dictionary) -> void: pass
-	func on_heal(_source, amount: float) -> void: last_heal = amount
+	func on_heal(_source, amount: float, _source_snapshot: Dictionary = {}) -> void: last_heal = amount
 	func note_passive(_actor_id: String, _passive_id: String) -> void: pass
 	func find_closest_enemy(seeker):
 		var pool: Array = enemies if seeker.faction == "heroes" else heroes

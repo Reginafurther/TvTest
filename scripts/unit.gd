@@ -62,7 +62,9 @@ var poison_time := 0.0
 var poison_tick := 0.0
 var poison_depth := 0
 var poison_source
+var poison_source_snapshot: Dictionary = {}
 var last_damage_source
+var last_damage_source_id := ""
 var taunt_timer := 0.0
 var control_resistance := 0.0
 var accumulated_control := 0.0
@@ -83,10 +85,12 @@ var burn_damage := 0.0
 var burn_time := 0.0
 var burn_tick := 0.0
 var burn_source
+var burn_source_snapshot: Dictionary = {}
 var hot_amount := 0.0
 var hot_time := 0.0
 var hot_tick := 0.0
 var hot_source
+var hot_source_snapshot: Dictionary = {}
 var slow_time := 0.0
 var slow_power := 0.0
 var temporary_reduction_time := 0.0
@@ -110,6 +114,26 @@ var rift_affixes: Array = []
 var is_summon := false
 var summon_owner_id := ""
 var summon_lifetime := 0.0
+
+func valid_combat_source(source):
+	return source if is_instance_valid(source) else null
+
+func combat_source_snapshot(source, fallback_damage_type: String = "none") -> Dictionary:
+	var snapshot := {
+		"actor_id":"", "name":"环境效果", "faction":"", "damage_type":fallback_damage_type,
+		"physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0, "special_effects":[]
+	}
+	if not is_instance_valid(source):
+		return snapshot
+	snapshot.actor_id = str(source.actor_id)
+	snapshot.name = str(source._name())
+	snapshot.faction = str(source.faction)
+	snapshot.damage_type = str(source.actor_data.get("basic_damage_type", fallback_damage_type))
+	snapshot.physical_damage = float(source.physical_damage)
+	snapshot.elemental_damage = float(source.elemental_damage)
+	snapshot.final_damage = float(source.final_damage)
+	snapshot.special_effects = source.special_effects.duplicate()
+	return snapshot
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
 	actor_id = id
@@ -197,19 +221,19 @@ func _physics_process(delta: float) -> void:
 		poison_tick += delta
 		if poison_tick >= 1.0:
 			poison_tick -= 1.0
-			take_damage(poison_damage, poison_source, false, {"kind": "effect", "damage_type": "elemental", "allow_triggers": false, "poison": true})
+			take_damage(poison_damage, valid_combat_source(poison_source), false, {"kind": "effect", "damage_type": "elemental", "allow_triggers": false, "poison": true, "source_snapshot":poison_source_snapshot})
 	if burn_time > 0.0:
 		burn_time -= delta
 		burn_tick += delta
 		if burn_tick >= 1.0:
 			burn_tick -= 1.0
-			take_damage(burn_damage, burn_source, false, {"kind": "effect", "damage_type": "elemental", "allow_triggers": false, "burn": true})
+			take_damage(burn_damage, valid_combat_source(burn_source), false, {"kind": "effect", "damage_type": "elemental", "allow_triggers": false, "burn": true, "source_snapshot":burn_source_snapshot})
 	if hot_time > 0.0:
 		hot_time -= delta
 		hot_tick += delta
 		if hot_tick >= 1.0:
 			hot_tick -= 1.0
-			heal(hot_amount, hot_source, false)
+			heal(hot_amount, valid_combat_source(hot_source), false, {"source_snapshot":hot_source_snapshot})
 	var current_regen := life_regen + (emergency_regen if hp / maxf(1.0, max_hp) <= 0.35 else 0.0)
 	if current_regen > 0.0 and hp < max_hp:
 		regen_accumulator += delta
@@ -814,34 +838,43 @@ func try_use_skill() -> bool:
 	return false
 
 func take_damage(raw_amount: float, source, critical: bool = false, context: Dictionary = {}) -> Dictionary:
-	var damage_type := resolve_damage_type(source, context)
+	var live_source = valid_combat_source(source)
+	var safe_context: Dictionary = context.duplicate(true)
+	var source_snapshot: Dictionary = safe_context.get("source_snapshot", {})
+	if source_snapshot.is_empty() and live_source != null:
+		source_snapshot = combat_source_snapshot(live_source)
+	safe_context["source_snapshot"] = source_snapshot
+	safe_context["source_actor_id"] = str(source_snapshot.get("actor_id", ""))
+	var damage_type := resolve_damage_type(live_source, safe_context)
 	var result := {"raw":raw_amount, "damage_type":damage_type, "defense":defense, "reduction":0.0, "shield_absorbed":0.0, "hp_damage":0.0, "hp_before":hp, "reason":""}
 	if dead:
 		result.reason = "target_dead"
-		battle.record_damage_resolution(source, self, result, context)
+		battle.record_damage_resolution(live_source, self, result, safe_context)
 		return result
 	if not is_finite(raw_amount) or raw_amount <= 0.0:
 		result.reason = "invalid_raw_damage"
-		battle.record_damage_resolution(source, self, result, context)
+		battle.record_damage_resolution(live_source, self, result, safe_context)
 		return result
 	var evasion := passive_effect_total("evasion") + (passive_value() if passive_data.get("effect", "") == "evasion" else 0.0) + (temporary_evasion if temporary_evasion_time > 0.0 else 0.0)
 	if randf() < minf(0.75, evasion):
 		show_number("闪避", Color("#D4F4FF"))
 		result.reason = "evaded"
-		battle.record_damage_resolution(source, self, result, context)
+		battle.record_damage_resolution(live_source, self, result, safe_context)
 		return result
 	if damage_share_time > 0.0 and is_instance_valid(damage_share_source) and damage_share_source != self and not damage_share_source.dead:
 		var shared := raw_amount * damage_share_ratio
 		raw_amount -= shared
-		damage_share_source.take_damage(shared, source, false, {"kind":"effect", "allow_triggers":false, "shared":true})
+		damage_share_source.take_damage(shared, live_source, false, {"kind":"effect", "damage_type":damage_type, "allow_triggers":false, "shared":true, "source_snapshot":source_snapshot})
+	elif damage_share_time > 0.0 and not is_instance_valid(damage_share_source):
+		damage_share_time = 0.0
+		damage_share_ratio = 0.0
+		damage_share_source = null
 	var typed_amount := raw_amount
-	if source is BattleUnit:
-		if damage_type == "physical": typed_amount *= 1.0 + source.physical_damage
-		elif damage_type == "elemental": typed_amount *= 1.0 + source.elemental_damage
+	if damage_type == "physical": typed_amount *= 1.0 + float(source_snapshot.get("physical_damage", 0.0))
+	elif damage_type == "elemental": typed_amount *= 1.0 + float(source_snapshot.get("elemental_damage", 0.0))
 	var amount := float(preview_damage(typed_amount))
 	# Final damage is an independent post-defense offensive multiplier.
-	if source is BattleUnit:
-		amount *= 1.0 + source.final_damage
+	amount *= 1.0 + float(source_snapshot.get("final_damage", 0.0))
 	var reduction_factor := 1.0
 	# Equipment reduction remains a permanent independent multiplier and never
 	# enters the temporary reduction state used by skills.
@@ -870,35 +903,36 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 			trigger_shield_burst()
 	if amount <= 0:
 		result.reason = "shield_absorbed"
-		battle.record_damage_resolution(source, self, result, context)
+		battle.record_damage_resolution(live_source, self, result, safe_context)
 		if not battle.suppress_combat_visuals: queue_redraw()
 		return result
 	amount = maxf(1.0, roundf(amount))
-	last_damage_source = source
+	last_damage_source = live_source
+	last_damage_source_id = str(source_snapshot.get("actor_id", ""))
 	hp = maxf(0.0, hp - amount)
 	result.hp_damage = amount
 	result.reason = "applied"
 	hit_flash = 0.12
 	show_number(("暴击 -%d" if critical else "-%d") % amount, Color("#FFE26A") if critical else Color("#FF8278"))
 	health_changed.emit(self)
-	battle.on_damage(source, self, amount, context)
-	battle.record_damage_resolution(source, self, result, context)
-	if is_instance_valid(source) and source != self:
+	battle.on_damage(live_source, self, amount, safe_context)
+	battle.record_damage_resolution(live_source, self, result, safe_context)
+	if live_source != null and live_source != self:
 		if actor_data.get("boss_mechanic", "") == "counter_guard":
-			source.take_damage(amount * 0.18, self, false, {"kind":"effect", "allow_triggers":false})
+			live_source.take_damage(amount * 0.18, self, false, {"kind":"effect", "allow_triggers":false})
 		if "counter" in rift_affixes:
-			source.take_damage(amount * 0.12, self, false, {"kind":"effect", "allow_triggers":false})
+			live_source.take_damage(amount * 0.12, self, false, {"kind":"effect", "allow_triggers":false})
 		if temporary_counter_time > 0.0:
-			source.take_damage(attack * temporary_counter, self, false, {"kind":"effect", "damage_type":"physical", "skill_id":"tk_counter_stance", "allow_triggers":false})
+			live_source.take_damage(attack * temporary_counter, self, false, {"kind":"effect", "damage_type":"physical", "skill_id":"tk_counter_stance", "allow_triggers":false})
 		var counter_chance := passive_effect_total("counter")
 		if counter_chance > 0.0 and randf() < counter_chance:
-			source.take_damage(attack * 0.65, self, false, {"kind":"effect", "allow_triggers":false})
+			live_source.take_damage(attack * 0.65, self, false, {"kind":"effect", "allow_triggers":false})
 	if not battle.suppress_combat_visuals: queue_redraw()
 	if hp <= 0.0:
 		dead = true
 		velocity = Vector2.ZERO
-		combat_event.emit("%s 被 %s 击败" % [_name(), source._name()])
-		if poison_time > 0.0 and is_instance_valid(poison_source) and poison_source.has_special("poison_spread"):
+		combat_event.emit("%s 被 %s 击败" % [_name(), str(source_snapshot.get("name", "环境效果"))])
+		if poison_time > 0.0 and ("poison_spread" in source_snapshot.get("special_effects", [])):
 			battle.propagate_poison(self)
 		died.emit(self)
 		var tween := create_tween()
@@ -909,6 +943,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 func resolve_damage_type(source, context: Dictionary) -> String:
 	var explicit := str(context.get("damage_type", ""))
 	if explicit in ["physical", "elemental", "none"]: return explicit
+	if not is_instance_valid(source):
+		return str(context.get("source_snapshot", {}).get("damage_type", "none"))
 	if not (source is BattleUnit): return "none"
 	match str(context.get("kind", "")):
 		"basic": return str(source.actor_data.get("basic_damage_type", "physical"))
@@ -931,7 +967,7 @@ func preview_damage(raw_amount: float) -> int:
 	var effective_defense := defense * (1.0 - armor_break_power if armor_break_time > 0.0 else 1.0)
 	return maxi(1, roundi(maxf(1.0, raw_amount - effective_defense * 0.55)))
 
-func heal(raw_amount: float, _source, show_text: bool = true) -> void:
+func heal(raw_amount: float, _source, show_text: bool = true, context: Dictionary = {}) -> void:
 	if faction == "heroes" and battle != null and not battle.active_rift_context.is_empty():
 		var boss_affixes: Array = []
 		for enemy in battle.enemies:
@@ -941,7 +977,11 @@ func heal(raw_amount: float, _source, show_text: bool = true) -> void:
 	if amount <= 0:
 		return
 	hp += amount
-	battle.on_heal(_source, amount)
+	var live_source = valid_combat_source(_source)
+	var source_snapshot: Dictionary = context.get("source_snapshot", {})
+	if source_snapshot.is_empty() and live_source != null:
+		source_snapshot = combat_source_snapshot(live_source)
+	battle.on_heal(live_source, amount, source_snapshot)
 	if show_text:
 		show_number("+%d" % amount, Color("#77F09D"))
 	health_changed.emit(self)
@@ -974,24 +1014,27 @@ func add_shield(amount: float, duration: float = 6.0) -> void:
 	show_number("◆ 护盾", Color("#80C8FF"))
 	queue_redraw()
 
-func apply_poison(damage_per_second: float, duration: float, source, depth: int) -> void:
+func apply_poison(damage_per_second: float, duration: float, source, depth: int, source_snapshot: Dictionary = {}) -> void:
 	poison_damage = maxf(poison_damage, damage_per_second)
 	poison_time = maxf(poison_time, duration)
-	poison_source = source
+	poison_source = valid_combat_source(source)
+	poison_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental")
 	poison_depth = depth
 	show_number("☠ 中毒", Color("#C58DFF"))
 	queue_redraw()
 
-func apply_burn(damage_per_second: float, duration: float, source) -> void:
+func apply_burn(damage_per_second: float, duration: float, source, source_snapshot: Dictionary = {}) -> void:
 	burn_damage = maxf(burn_damage, damage_per_second)
 	burn_time = maxf(burn_time, duration)
-	burn_source = source
+	burn_source = valid_combat_source(source)
+	burn_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental")
 	show_number("♨ 燃烧", Color("#FF9B62"))
 
-func apply_hot(total_power: float, duration: float, source) -> void:
+func apply_hot(total_power: float, duration: float, source, source_snapshot: Dictionary = {}) -> void:
 	hot_amount = maxf(hot_amount, total_power / maxf(1.0, duration))
 	hot_time = maxf(hot_time, duration)
-	hot_source = source
+	hot_source = valid_combat_source(source)
+	hot_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source)
 	show_number("✚ 持续恢复", Color("#78F0A8"))
 
 func apply_shock(duration: float) -> void:
@@ -1015,12 +1058,14 @@ func apply_damage_reduction(power: float, duration: float) -> void:
 	temporary_reduction_time = maxf(temporary_reduction_time, duration)
 
 func apply_damage_share(source, ratio: float, duration: float) -> void:
-	damage_share_source = source
+	damage_share_source = valid_combat_source(source)
 	damage_share_ratio = clampf(ratio, 0.0, 0.6)
 	damage_share_time = duration
 
 func cleanse_statuses() -> void:
 	poison_time = 0.0; burn_time = 0.0; slow_time = 0.0; armor_break_time = 0.0; shock_time = 0.0
+	poison_source = null; burn_source = null
+	poison_source_snapshot.clear(); burn_source_snapshot.clear()
 	show_number("净化", Color("#F8F2C0"))
 
 func has_negative_status() -> bool:

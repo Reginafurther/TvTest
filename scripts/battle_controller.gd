@@ -510,6 +510,10 @@ func _on_unit_died(unit) -> void:
 		if is_instance_valid(unit.last_damage_source):
 			unit.last_damage_source.on_kill_trigger()
 			combat_stats.record_kill(stats_actor_id(unit.last_damage_source))
+		elif not str(unit.last_damage_source_id).is_empty():
+			# Delayed damage may outlive its source node. Preserve attribution, but
+			# never invoke on-kill effects on a dead/freed unit.
+			combat_stats.record_kill(str(unit.last_damage_source_id))
 		var leveled_actors: Array[String] = []
 		for actor_id in progression.party:
 			if str(actor_id).is_empty():
@@ -919,7 +923,7 @@ func strategy_allows(unit) -> bool:
 	return enemies_near(unit.position, unit.faction, float(unit.skill_data.get("range", 180)), 99).size() >= int(preset.get("enemy_count", 1))
 
 func on_damage(source, target, amount: float, context: Dictionary) -> void:
-	var source_id := stats_actor_id(source)
+	var source_id := stats_actor_id(source) if is_instance_valid(source) else str(context.get("source_actor_id", ""))
 	var target_id := stats_actor_id(target)
 	combat_stats.record_damage(source_id, target_id, amount, context.get("kind", "skill"))
 	if not context.get("allow_triggers", true):
@@ -933,7 +937,7 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		source.take_damage(amount * reflect_power, target, false, {"kind": "effect", "allow_triggers": false})
 
 func record_damage_resolution(source, target, result: Dictionary, context: Dictionary) -> void:
-	var source_id: String = source.actor_id if is_instance_valid(source) else ""
+	var source_id: String = str(source.actor_id) if is_instance_valid(source) else str(context.get("source_actor_id", ""))
 	var target_id: String = target.actor_id if is_instance_valid(target) else ""
 	var row := {
 		"time":elapsed, "attacker":source_id, "target":target_id,
@@ -960,9 +964,10 @@ func record_damage_resolution(source, target, result: Dictionary, context: Dicti
 		if damage_anomalies.size() > 60: damage_anomalies.pop_front()
 		push_warning("ZERO_DAMAGE_DIAGNOSTIC %s" % JSON.stringify(diagnostic))
 
-func on_heal(source, amount: float) -> void:
-	if is_instance_valid(source):
-		combat_stats.record_heal(stats_actor_id(source), amount)
+func on_heal(source, amount: float, source_snapshot: Dictionary = {}) -> void:
+	var source_id := stats_actor_id(source) if is_instance_valid(source) else str(source_snapshot.get("actor_id", ""))
+	if not source_id.is_empty():
+		combat_stats.record_heal(source_id, amount)
 
 func on_skill(source) -> void:
 	combat_stats.record_skill(stats_actor_id(source))
@@ -987,11 +992,13 @@ func trigger_lightning(source, primary) -> void:
 func propagate_poison(dead_unit) -> void:
 	if dead_unit.poison_depth >= int(special_config.effects.poison_spread.max_chain_depth):
 		return
-	var source_faction: String = dead_unit.poison_source.faction if is_instance_valid(dead_unit.poison_source) else ("enemies" if dead_unit.faction == "heroes" else "heroes")
+	var source_faction: String = str(dead_unit.poison_source_snapshot.get("faction", ""))
+	if source_faction.is_empty():
+		source_faction = "enemies" if dead_unit.faction == "heroes" else "heroes"
 	var victims := enemies_near(dead_unit.position, source_faction, float(special_config.effects.poison_spread.range), int(special_config.effects.poison_spread.max_targets))
 	trigger_counts.poison_spread += 1
 	for victim in victims:
-		victim.apply_poison(dead_unit.poison_damage, 4.0, dead_unit.poison_source, dead_unit.poison_depth + 1)
+		victim.apply_poison(dead_unit.poison_damage, 4.0, dead_unit.valid_combat_source(dead_unit.poison_source), dead_unit.poison_depth + 1, dead_unit.poison_source_snapshot)
 
 func stats_snapshot() -> Dictionary:
 	return combat_stats.snapshot(elapsed, progression.roster)
