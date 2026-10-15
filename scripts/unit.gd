@@ -499,6 +499,8 @@ func basic_attack() -> void:
 	last_basic_target_id = current_target_id
 	var next_basic_count := basic_attack_count + 1
 	if consecutive_basic_count % 3 == 0: amount *= 1.0 + passive_effect_total("combo")
+	if has_general_passive("jy_jade_maiden") and consecutive_basic_count % 4 == 0:
+		amount *= 1.0 + general_passive_by_id("jy_jade_maiden")
 	target.take_damage(amount, self, critical, {"kind": "basic", "damage_type": str(actor_data.get("basic_damage_type", "physical")), "critical": critical, "allow_triggers": true})
 	match str(actor_data.get("boss_mechanic", "")):
 		"venom_strike": target.apply_poison(attack * 0.12, 4.0, self, 0)
@@ -550,7 +552,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 			if valid_enemy_in_range(enemy, cast_range):
 				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
 				enemy.apply_hard_control(float(data.get("duration", 1.2)))
-				if data.has("armor_break"): enemy.apply_armor_break(float(data.armor_break), maxf(4.0, float(data.get("duration", 1.2))))
+				if data.has("armor_break"): enemy.apply_armor_break(minf(0.8, float(data.armor_break) * armor_break_multiplier()), maxf(4.0, float(data.get("duration", 1.2))))
 				used = true
 		"low_hp_damage":
 			if valid_enemy_in_range(enemy, cast_range):
@@ -591,7 +593,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 		"armor_break":
 			if valid_enemy_in_range(enemy, cast_range):
 				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
-				enemy.apply_armor_break(float(data.get("armor_break", 0.25)), float(data.get("duration", 5.0)))
+				enemy.apply_armor_break(minf(0.8, float(data.get("armor_break", 0.25)) * armor_break_multiplier()), float(data.get("duration", 5.0)))
 				if skill_id == "dz_alchemy_seal" and enemy.shield > 0.0: enemy.shield *= 1.0 - minf(0.45, float(data.get("armor_break", 0.25)))
 				used = true
 		"burn", "poison":
@@ -810,7 +812,7 @@ func try_use_skill() -> bool:
 					if passive_data.get("effect", "") == "execute_damage" and victim.hp / maxf(1.0, victim.max_hp) <= 0.35:
 						damage *= 1.0 + passive_value(); battle.note_passive(actor_id, passive_skill_id)
 					victim.take_damage(damage, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
-					victim.apply_armor_break(float(skill_data.get("armor_break", 0.18)), float(skill_data.get("duration", 5.0)))
+					victim.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.18)) * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
 				skill_timer = cooldown; battle.on_skill(self); combat_event.emit("%s 施放【%s】，破甲斩击%d个目标" % [_name(), _skill_name(), victims.size()]); return true
 		"piercing_shot":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 285.0))):
@@ -821,7 +823,7 @@ func try_use_skill() -> bool:
 		"charm_control":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 230.0))):
 				target.take_damage(attack * 0.55, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
-				target.apply_armor_break(float(skill_data.get("armor_break", 0.16)), 5.0)
+				target.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.16)) * armor_break_multiplier()), 5.0)
 				target.apply_hard_control(float(skill_data.get("duration", 2.2)))
 				var haste := passive_value() if passive_data.get("effect", "") == "control_haste" else power
 				for member in allied_units(4): member.reduce_current_cooldowns(haste)
@@ -864,7 +866,7 @@ func try_use_skill() -> bool:
 				var ignore := passive_value() if passive_data.get("effect", "") == "armor_ignore" else 0.0
 				if passive_data.get("effect", "") == "armor_ignore": battle.note_passive(actor_id, passive_skill_id)
 				target.take_damage(attack * power + target.defense * 0.55 * ignore, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"bypass_evasion":str(actor_data.get("skill", "")) == "aura_sphere"})
-				target.apply_armor_break(float(skill_data.get("armor_break", 0.25)), float(skill_data.get("duration", 5.0)))
+				target.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.25)) * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"ally_guard":
 			var ally = battle.lowest_health_ally(self, 9999.0)
@@ -883,20 +885,22 @@ func try_use_skill() -> bool:
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"multi_hit_slow":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 190.0))):
-				for _hit in range(int(skill_data.get("hits", 4))): target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
+				var multi_bonus := 1.0 + passive_effect_total("multi_hit_bonus")
+				for _hit in range(int(skill_data.get("hits", 4))): target.take_damage(attack * power * multi_bonus, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
 				target.apply_slow(float(skill_data.get("slow", 0.25)), float(skill_data.get("duration", 4.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"multi_hit":
 			if valid_enemy_in_range(target, float(skill_data.get("range", attack_range))):
 				var hit_count := int(skill_data.get("hits", 3))
+				var multi_bonus := 1.0 + passive_effect_total("multi_hit_bonus")
 				if str(actor_data.get("skill", "")) == "iron_hook":
 					var victims: Array = battle.enemies_near(target.position, faction, 105.0, 5)
 					for hit in range(hit_count):
 						var victim = victims[hit % victims.size()]
-						victim.take_damage(attack * power * (1.35 if hit == hit_count - 1 else 1.0), self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
+						victim.take_damage(attack * power * multi_bonus * (1.35 if hit == hit_count - 1 else 1.0), self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
 				else:
 					for hit in range(hit_count):
-						var hit_power := power * (1.35 if hit == hit_count - 1 else 1.0)
+						var hit_power := power * multi_bonus * (1.35 if hit == hit_count - 1 else 1.0)
 						if str(actor_data.get("skill", "")) == "endless_annihilation" and hit == hit_count - 1 and target.hp / maxf(1.0, target.max_hp) <= 0.35:
 							hit_power *= 1.65
 						target.take_damage(attack * hit_power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
@@ -986,6 +990,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		battle.record_damage_resolution(live_source, self, result, safe_context)
 		return result
 	var evasion := passive_effect_total("evasion") + (passive_value() if passive_data.get("effect", "") == "evasion" else 0.0) + (temporary_evasion if temporary_evasion_time > 0.0 else 0.0)
+	if live_source != null and live_source.has_general_passive("dz_golden_eye"):
+		evasion = maxf(0.0, evasion - live_source.general_passive_by_id("dz_golden_eye"))
 	if not bool(safe_context.get("bypass_evasion", false)) and randf() < minf(0.75, evasion):
 		show_number("闪避", Color("#D4F4FF"))
 		result.reason = "evaded"
@@ -1411,6 +1417,19 @@ func passive_status_mastery(status: String) -> float:
 			total += general_passive_value(str(row.id), row.data)
 	return total
 
+func has_general_passive(skill_id: String) -> bool:
+	for row in general_passive_datas:
+		if str(row.id) == skill_id: return true
+	return false
+
+func general_passive_by_id(skill_id: String) -> float:
+	for row in general_passive_datas:
+		if str(row.id) == skill_id: return general_passive_value(skill_id, row.data)
+	return 0.0
+
+func armor_break_multiplier() -> float:
+	return 1.0 + (general_passive_by_id("dz_alchemy_affinity") if has_general_passive("dz_alchemy_affinity") else 0.0)
+
 func shield_power_multiplier() -> float:
 	var value := passive_effect_total("shield_power")
 	if passive_data.get("effect", "") == "shield_healing": value += passive_value()
@@ -1436,6 +1455,9 @@ func on_kill_trigger() -> void:
 	if power > 0.0:
 		haste_power = maxf(haste_power, power)
 		haste_time = maxf(haste_time, 5.0)
+		temporary_attack_bonus = maxf(temporary_attack_bonus, power)
+		temporary_attack_bonus_time = maxf(temporary_attack_bonus_time, 5.0)
+		if has_general_passive("jy_zixia"): reduce_current_cooldowns(general_passive_by_id("jy_zixia"))
 
 func combat_snapshot() -> Dictionary:
 	return {
