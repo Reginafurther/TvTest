@@ -4,6 +4,10 @@ extends CharacterBody2D
 const BattleMapScript = preload("res://scripts/battle_map.gd")
 const FloatingTextScript = preload("res://scripts/floating_text.gd")
 const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
+const HEALER_BASIC_ATTACK_RATIO := 0.40
+const ACTIVE_HEAL_MULTIPLIER := 1.50
+const HEALER_FOLLOW_RANGE_RATIO := 0.75
+const HEALER_FOLLOW_TOLERANCE := 24.0
 
 signal died(unit)
 signal combat_event(message: String)
@@ -32,6 +36,9 @@ var cooldown_reduction := 0.0
 var physical_damage := 0.0
 var elemental_damage := 0.0
 var life_regen := 0.0
+var final_damage := 0.0
+var damage_reduction := 0.0
+var healing_effect := 0.0
 var regen_accumulator := 0.0
 var equipment_rules: Dictionary = {}
 var attack_timer := 0.0
@@ -189,13 +196,13 @@ func _physics_process(delta: float) -> void:
 		poison_tick += delta
 		if poison_tick >= 1.0:
 			poison_tick -= 1.0
-			take_damage(poison_damage, poison_source, false, {"kind": "effect", "allow_triggers": false, "poison": true})
+			take_damage(poison_damage, poison_source, false, {"kind": "effect", "damage_type": "elemental", "allow_triggers": false, "poison": true})
 	if burn_time > 0.0:
 		burn_time -= delta
 		burn_tick += delta
 		if burn_tick >= 1.0:
 			burn_tick -= 1.0
-			take_damage(burn_damage, burn_source, false, {"kind": "effect", "allow_triggers": false, "burn": true})
+			take_damage(burn_damage, burn_source, false, {"kind": "effect", "damage_type": "elemental", "allow_triggers": false, "burn": true})
 	if hot_time > 0.0:
 		hot_time -= delta
 		hot_tick += delta
@@ -308,36 +315,89 @@ func process_healer(delta: float) -> void:
 	var minimum_safe := float(actor_data.get("minimum_safe_distance", 120.0))
 	if is_instance_valid(danger) and position.distance_to(danger.position) < minimum_safe:
 		current_action = "retreat"
-		move_toward_point(battle.tactical_ranged_point(self, danger), delta)
+		var retreat_point := healer_follow_point(healer_anchor(), danger)
+		move_toward_point(retreat_point, delta)
 		return
 	var ally = battle.lowest_health_ally(self, 9999.0)
-	if ally == null or ally.hp >= ally.max_hp * 0.995:
-		target = null
+	if ally != null and ally.hp < ally.max_hp * 0.995:
+		target = ally
+		if try_auto_skills():
+			return
+		if position.distance_to(ally.position) <= attack_range:
+			if attack_timer <= 0.0:
+				basic_attack()
+			else:
+				current_action = "heal_ready"
+				velocity = Vector2.ZERO
+			return
+		current_action = "seek_heal_range"
+		var heal_direction: Vector2 = ally.position.direction_to(position)
+		if heal_direction.length_squared() < 0.01: heal_direction = Vector2.LEFT
+		move_toward_point(ally.position + heal_direction * attack_range * 0.72, delta)
+		return
+	target = null
+	var anchor = healer_anchor()
+	if anchor == null:
 		return_to_formation(delta)
 		return
-	target = ally
-	if try_auto_skills():
-		return
-	if position.distance_to(ally.position) > attack_range:
-		current_action = "seek_heal_range"
-		move_toward_point(ally.position, delta)
-	elif attack_timer <= 0.0:
-		basic_attack()
+	var follow_point := healer_follow_point(anchor, danger)
+	if position.distance_to(follow_point) > HEALER_FOLLOW_TOLERANCE:
+		current_action = "follow_tank"
+		move_toward_point(follow_point, delta)
 	else:
-		current_action = "heal_ready"
+		current_action = "healer_cover"
 		velocity = Vector2.ZERO
+
+func healer_anchor():
+	var alive: Array = []
+	for member in battle.heroes:
+		if is_instance_valid(member) and not member.dead and member != self and not member.is_summon:
+			alive.append(member)
+	if alive.is_empty(): return null
+	var candidates := alive.filter(func(member): return str(member.actor_data.get("combat_role", "")) == "tank")
+	if candidates.is_empty():
+		candidates = alive.filter(func(member): return str(member.actor_data.get("combat_style", "")) == "melee")
+	if candidates.is_empty():
+		# No frontliner: use the living party member nearest the team centre.
+		var centre := Vector2.ZERO
+		for member in alive: centre += member.position
+		centre /= alive.size()
+		candidates = alive.duplicate()
+		candidates.sort_custom(func(a, b): return a.position.distance_squared_to(centre) < b.position.distance_squared_to(centre))
+		return candidates[0]
+	# The main tank is the candidate currently closest to enemy pressure.
+	candidates.sort_custom(func(a, b):
+		var enemy_a = battle.find_closest_enemy(a)
+		var enemy_b = battle.find_closest_enemy(b)
+		var distance_a: float = a.position.distance_squared_to(enemy_a.position) if is_instance_valid(enemy_a) else -a.position.x
+		var distance_b: float = b.position.distance_squared_to(enemy_b.position) if is_instance_valid(enemy_b) else -b.position.x
+		return distance_a < distance_b
+	)
+	return candidates[0]
+
+func healer_follow_point(anchor, danger = null) -> Vector2:
+	if anchor == null: return home_position
+	var threat = danger if is_instance_valid(danger) else battle.find_closest_enemy(anchor)
+	var away := Vector2.LEFT
+	if is_instance_valid(threat):
+		away = threat.position.direction_to(anchor.position)
+	if away.length_squared() < 0.01: away = Vector2.LEFT
+	var desired: Vector2 = anchor.position + away.normalized() * attack_range * HEALER_FOLLOW_RANGE_RATIO
+	desired.x = clampf(desired.x, 24.0, BattleMapScript.ARENA_SIZE.x - 24.0)
+	desired.y = clampf(desired.y, 34.0, BattleMapScript.ARENA_SIZE.y - 24.0)
+	return desired
 
 func basic_attack() -> void:
 	attack_timer = attack_interval / (1.0 + haste_power if haste_time > 0.0 else 1.0)
 	current_action = "basic_attack"
 	if actor_data.get("basic_action", "damage") == "heal" and is_instance_valid(target) and target.faction == faction:
 		var healing_bonus := (passive_value() if passive_data.get("effect", "") == "healing" else 0.0) + passive_effect_total("healing")
-		target.heal(attack * 0.72 * (1.0 + healing_bonus), self)
+		target.heal(basic_heal_amount(attack * HEALER_BASIC_ATTACK_RATIO * (1.0 + healing_bonus)), self)
 		if healing_bonus > 0.0:
 			battle.note_passive(actor_id, passive_skill_id)
 		battle.spawn_tracer(position, target.position, Color("#78F0A8"))
 		return
-	var amount := attack * (1.0 + physical_damage) * randf_range(0.9, 1.1)
+	var amount := attack * randf_range(0.9, 1.1)
 	if passive_data.get("effect", "") == "low_hp_rage" and hp / max_hp < 0.4:
 		amount *= 1.0 + passive_value()
 		battle.note_passive(actor_id, passive_skill_id)
@@ -362,7 +422,7 @@ func basic_attack() -> void:
 		amount *= crit_damage
 	if target.has_negative_status(): amount *= 1.0 + passive_effect_total("status_amplifier") + (passive_value() if passive_data.get("effect", "") == "status_amplifier" else 0.0)
 	if basic_attack_count % 3 == 0: amount *= 1.0 + passive_effect_total("combo")
-	target.take_damage(amount, self, critical, {"kind": "basic", "critical": critical, "allow_triggers": true})
+	target.take_damage(amount, self, critical, {"kind": "basic", "damage_type": str(actor_data.get("basic_damage_type", "physical")), "critical": critical, "allow_triggers": true})
 	match str(actor_data.get("boss_mechanic", "")):
 		"venom_strike": target.apply_poison(attack * 0.12, 4.0, self, 0)
 		"shock_strike": target.apply_shock(2.2)
@@ -404,7 +464,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 	match str(data.get("effect", "")):
 		"damage":
 			if valid_enemy_in_range(enemy, cast_range):
-				enemy.take_damage(attack * power * (1.0 + physical_damage), self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
 				used = true
 		"stun":
 			if valid_enemy_in_range(enemy, cast_range):
@@ -423,7 +483,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 				used = true
 		"area_damage":
 			if valid_enemy_in_range(enemy, cast_range):
-				for victim in battle.enemies_near(enemy.position, faction, 125.0, 6): victim.take_damage(attack * power * (1.0 + elemental_damage), self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+				for victim in battle.enemies_near(enemy.position, faction, 125.0, 6): victim.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
 				battle.spawn_ring(enemy.position, Color("#F2C66D")); used = true
 		"chain":
 			if valid_enemy_in_range(enemy, cast_range):
@@ -449,20 +509,20 @@ func try_use_general_skill(skill_id: String) -> bool:
 				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true}); enemy.apply_slow(float(data.get("slow", 0.6)), float(data.get("duration", 3.0))); used = true
 		"heal":
 			if is_instance_valid(ally) and ally.hp < ally.max_hp:
-				ally.heal(attack * power * (1.0 + passive_effect_total("healing")), self); used = true
+				ally.heal(active_heal_amount(attack * power * (1.0 + passive_effect_total("healing"))), self); used = true
 		"hot":
 			if is_instance_valid(ally) and ally.hp < ally.max_hp:
-				ally.apply_hot(attack * power * (1.0 + passive_effect_total("healing")), float(data.get("duration", 6.0)), self); used = true
+				ally.apply_hot(active_heal_amount(attack * power * (1.0 + passive_effect_total("healing"))), float(data.get("duration", 6.0)), self); used = true
 		"team_hot":
 			var wounded := false
 			for member in allied_units(int(data.get("targets", 4))):
 				if member.hp < member.max_hp:
-					member.apply_hot(attack * power * (1.0 + passive_effect_total("healing")), float(data.get("duration", 6.0)), self)
+					member.apply_hot(active_heal_amount(attack * power * (1.0 + passive_effect_total("healing"))), float(data.get("duration", 6.0)), self)
 					wounded = true
 			used = wounded
 		"cleanse":
 			if is_instance_valid(ally) and (ally.has_negative_status() or ally.hp < ally.max_hp):
-				ally.cleanse_statuses(); ally.heal(attack * power, self); used = true
+				ally.cleanse_statuses(); ally.heal(active_heal_amount(attack * power), self); used = true
 		"taunt":
 			var victims: Array = battle.enemies_near(position, faction, cast_range, 12)
 			if not victims.is_empty():
@@ -525,7 +585,7 @@ func try_use_skill() -> bool:
 			var ally = battle.lowest_health_ally(self)
 			if ally != null and ally.hp < ally.max_hp * 0.88:
 				var healing_bonus := (passive_value() if passive_data.get("effect", "") == "healing" else 0.0) + passive_effect_total("healing")
-				ally.heal(attack * power * (1.0 + healing_bonus), self)
+				ally.heal(active_heal_amount(attack * power * (1.0 + healing_bonus)), self)
 				ally.add_shield(attack * (1.0 + healing_bonus))
 				if healing_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
 				battle.spawn_ring(ally.position, _skill_color())
@@ -535,7 +595,7 @@ func try_use_skill() -> bool:
 				return true
 		"self_heal":
 			if hp < max_hp * 0.72:
-				heal(max_hp * power, self)
+				heal(active_heal_amount(max_hp * power), self)
 				battle.spawn_ring(position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】恢复体力" % [_name(), _skill_name()])
@@ -546,7 +606,7 @@ func try_use_skill() -> bool:
 				var victims: Array = battle.enemies_near(target.position, faction, 145.0, 3)
 				for i in range(victims.size()):
 					var victim = victims[i]
-					victim.take_damage(attack * power * (1.0 + elemental_damage) * (1.0 - i * 0.18), self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
+					victim.take_damage(attack * power * (1.0 - i * 0.18), self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 					battle.spawn_tracer(position if i == 0 else victims[i - 1].position, victim.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】，命中 %d 个目标" % [_name(), _skill_name(), victims.size()])
@@ -554,7 +614,7 @@ func try_use_skill() -> bool:
 				return true
 		"damage":
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", attack_range)):
-				target.take_damage(attack * power * (1.0 + physical_damage), self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
+				target.take_damage(attack * power, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				battle.spawn_ring(target.position, _skill_color())
 				skill_timer = cooldown
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
@@ -574,7 +634,7 @@ func try_use_skill() -> bool:
 			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 170)), 12)
 			if not victims.is_empty():
 				for victim in victims:
-					var damage := attack * power * (1.0 + elemental_damage)
+					var damage := attack * power
 					if actor_data.get("boss_mechanic", "") == "dragon_king_phases":
 						if hp / maxf(1.0, max_hp) <= 0.65: damage *= 1.18; add_shield(max_hp * 0.06, 4.0)
 						if hp / maxf(1.0, max_hp) <= 0.30: damage *= 1.28; haste_power = 0.25; haste_time = 6.0
@@ -647,7 +707,7 @@ func try_use_skill() -> bool:
 				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				target.apply_poison(attack * power * 0.34, float(skill_data.get("duration", 6.0)), self, 0)
 				var wounded = battle.lowest_health_ally(self, 9999.0)
-				if wounded != null: wounded.apply_hot(attack * power * 1.4, float(skill_data.get("duration", 6.0)), self)
+				if wounded != null: wounded.apply_hot(active_heal_amount(attack * power * 1.4), float(skill_data.get("duration", 6.0)), self)
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"shell_guard":
 			var shield_power := power * (1.0 + (passive_value() if passive_data.get("effect", "") == "shield_healing" else 0.0))
@@ -669,7 +729,7 @@ func try_use_skill() -> bool:
 				var bonus := 1.0 + (passive_value() if passive_data.get("effect", "") == "shield_healing" else 0.0)
 				if passive_data.get("effect", "") == "shield_healing": battle.note_passive(actor_id, passive_skill_id)
 				ally.add_shield(ally.max_hp * power * bonus, float(skill_data.get("duration", 6.0)))
-				ally.heal(attack * 0.45 * bonus, self)
+				ally.heal(active_heal_amount(attack * 0.45 * bonus), self)
 				if ally != self: add_shield(max_hp * power * 0.45 * bonus, float(skill_data.get("duration", 6.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"dive_guard":
@@ -692,7 +752,7 @@ func try_use_skill() -> bool:
 		"emergency_heal":
 			var wounded = battle.lowest_health_ally(self, 9999.0)
 			if wounded != null and wounded.hp / maxf(1.0, wounded.max_hp) <= float(skill_data.get("threshold", 0.42)):
-				wounded.heal(attack * power * (1.0 + (passive_value() if passive_data.get("effect", "") == "healing" else 0.0)), self)
+				wounded.heal(active_heal_amount(attack * power * (1.0 + (passive_value() if passive_data.get("effect", "") == "healing" else 0.0))), self)
 				wounded.apply_damage_reduction(0.28, 4.0); skill_timer = cooldown; battle.on_skill(self); return true
 		"blood_bargain":
 			if hp > max_hp * 0.3:
@@ -702,7 +762,7 @@ func try_use_skill() -> bool:
 		"capped_execute_area":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 245.0))):
 				for victim in battle.enemies_near(target.position, faction, 145.0, 8):
-					var damage := attack * power * (1.0 + elemental_damage)
+					var damage := attack * power
 					if victim.hp / maxf(1.0, victim.max_hp) <= 0.35: damage *= 1.0 + float(skill_data.get("execute_bonus", 0.45))
 					if victim.actor_data.has("boss_id"): damage = minf(damage, victim.max_hp * float(skill_data.get("boss_cap", 0.12)))
 					victim.take_damage(damage, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
@@ -725,7 +785,7 @@ func try_use_skill() -> bool:
 		"team_hot":
 			var applied := false
 			for member in allied_units(int(skill_data.get("targets", 4))):
-				if member.hp < member.max_hp: member.apply_hot(attack * power, float(skill_data.get("duration", 7.0)), self); applied = true
+				if member.hp < member.max_hp: member.apply_hot(active_heal_amount(attack * power), float(skill_data.get("duration", 7.0)), self); applied = true
 			if applied: skill_timer = cooldown; battle.on_skill(self); return true
 		"hero_summon":
 			var summon_count := 0
@@ -738,7 +798,8 @@ func try_use_skill() -> bool:
 	return false
 
 func take_damage(raw_amount: float, source, critical: bool = false, context: Dictionary = {}) -> Dictionary:
-	var result := {"raw":raw_amount, "defense":defense, "reduction":0.0, "shield_absorbed":0.0, "hp_damage":0.0, "hp_before":hp, "reason":""}
+	var damage_type := resolve_damage_type(source, context)
+	var result := {"raw":raw_amount, "damage_type":damage_type, "defense":defense, "reduction":0.0, "shield_absorbed":0.0, "hp_damage":0.0, "hp_before":hp, "reason":""}
 	if dead:
 		result.reason = "target_dead"
 		battle.record_damage_resolution(source, self, result, context)
@@ -757,8 +818,18 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		var shared := raw_amount * damage_share_ratio
 		raw_amount -= shared
 		damage_share_source.take_damage(shared, source, false, {"kind":"effect", "allow_triggers":false, "shared":true})
-	var amount := float(preview_damage(raw_amount))
+	var typed_amount := raw_amount
+	if source is BattleUnit:
+		if damage_type == "physical": typed_amount *= 1.0 + source.physical_damage
+		elif damage_type == "elemental": typed_amount *= 1.0 + source.elemental_damage
+	var amount := float(preview_damage(typed_amount))
+	# Final damage is an independent post-defense offensive multiplier.
+	if source is BattleUnit:
+		amount *= 1.0 + source.final_damage
 	var reduction_factor := 1.0
+	# Equipment reduction remains a permanent independent multiplier and never
+	# enters the temporary reduction state used by skills.
+	reduction_factor *= 1.0 - clampf(damage_reduction, 0.0, 0.85)
 	if actor_data.get("boss_mechanic", "") == "stone_skin": reduction_factor *= 0.78
 	if "iron_wall" in rift_affixes: reduction_factor *= 0.82
 	if passive_data.get("effect", "") == "damage_reduction":
@@ -802,7 +873,7 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		if "counter" in rift_affixes:
 			source.take_damage(amount * 0.12, self, false, {"kind":"effect", "allow_triggers":false})
 		if temporary_counter_time > 0.0:
-			source.take_damage(attack * temporary_counter, self, false, {"kind":"effect", "allow_triggers":false})
+			source.take_damage(attack * temporary_counter, self, false, {"kind":"effect", "damage_type":"physical", "skill_id":"tk_counter_stance", "allow_triggers":false})
 		var counter_chance := passive_effect_total("counter")
 		if counter_chance > 0.0 and randf() < counter_chance:
 			source.take_damage(attack * 0.65, self, false, {"kind":"effect", "allow_triggers":false})
@@ -818,6 +889,27 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
 		tween.tween_callback(queue_free)
 	return result
+
+func resolve_damage_type(source, context: Dictionary) -> String:
+	var explicit := str(context.get("damage_type", ""))
+	if explicit in ["physical", "elemental", "none"]: return explicit
+	if not (source is BattleUnit): return "none"
+	match str(context.get("kind", "")):
+		"basic": return str(source.actor_data.get("basic_damage_type", "physical"))
+		"skill":
+			var skill_id := str(context.get("skill_id", ""))
+			if source.battle != null and source.battle.general_skills_config.has(skill_id):
+				return str(source.battle.general_skills_config[skill_id].get("damage_type", "none"))
+			if skill_id == str(source.actor_data.get("skill", "")):
+				return str(source.skill_data.get("damage_type", "none"))
+	return "none"
+
+func basic_heal_amount(base_amount: float) -> float:
+	return base_amount * (1.0 + healing_effect)
+
+func active_heal_amount(base_amount: float) -> float:
+	var active_multiplier := ACTIVE_HEAL_MULTIPLIER if faction == "heroes" else 1.0
+	return base_amount * active_multiplier * (1.0 + healing_effect)
 
 func preview_damage(raw_amount: float) -> int:
 	var effective_defense := defense * (1.0 - armor_break_power if armor_break_time > 0.0 else 1.0)
@@ -1001,7 +1093,10 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	cooldown_reduction = clampf(float(stats.get("cooldown_reduction", 0)), 0.0, float(rules.get("max_cooldown_reduction", 0.5)))
 	physical_damage = maxf(-0.9, float(stats.get("physical_damage", 0)))
 	elemental_damage = maxf(-0.9, float(stats.get("elemental_damage", 0)))
-	life_regen = maxf(0.0, float(stats.get("life_regen", 0)))
+	final_damage = clampf(float(stats.get("final_damage", 0)), 0.0, float(rules.get("max_final_damage", 0.5)))
+	damage_reduction = clampf(float(stats.get("damage_reduction", 0)), 0.0, float(rules.get("max_damage_reduction", 0.45)))
+	healing_effect = clampf(float(stats.get("healing_effect", 0)), 0.0, float(rules.get("max_healing_effect", 1.0)))
+	life_regen = 0.0
 	for row in general_passive_datas:
 		var general_id: String = row.id
 		var general_data: Dictionary = row.data
@@ -1100,6 +1195,9 @@ func combat_snapshot() -> Dictionary:
 		"cooldown_reduction": cooldown_reduction,
 		"physical_damage": physical_damage,
 		"elemental_damage": elemental_damage,
+		"final_damage": final_damage,
+		"damage_reduction": damage_reduction,
+		"healing_effect": healing_effect,
 		"life_regen": life_regen,
 		"attack_interval": attack_interval,
 		"actor_level": actor_level,

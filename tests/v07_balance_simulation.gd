@@ -52,7 +52,7 @@ func simulate(party: Dictionary, stage: int, rift: bool) -> float:
 		var dps := attack / float(actor.attack_interval)
 		var skill: Dictionary = skills[str(actor.skill)]
 		var skill_dps := attack * float(skill.get("power", 0.5)) / maxf(3.5, float(skill.get("cooldown", 6.0)))
-		if str(actor.get("basic_action", "damage")) == "heal": sustain += dps * 0.72 + skill_dps
+		if str(actor.get("basic_action", "damage")) == "heal": sustain += dps * 0.40 + skill_dps
 		else: offense += dps + skill_dps
 		match str(skill.get("type", "")):
 			"armor_break_shot", "execute_cone", "piercing_shot": offense *= 1.045

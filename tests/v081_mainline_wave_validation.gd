@@ -9,16 +9,19 @@ func _initialize() -> void:
 	battle = BattleControllerScript.new()
 	root.add_child(battle)
 	await process_frame
+	battle.progression.save_path = "user://v081_mainline_wave_progress_test.json"
 	battle.is_paused = true
 	_validate_all_stage_pools()
 	_validate_stage_23_regular_wave()
 	_validate_stage_23_completion_orders()
+	_validate_stage_29_unlock()
 	_validate_reward_identity()
 	battle.clear_combatants()
+	if FileAccess.file_exists(battle.progression.save_path): DirAccess.remove_absolute(ProjectSettings.globalize_path(battle.progression.save_path))
 	battle.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("V081_MAINLINE_WAVE_VALIDATION_PASS stages=40 late_world_pools=20 stage23_orders=3 max_waves=3 rewards=true")
+		print("V081_MAINLINE_WAVE_VALIDATION_PASS stages=40 late_world_pools=20 stage23_orders=3 stage29_to_30=true max_waves=3 rewards=true")
 		quit(0)
 		return
 	for failure in failures:
@@ -166,3 +169,21 @@ func _validate_reward_identity() -> void:
 	var boss_xp: int = battle.progression.experience_for_kill(23, "boss", 23)
 	if not (normal_xp < elite_xp and elite_xp < boss_xp):
 		failures.append("普通/精英/Boss经验分类错误")
+
+func _validate_stage_29_unlock() -> void:
+	battle.clear_combatants()
+	battle.current_map_id = "white_king_relic"
+	battle.wave = 3
+	battle.stage_cleared = false
+	battle.progression.auto_push = false
+	battle.progression.completed_stages = range(1, 29)
+	battle.progression.ensure_world_layout()
+	battle.spawn_wave()
+	if battle.enemies.size() != 1 or battle.enemies[0]._name() != "白王":
+		failures.append("第29关最终波未生成白王")
+		return
+	battle._on_unit_died(battle.enemies[0])
+	if not battle.stage_cleared or not battle.progression.is_stage_complete(29) or not battle.progression.can_enter_stage(30):
+		failures.append("第29关合法通关后未立即解锁第30关")
+	if battle.current_map_id != "white_king_relic":
+		failures.append("关闭自动推关时第29关通关后仍切换了地图")

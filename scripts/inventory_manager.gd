@@ -10,9 +10,11 @@ const SAVE_PATH := "user://wanjie_v08_inventory.json"
 const LEGACY_SAVE_PATH := "user://wanjie_v07_inventory.json"
 const LEGACY_V061_SAVE_PATH := "user://wanjie_v061_inventory.json"
 const MIGRATION_BACKUP_PATH := "user://wanjie_v07_inventory.pre_v08_backup.json"
+const AFFIX_MIGRATION_BACKUP_PATH := "user://wanjie_v08_inventory.pre_affix_v2_backup.json"
 const TEST_SAVE_PATH := "user://wanjie_v08_test_inventory.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits"]
+const AFFIX_CONFIG_VERSION := 2
 
 var config: Dictionary
 var items: Array = []
@@ -20,6 +22,7 @@ var equipped: Dictionary = {}
 var capacity := 120
 var save_path := SAVE_PATH
 var last_error := ""
+var affix_config_version := AFFIX_CONFIG_VERSION
 
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
@@ -169,10 +172,10 @@ func set_item_locked(instance_id: String, locked: bool) -> bool:
 
 func item_score(item: Dictionary, combat_role: String = "") -> float:
 	var stats := item_stats(item)
-	var weights := {"attack":5.0,"defense":3.0,"health":0.3,"crit_chance":300.0,"crit_damage":120.0,"attack_speed":180.0,"cooldown_reduction":180.0,"physical_damage":140.0,"elemental_damage":140.0,"life_regen":8.0}
+	var weights := {"attack":5.0,"defense":3.0,"health":0.3,"crit_chance":300.0,"crit_damage":120.0,"attack_speed":180.0,"cooldown_reduction":180.0,"physical_damage":140.0,"elemental_damage":140.0,"final_damage":260.0,"damage_reduction":240.0,"healing_effect":180.0}
 	match combat_role:
-		"tank": weights.merge({"attack":2.2,"defense":7.0,"health":0.7,"life_regen":14.0,"cooldown_reduction":130.0}, true)
-		"healer": weights.merge({"attack":4.5,"defense":3.5,"health":0.45,"cooldown_reduction":300.0,"attack_speed":220.0,"life_regen":11.0}, true)
+		"tank": weights.merge({"attack":2.2,"defense":7.0,"health":0.7,"damage_reduction":520.0,"cooldown_reduction":130.0}, true)
+		"healer": weights.merge({"attack":4.5,"defense":3.5,"health":0.45,"cooldown_reduction":300.0,"attack_speed":220.0,"healing_effect":520.0}, true)
 		"ranged_dps": weights.merge({"attack":5.8,"defense":1.8,"health":0.2,"crit_chance":360.0,"crit_damage":155.0,"elemental_damage":230.0,"cooldown_reduction":210.0}, true)
 		"melee_dps": weights.merge({"attack":6.2,"defense":2.5,"health":0.28,"crit_chance":350.0,"physical_damage":230.0,"attack_speed":220.0}, true)
 	var score := 0.0
@@ -414,6 +417,7 @@ func merge_stats(target: Dictionary, addition: Dictionary) -> void:
 func save_to_disk() -> bool:
 	var payload := {
 		"version": SAVE_VERSION,
+		"affix_config_version": AFFIX_CONFIG_VERSION,
 		"items": items,
 		"equipped": equipped
 	}
@@ -451,13 +455,43 @@ func load_from_disk() -> bool:
 		push_warning("存档格式无效，已忽略")
 		return false
 	items = parsed.get("items", [])
+	affix_config_version = int(parsed.get("affix_config_version", 1))
+	var upgraded_affix_config := affix_config_version < AFFIX_CONFIG_VERSION
+	if upgraded_affix_config:
+		if save_path == SAVE_PATH and not FileAccess.file_exists(AFFIX_MIGRATION_BACKUP_PATH):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(source_path), ProjectSettings.globalize_path(AFFIX_MIGRATION_BACKUP_PATH))
+		migrate_legacy_life_regen_affixes()
+		affix_config_version = AFFIX_CONFIG_VERSION
 	for item in items:
 		item["locked"] = bool(item.get("locked", false))
 	equipped = parsed.get("equipped", {})
 	remove_broken_references()
 	ensure_equipment_layout()
 	inventory_changed.emit()
+	if upgraded_affix_config:
+		save_to_disk()
 	return true
+
+func migrate_legacy_life_regen_affixes() -> bool:
+	var changed := false
+	for item in items:
+		var base_stats = item.get("base_stats", {})
+		if typeof(base_stats) == TYPE_DICTIONARY and base_stats.has("life_regen"):
+			base_stats["healing_effect"] = float(base_stats.get("healing_effect", 0.0)) + legacy_regen_to_healing_effect(float(base_stats.life_regen))
+			base_stats.erase("life_regen")
+			changed = true
+		for affix in item.get("affixes", []):
+			if str(affix.get("stat", "")) == "life_regen":
+				affix["stat"] = "healing_effect"
+				affix["value"] = legacy_regen_to_healing_effect(float(affix.get("value", 0.0)))
+				changed = true
+	return changed
+
+func legacy_regen_to_healing_effect(value: float) -> float:
+	# Legacy values were flat HP/tick (commonly 0.8–4.0), not percentages.
+	# Converting at two percentage points per legacy point preserves affix tier
+	# without ever interpreting a value such as 2 as +200% healing.
+	return snappedf(clampf(value * 0.02, 0.0, 0.12), 0.0001)
 
 func remove_broken_references() -> void:
 	var known: Dictionary = {}

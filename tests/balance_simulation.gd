@@ -84,7 +84,7 @@ func encounter_estimate(scenario: Dictionary, stage: int) -> Dictionary:
 		gear_contribution += attack - base_attack
 		ehp += hp * (1.0 + defense * 0.012)
 		if actor.get("basic_action", "damage") == "heal":
-			healing += attack * 0.72 / float(actor.attack_interval)
+			healing += attack * 0.40 / float(actor.attack_interval)
 			if int(scenario.skills) > 0: healing += attack * 1.35 / 6.5
 		else:
 			var basic_dps := attack / float(actor.attack_interval)

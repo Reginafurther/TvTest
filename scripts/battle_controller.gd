@@ -824,7 +824,14 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 	stage_resolution_started = true
 	var stage := int(map_data.get("global_stage", 1))
 	var first_clear: bool = not progression.is_stage_complete(stage)
-	if first_clear and progression.complete_stage(stage):
+	if first_clear:
+		if not progression.complete_stage(stage):
+			stage_resolution_started = false
+			var message := "主线第%d关战斗完成，但进度写入被拒绝（最高可进入第%d关，完成记录%d关）；已停止切关并保留现场诊断。" % [stage, progression.highest_unlocked_stage(), progression.completed_stages.size()]
+			push_error(message)
+			log_message.emit(message)
+			battle_state_changed.emit("第%d关进度写入失败，请重试本关" % stage)
+			return
 		progression.add_gold(int(map_data.get("first_clear_gold", 0)))
 		var first_material := int(map_data.get("first_clear_material", 0))
 		progression.add_material(str(map_data.get("material", "three_kingdoms_token")), first_material)
@@ -844,7 +851,7 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 		else:
 			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
 		battle_state_changed.emit("主线第%d关已通关" % stage)
-	elif not first_clear:
+	else:
 		log_message.emit("第%d关挂机轮次完成，常规掉落已结算。" % stage)
 	stage_cleared = true
 	stage_boss_active = false

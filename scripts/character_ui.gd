@@ -304,7 +304,7 @@ func refresh_center() -> void:
 	var xp := int(battle.progression.actor_experience.get(selected_actor, 0))
 	var needed: int = battle.progression.experience_to_next(level)
 	actor_name.text = "%s  Lv.%d" % [data.get("name", selected_actor), level]
-	actor_role.text = "%s · %s · %s" % [data.get("world", ""), data.get("role", ""), "上阵中" if selected_actor in battle.progression.party else "未上阵，可正常培养"]
+	actor_role.text = "%s · %s · %s · %s" % [data.get("world", ""), data.get("role", ""), basic_attack_label(data), "上阵中" if selected_actor in battle.progression.party else "未上阵，可正常培养"]
 	exp_bar.max_value = needed
 	exp_bar.value = xp
 	exp_label.text = "Lv.%d / 上限Lv.%d　经验 %d / %d（%.1f%%）" % [level, battle.progression.actor_level_cap(), xp, needed, 100.0 * xp / maxf(1.0, needed)]
@@ -333,7 +333,7 @@ func refresh_stats() -> void:
 	if selected_actor.is_empty(): return
 	var data: Dictionary = battle.actors[selected_actor]
 	var level: int = battle.progression.actor_level(selected_actor)
-	var base: Dictionary = {"health": float(data.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(data.attack) * (1.0 + (level - 1) * 0.06), "defense": float(data.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0, "physical_damage":0.0, "elemental_damage":0.0, "life_regen":0.0}
+	var base: Dictionary = {"health": float(data.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(data.attack) * (1.0 + (level - 1) * 0.06), "defense": float(data.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0, "physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0, "damage_reduction":0.0, "healing_effect":0.0}
 	var gear: Dictionary = battle.inventory.get_actor_stats(selected_actor)
 	var final: Dictionary = base.duplicate(true)
 	for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
@@ -342,10 +342,10 @@ func refresh_stats() -> void:
 	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n等级 Lv.%d / 当前上限 Lv.%d　当前经验 %d / %d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [data.name, level, battle.progression.actor_level_cap(), int(battle.progression.actor_experience[selected_actor]), battle.progression.experience_to_next(level), stat_rows(base, gear, final)]
 
 func stat_rows(base: Dictionary, gear: Dictionary, final: Dictionary) -> String:
-	var labels := {"health":"[基础] 生命", "attack":"[基础] 攻击", "defense":"[基础] 防御", "crit_chance":"[攻击] 暴击率", "crit_damage":"[攻击] 暴击伤害", "attack_speed":"[攻击] 攻击速度", "physical_damage":"[攻击] 物理增伤", "elemental_damage":"[攻击] 元素增伤", "cooldown_reduction":"[特殊] 冷却缩减", "life_regen":"[防御] 生命恢复"}
+	var labels := {"health":"[基础] 生命", "attack":"[基础] 攻击", "defense":"[基础] 防御", "crit_chance":"[攻击] 暴击率", "crit_damage":"[攻击] 暴击伤害", "attack_speed":"[攻击] 攻击速度", "physical_damage":"[攻击] 物理增伤", "elemental_damage":"[攻击] 元素增伤", "final_damage":"[攻击] 最终伤害", "damage_reduction":"[防御] 减伤", "healing_effect":"[治疗] 治疗效果", "cooldown_reduction":"[特殊] 冷却缩减"}
 	var rows: Array[String] = []
 	for key in labels:
-		var percent: bool = key in ["crit_chance", "crit_damage", "attack_speed", "cooldown_reduction", "physical_damage", "elemental_damage"]
+		var percent: bool = key in ["crit_chance", "crit_damage", "attack_speed", "cooldown_reduction", "physical_damage", "elemental_damage", "final_damage", "damage_reduction", "healing_effect"]
 		var scale: float = 100.0 if percent else 1.0
 		var suffix: String = "%" if percent else ""
 		rows.append("%s　　%.1f%s　　+%.1f%s　　[b]%.1f%s[/b]" % [labels[key], float(base.get(key, 0)) * scale, suffix, float(gear.get(key, 0)) * scale, suffix, float(final.get(key, 0)) * scale, suffix])
@@ -369,7 +369,7 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 		var button := Button.new(); button.text = category_name; button.disabled = skill_category_filter == category_name; button.pressed.connect(_set_skill_category_filter.bind(category_name)); category_row.add_child(button)
 	var exclusive_active: Dictionary = battle.skills[actor.skill]
 	var exclusive_active_level: int = p.skill_level(selected_actor, "active")
-	add_skill_heading("专属主动 · %s Lv.%d" % [exclusive_active.name, exclusive_active_level], skill_numeric_description(exclusive_active, exclusive_active_level, "active", true))
+	add_skill_heading("专属主动 · %s Lv.%d%s" % [exclusive_active.name, exclusive_active_level, damage_type_suffix(exclusive_active)], skill_numeric_description(exclusive_active, exclusive_active_level, "active", true))
 	add_skill_upgrade_button("升级专属主动", "active")
 	var exclusive_passive: Dictionary = battle.passives_config[actor.passive_skill]
 	var exclusive_passive_level: int = p.skill_level(selected_actor, "passive")
@@ -404,7 +404,7 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var general_level: int = p.general_skill_level(selected_actor, skill_id)
 		var function_name := skill_function_name(str(skill.get("function_type", "damage")))
-		label.text = "%s【%s】· %s · %s · Lv.%d\n%s" % [skill_function_icon(str(skill.get("function_type", "damage"))), skill.name, str(skill.get("world", "未知")), function_name, general_level, skill_numeric_description(skill, general_level, str(skill.category), false)]
+		label.text = "%s【%s】· %s · %s%s · Lv.%d\n%s" % [skill_function_icon(str(skill.get("function_type", "damage"))), skill.name, str(skill.get("world", "未知")), function_name, damage_type_suffix(skill), general_level, skill_numeric_description(skill, general_level, str(skill.category), false)]
 		label.add_theme_color_override("font_color", skill_function_color(str(skill.get("function_type", "damage"))))
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		row.add_child(label)
@@ -463,6 +463,17 @@ func skill_function_icon(value: String) -> String:
 
 func skill_function_color(value: String) -> Color:
 	return Color({"damage":"#B73D36", "healing":"#26834A", "defense":"#346AA3", "support":"#A66718", "control":"#78469B", "mobility":"#1D8190"}.get(value, "#493520"))
+
+func damage_type_suffix(data: Dictionary) -> String:
+	var damage_type := str(data.get("damage_type", "none"))
+	if damage_type == "physical": return " · 物理伤害"
+	if damage_type == "elemental": return " · 元素伤害"
+	return ""
+
+func basic_attack_label(data: Dictionary) -> String:
+	var damage_type := str(data.get("basic_damage_type", "physical"))
+	if damage_type == "none" or str(data.get("basic_action", "damage")) == "heal": return "普攻：治疗（攻击力40%）"
+	return "普攻：%s伤害" % ("元素" if damage_type == "elemental" else "物理")
 
 func skill_numeric_description(data: Dictionary, level: int, category: String, exclusive: bool) -> String:
 	var lines: Array[String] = [str(data.get("description", ""))]
@@ -678,7 +689,12 @@ func actor_power(actor_id: String) -> float:
 func item_summary(item) -> String:
 	if item == null: return ""
 	var parts: Array[String] = []
-	for key in battle.inventory.item_stats(item): parts.append("%s %.2f" % [key, float(battle.inventory.item_stats(item)[key])])
+	var stats: Dictionary = battle.inventory.item_stats(item)
+	for key in stats:
+		var config: Dictionary = battle.equipment_config.get("affixes", {}).get(key, {})
+		var name_value := str(config.get("name", {"health":"生命", "attack":"攻击", "defense":"防御"}.get(key, key)))
+		var value := float(stats[key])
+		parts.append("%s +%.1f%%" % [name_value, value * 100.0] if str(config.get("unit", "flat")) == "percent" else "%s +%.1f" % [name_value, value])
 	return " / ".join(parts)
 
 func skill_name(skill_id: String) -> String:

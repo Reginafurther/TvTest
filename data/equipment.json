@@ -38,14 +38,19 @@
     "cooldown_reduction": {"name": "冷却缩减", "unit": "percent", "min": 0.012, "max": 0.04, "level_scale": 0.0007, "weight": 8},
     "physical_damage": {"name": "物理增伤", "unit": "percent", "min": 0.018, "max": 0.055, "level_scale": 0.001, "weight": 8},
     "elemental_damage": {"name": "元素增伤", "unit": "percent", "min": 0.018, "max": 0.055, "level_scale": 0.001, "weight": 7},
-    "life_regen": {"name": "生命恢复", "unit": "flat", "min": 0.8, "max": 2.2, "level_scale": 0.08, "weight": 7}
+    "final_damage": {"name": "最终伤害", "unit": "percent", "min": 0.01, "max": 0.025, "level_scale": 0.0004, "weight": 4},
+    "damage_reduction": {"name": "减伤", "unit": "percent", "min": 0.008, "max": 0.02, "level_scale": 0.0003, "weight": 4},
+    "healing_effect": {"name": "治疗效果", "unit": "percent", "min": 0.02, "max": 0.05, "level_scale": 0.0008, "weight": 6}
   },
   "rules": {
     "inventory_capacity": 120,
     "max_crit_chance": 0.75,
     "max_cooldown_reduction": 0.50,
     "max_attack_speed": 1.50,
-    "min_attack_interval": 0.25
+    "min_attack_interval": 0.25,
+    "max_final_damage": 0.50,
+    "max_damage_reduction": 0.45,
+    "max_healing_effect": 1.00
   }
 }
 
