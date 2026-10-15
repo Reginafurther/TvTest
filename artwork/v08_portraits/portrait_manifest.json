@@ -1,0 +1,26 @@
+{
+  "version": "v08-art-dragon-nsh",
+  "asset_type": "character_portrait",
+  "format": "PNG",
+  "size": [640, 960],
+  "transparent_alpha": true,
+  "godot_integrated": false,
+  "portraits": {
+    "chen_motong": "artwork/v08_portraits/dragon/final/chen_motong_portrait.png",
+    "chu_zihang": "artwork/v08_portraits/dragon/final/chu_zihang_portrait.png",
+    "yabuki_sakura": "artwork/v08_portraits/dragon/final/yabuki_sakura_portrait.png",
+    "lu_mingfei": "artwork/v08_portraits/dragon/final/lu_mingfei_portrait.png",
+    "lu_mingze": "artwork/v08_portraits/dragon/final/lu_mingze_portrait.png",
+    "caesar": "artwork/v08_portraits/dragon/final/caesar_portrait.png",
+    "eri_uesugi": "artwork/v08_portraits/dragon/final/eri_uesugi_portrait.png",
+    "minamoto_chisei": "artwork/v08_portraits/dragon/final/minamoto_chisei_portrait.png",
+    "minamoto_chime": "artwork/v08_portraits/dragon/final/minamoto_chime_portrait.png",
+    "zero": "artwork/v08_portraits/dragon/final/zero_portrait.png",
+    "blood_river": "artwork/v08_portraits/nsh/final/blood_river_portrait.png",
+    "iron_guard": "artwork/v08_portraits/nsh/final/iron_guard_portrait.png",
+    "broken_dream": "artwork/v08_portraits/nsh/final/broken_dream_portrait.png",
+    "divine_harmony": "artwork/v08_portraits/nsh/final/divine_harmony_portrait.png",
+    "plain_question": "artwork/v08_portraits/nsh/final/plain_question_portrait.png",
+    "nine_spirits": "artwork/v08_portraits/nsh/final/nine_spirits_portrait.png"
+  }
+}
