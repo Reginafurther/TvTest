@@ -908,7 +908,7 @@ func strategy_allows(unit) -> bool:
 func on_damage(source, target, amount: float, context: Dictionary) -> void:
 	var source_id := stats_actor_id(source) if is_instance_valid(source) else str(context.get("source_actor_id", ""))
 	var target_id := stats_actor_id(target)
-	combat_stats.record_damage(source_id, target_id, amount, context.get("kind", "skill"))
+	combat_stats.record_damage(source_id, target_id, amount, context.get("kind", "skill"), stats_damage_source_id(source, context))
 	if not context.get("allow_triggers", true):
 		return
 	if is_instance_valid(source) and is_instance_valid(target) and str(context.get("kind", "")) == "skill":
@@ -919,7 +919,23 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		trigger_counts.thorn_reflect += 1
 		var reflect_power: float = target.passive_value() if target.passive_data.get("effect", "") == "low_hp_rage" else float(special_config.effects.thorn_reflect.power)
 		if target.passive_data.get("effect", "") == "low_hp_rage": target.battle.note_passive(target.actor_id, target.passive_skill_id)
-		source.take_damage(amount * reflect_power, target, false, {"kind": "effect", "allow_triggers": false})
+		source.take_damage(amount * reflect_power, target, false, {"kind": "effect", "skill_id":"passive:" + str(target.passive_skill_id), "allow_triggers": false})
+
+func stats_damage_source_id(source, context: Dictionary) -> String:
+	var kind := str(context.get("kind", "skill"))
+	if is_instance_valid(source) and bool(source.get("is_summon")):
+		return "summon:" + str(source.actor_id)
+	if kind == "basic": return "basic"
+	var skill_id := str(context.get("skill_id", ""))
+	if skill_id.is_empty(): skill_id = str(context.get("source_snapshot", {}).get("skill_id", ""))
+	if skill_id.is_empty() and is_instance_valid(source):
+		if kind == "skill": skill_id = str(source.actor_data.get("skill", ""))
+		elif kind == "passive": skill_id = "passive:" + str(source.passive_skill_id)
+	if skill_id.is_empty(): skill_id = "effect"
+	if bool(context.get("burn", false)): return skill_id + ":burn"
+	if bool(context.get("poison", false)): return skill_id + ":poison"
+	if bool(context.get("frost", false)): return skill_id + ":frost"
+	return skill_id
 
 func record_damage_resolution(source, target, result: Dictionary, context: Dictionary) -> void:
 	var source_id: String = str(source.actor_id) if is_instance_valid(source) else str(context.get("source_actor_id", ""))
@@ -972,7 +988,7 @@ func trigger_lightning(source, primary) -> void:
 		return
 	effect_cooldowns[key] = float(effect.cooldown)
 	trigger_counts.crit_lightning += 1
-	primary.take_damage(source.attack * float(effect.power), source, false, {"kind": "effect", "allow_triggers": false})
+	primary.take_damage(source.attack * float(effect.power), source, false, {"kind": "effect", "skill_id":"crit_lightning", "allow_triggers": false})
 	spawn_tracer(source.position, primary.position, Color("#FFE65A"))
 
 func propagate_poison(dead_unit) -> void:

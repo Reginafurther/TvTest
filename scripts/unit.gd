@@ -138,14 +138,16 @@ var metamorphosis_cooldown := 0.0
 func valid_combat_source(source):
 	return source if is_instance_valid(source) else null
 
-func combat_source_snapshot(source, fallback_damage_type: String = "none") -> Dictionary:
+func combat_source_snapshot(source, fallback_damage_type: String = "none", source_skill_id: String = "") -> Dictionary:
 	var snapshot := {
 		"actor_id":"", "name":"环境效果", "faction":"", "damage_type":fallback_damage_type,
-		"physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0, "special_effects":[]
+		"physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0, "special_effects":[],
+		"source_unit_id":"", "skill_id":source_skill_id
 	}
 	if not is_instance_valid(source):
 		return snapshot
-	snapshot.actor_id = str(source.actor_id)
+	snapshot.source_unit_id = str(source.actor_id)
+	snapshot.actor_id = str(source.summon_owner_id) if bool(source.is_summon) and not str(source.summon_owner_id).is_empty() else str(source.actor_id)
 	snapshot.name = str(source._name())
 	snapshot.faction = str(source.faction)
 	snapshot.damage_type = str(source.actor_data.get("basic_damage_type", fallback_damage_type))
@@ -153,6 +155,7 @@ func combat_source_snapshot(source, fallback_damage_type: String = "none") -> Di
 	snapshot.elemental_damage = float(source.elemental_damage)
 	snapshot.final_damage = float(source.final_damage)
 	snapshot.special_effects = source.special_effects.duplicate()
+	if snapshot.skill_id.is_empty() and bool(source.is_summon): snapshot.skill_id = "summon:" + str(source.actor_id)
 	return snapshot
 
 func setup(id: String, info: Dictionary, skill: Dictionary, team: String, owner_battle) -> void:
@@ -607,11 +610,11 @@ func try_use_general_skill(skill_id: String) -> bool:
 				var status_targets: Array = battle.enemies_near(enemy.position, faction, 115.0, 6) if skill_id == "dz_dragon_flame" else [enemy]
 				for status_target in status_targets:
 					status_target.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
-					if data.effect == "burn": status_target.apply_burn(attack * float(data.get("dot_power", 0.18)) * mastery, float(data.get("duration", 5.0)) * mastery, self)
+					if data.effect == "burn": status_target.apply_burn(attack * float(data.get("dot_power", 0.18)) * mastery, float(data.get("duration", 5.0)) * mastery, self, combat_source_snapshot(self, "elemental", skill_id))
 					else:
 						if skill_id == "pk_toxic": status_target.poison_stack_count = mini(3, status_target.poison_stack_count + 1)
 						var stack_power: float = 1.0 + 0.25 * maxf(0.0, status_target.poison_stack_count - 1) if skill_id == "pk_toxic" else 1.0
-						status_target.apply_poison(attack * float(data.get("dot_power", 0.18)) * mastery * stack_power, float(data.get("duration", 6.0)) * mastery, self, 0)
+						status_target.apply_poison(attack * float(data.get("dot_power", 0.18)) * mastery * stack_power, float(data.get("duration", 6.0)) * mastery, self, 0, combat_source_snapshot(self, "elemental", skill_id))
 				used = true
 		"shock":
 			if valid_enemy_in_range(enemy, cast_range):
@@ -755,7 +758,7 @@ func try_use_skill() -> bool:
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 210)):
 				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				var poison_bonus := passive_value() if passive_data.get("effect", "") == "poison_master" else 0.0
-				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, 0)
+				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, 0, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				if poison_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
 				skill_timer = cooldown
 				battle.on_skill(self)
@@ -845,17 +848,17 @@ func try_use_skill() -> bool:
 						victim.apply_slow(0.28, float(skill_data.get("duration", 5.0)))
 						victim.apply_hard_control(0.45)
 					elif actor_id == "jaina_proudmoore":
-						victim.apply_frost_dot(attack * float(skill_data.get("dot_power", 0.18)), float(skill_data.get("duration", 5.0)), self)
+						victim.apply_frost_dot(attack * float(skill_data.get("dot_power", 0.18)), float(skill_data.get("duration", 5.0)), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 					else:
 						var burn_duration := float(skill_data.get("duration", 6.0))
 						if str(actor_data.get("skill", "")) == "fire_spin" and victim.burn_time > 0.0:
 							burn_duration = minf(10.0, victim.burn_time + 2.5)
-						victim.apply_burn(attack * float(skill_data.get("dot_power", 0.24)) * mastery, burn_duration, self)
+						victim.apply_burn(attack * float(skill_data.get("dot_power", 0.24)) * mastery, burn_duration, self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				skill_timer = cooldown; battle.on_skill(self); combat_event.emit("%s 施放【%s】，点燃%d个目标" % [_name(), _skill_name(), victims.size()]); return true
 		"leech_vine":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 195.0))):
 				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
-				target.apply_poison(attack * power * 0.34, float(skill_data.get("duration", 6.0)), self, 0)
+				target.apply_poison(attack * power * 0.34, float(skill_data.get("duration", 6.0)), self, 0, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				var wounded = battle.lowest_health_ally(self, 9999.0)
 				if wounded != null: wounded.apply_hot(active_heal_amount(attack * power * 1.4), float(skill_data.get("duration", 6.0)), self)
 				skill_timer = cooldown; battle.on_skill(self); return true
@@ -984,6 +987,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		source_snapshot = combat_source_snapshot(live_source)
 	safe_context["source_snapshot"] = source_snapshot
 	safe_context["source_actor_id"] = str(source_snapshot.get("actor_id", ""))
+	if str(safe_context.get("skill_id", "")).is_empty() and not str(source_snapshot.get("skill_id", "")).is_empty():
+		safe_context["skill_id"] = str(source_snapshot.skill_id)
 	var damage_type := resolve_damage_type(live_source, safe_context)
 	var result := {"raw":raw_amount, "damage_type":damage_type, "defense":defense, "reduction":0.0, "shield_absorbed":0.0, "hp_damage":0.0, "hp_before":hp, "reason":""}
 	if dead:
@@ -1180,7 +1185,8 @@ func apply_poison(damage_per_second: float, duration: float, source, depth: int,
 	poison_damage = maxf(poison_damage, damage_per_second)
 	poison_time = maxf(poison_time, duration)
 	poison_source = valid_combat_source(source)
-	poison_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental")
+	var inferred_skill := str(source.actor_data.get("skill", "")) if is_instance_valid(source) else ""
+	poison_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental", inferred_skill)
 	poison_depth = depth
 	show_number("☠ 中毒", Color("#C58DFF"))
 	queue_redraw()
@@ -1189,7 +1195,8 @@ func apply_burn(damage_per_second: float, duration: float, source, source_snapsh
 	burn_damage = maxf(burn_damage, damage_per_second)
 	burn_time = maxf(burn_time, duration)
 	burn_source = valid_combat_source(source)
-	burn_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental")
+	var inferred_skill := str(source.actor_data.get("skill", "")) if is_instance_valid(source) else ""
+	burn_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental", inferred_skill)
 	show_number("♨ 燃烧", Color("#FF9B62"))
 
 func apply_hot(total_power: float, duration: float, source, source_snapshot: Dictionary = {}) -> void:
@@ -1205,11 +1212,12 @@ func apply_shock(duration: float) -> void:
 	skill_timer += duration * 0.25
 	show_number("⚡ 麻痹", Color("#FFE36A"))
 
-func apply_frost_dot(damage_per_second: float, duration: float, source) -> void:
+func apply_frost_dot(damage_per_second: float, duration: float, source, source_snapshot: Dictionary = {}) -> void:
 	frost_damage = maxf(frost_damage, damage_per_second)
 	frost_time = maxf(frost_time, minf(duration, 8.0))
 	frost_source = valid_combat_source(source)
-	frost_source_snapshot = combat_source_snapshot(source, "elemental")
+	var inferred_skill := str(source.actor_data.get("skill", "")) if is_instance_valid(source) else ""
+	frost_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental", inferred_skill)
 	apply_slow(0.28, duration)
 
 func apply_slow(power: float, duration: float) -> void:

@@ -51,6 +51,7 @@ var stats_summary: RichTextLabel
 var stats_rows_box: VBoxContainer
 var stats_actor_rows: Dictionary = {}
 var stats_sort_mode := "DPS"
+var stats_expanded: Dictionary = {}
 var difficulty_preview := 1.0
 var settings_feedback := ""
 var auto_equipment_warning_dialog: ConfirmationDialog
@@ -908,8 +909,24 @@ func _rebuild_stats_rows(ids: Array[String]) -> void:
 		share.max_value = 100.0
 		share.custom_minimum_size = Vector2(0, 8)
 		card.add_child(share)
+		var detail_toggle := Button.new()
+		detail_toggle.text = "查看技能伤害"
+		detail_toggle.pressed.connect(_toggle_stats_damage_detail.bind(actor_id))
+		card.add_child(detail_toggle)
+		var detail := RichTextLabel.new()
+		detail.bbcode_enabled = true
+		detail.fit_content = true
+		detail.custom_minimum_size = Vector2(0, 48)
+		detail.visible = bool(stats_expanded.get(actor_id, false))
+		card.add_child(detail)
 		stats_rows_box.add_child(card)
-		stats_actor_rows[actor_id] = {"root": card, "values": values, "share": share}
+		stats_actor_rows[actor_id] = {"root": card, "values": values, "share": share, "toggle":detail_toggle, "detail":detail}
+
+func _toggle_stats_damage_detail(actor_id: String) -> void:
+	stats_expanded[actor_id] = not bool(stats_expanded.get(actor_id, false))
+	if stats_actor_rows.has(actor_id):
+		stats_actor_rows[actor_id].detail.visible = bool(stats_expanded[actor_id])
+	update_stats_view()
 
 func update_stats_view() -> void:
 	if stats_summary == null or stats_rows_box == null: return
@@ -932,6 +949,41 @@ func update_stats_view() -> void:
 		controls.values.text = "[b]%s[/b] %s　[color=#FFB86B]伤害 %s｜DPS %s[/color]　[color=#77E89A]治疗 %s｜HPS %s[/color]\n普攻 %s　技能 %s　特效 %s　承伤 %s　施法 %d　击杀 %d" % [battle.actors.get(actor_id, {"name":actor_id}).get("name", actor_id), "●上阵" if deployed else "○本次历史", compact_number(float(row.get("damage", 0))), compact_number(float(row.get("dps", 0))), compact_number(float(row.get("healing", 0))), compact_number(float(row.get("hps", 0))), compact_number(float(row.get("basic", 0))), compact_number(float(row.get("skill", 0))), compact_number(float(row.get("effect", 0))), compact_number(float(row.get("taken", 0))), int(row.get("skills", 0)), int(row.get("kills", 0))]
 		controls.values.tooltip_text = "伤害 %.0f｜DPS %.2f｜治疗 %.0f｜HPS %.2f｜承伤 %.0f" % [float(row.get("damage", 0)), float(row.get("dps", 0)), float(row.get("healing", 0)), float(row.get("hps", 0)), float(row.get("taken", 0))]
 		controls.share.value = float(row.get("damage", 0.0)) * 100.0 / total_damage
+		var sources: Dictionary = row.get("damage_sources", {})
+		controls.toggle.disabled = sources.is_empty()
+		controls.toggle.text = "无伤害明细" if sources.is_empty() else "收起技能伤害" if bool(stats_expanded.get(actor_id, false)) else "查看技能伤害"
+		controls.detail.visible = bool(stats_expanded.get(actor_id, false)) and not sources.is_empty()
+		if controls.detail.visible: controls.detail.text = _damage_source_detail(sources)
+
+func _damage_source_detail(sources: Dictionary) -> String:
+	var ids: Array = sources.keys()
+	ids.sort_custom(func(a, b): return float(sources[a].get("damage", 0.0)) > float(sources[b].get("damage", 0.0)))
+	var lines: Array[String] = ["[color=#8A6840][b]伤害来源　　　　　　　　　伤害　　占比　次数　平均[/b][/color]"]
+	for source_id in ids:
+		var row: Dictionary = sources[source_id]
+		lines.append("%s　[color=#D06A32]%s[/color]　%.1f%%　%d　%s" % [_damage_source_name(str(source_id)), compact_number(float(row.get("damage", 0.0))), float(row.get("percent", 0.0)), int(row.get("hits", 0)), compact_number(float(row.get("average", 0.0)))])
+	return "\n".join(lines)
+
+func _damage_source_name(source_id: String) -> String:
+	if source_id == "basic": return "普通攻击"
+	if source_id == "effect": return "其他战斗效果"
+	if source_id == "crit_lightning": return "暴击雷击"
+	if source_id.begins_with("summon:"):
+		var summon_id := source_id.trim_prefix("summon:")
+		return str(battle.actors.get(summon_id, {"name":summon_id}).get("name", summon_id)) + "·召唤攻击"
+	var suffix := ""
+	var base_id := source_id
+	for spec in [[":burn", "·燃烧"], [":poison", "·中毒"], [":frost", "·冰霜"]]:
+		if base_id.ends_with(spec[0]):
+			base_id = base_id.substr(0, base_id.length() - str(spec[0]).length())
+			suffix = spec[1]
+			break
+	if base_id.begins_with("passive:"):
+		var passive_id := base_id.trim_prefix("passive:")
+		return str(battle.passives_config.get(passive_id, {"name":passive_id}).get("name", passive_id)) + suffix
+	if battle.skills.has(base_id): return str(battle.skills[base_id].get("name", base_id)) + suffix
+	if battle.general_skills_config.has(base_id): return str(battle.general_skills_config[base_id].get("name", base_id)) + suffix
+	return base_id + suffix
 
 func compact_number(value: float) -> String:
 	if absf(value) >= 1000000.0: return "%.2fM" % (value / 1000000.0)
