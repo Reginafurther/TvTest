@@ -54,6 +54,7 @@ var settings_feedback := ""
 var auto_equipment_warning_dialog: ConfirmationDialog
 var pending_auto_equipment_setting: Dictionary = {}
 var selected_world_tab := ""
+var pause_before_open := false
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -72,6 +73,7 @@ func build_toolbar() -> void:
 	add_child(toolbar_root)
 	var backpack_space := Control.new()
 	backpack_space.custom_minimum_size = Vector2(105, 57)
+	backpack_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toolbar_root.add_child(backpack_space)
 	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["挑战", "challenge"], ["营地", "camp"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
 		var button := Button.new()
@@ -195,8 +197,9 @@ func open_view(view: String) -> void:
 	if inventory_ui != null and inventory_ui.panel.visible:
 		inventory_ui.toggle()
 	current_view = "challenge" if view in ["rift", "boss"] else view
+	if not panel.visible: pause_before_open = battle.is_paused
 	panel.visible = true
-	battle.is_paused = view not in ["encounters", "stats"]
+	if view not in ["encounters", "stats"]: battle.is_paused = true
 	battle.battle_state_changed.emit("战斗统计中 · 自动战斗继续" if view == "stats" else "奇遇交易中 · 自动战斗继续" if view == "encounters" else "功能界面中")
 	refresh()
 	if current_view == "stats": stats_refresh_timer = 0.0
@@ -207,8 +210,8 @@ func _open_character_view(tab_name: String) -> void:
 
 func close_panel() -> void:
 	panel.visible = false
-	battle.is_paused = false
-	battle.battle_state_changed.emit("自动战斗中")
+	battle.is_paused = pause_before_open
+	battle.battle_state_changed.emit("已暂停" if battle.is_paused else "自动战斗中")
 
 func clear_content() -> void:
 	for child in content.get_children():
@@ -658,7 +661,7 @@ func build_recruit() -> void:
 		var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban", "fy_di_shitian":"di_shitian"}
 		var legendary_locked: bool = legendary_gate.has(actor_id) and not bool(p.boss_first_clear.get(legendary_gate[actor_id], false))
 		var state: String = "已招募" if owned else "需先击败对应Boss" if legendary_locked else "%s ×%d" % [material_name(cost[0]), cost[1]]
-		var idx := recruit_list.add_item("%s · %s" % [battle.actors[actor_id].name, state])
+		var idx := recruit_list.add_item("%s · %s" % [battle.actor_display_name(str(actor_id)), state])
 		recruit_list.set_item_metadata(idx, actor_id)
 		if actor_id == selected_party_actor: recruit_list.select(idx)
 	recruit_list.item_selected.connect(_select_recruit_actor.bind(recruit_list))
@@ -681,7 +684,7 @@ func build_recruit() -> void:
 		var current: String = str(p.party[i])
 		var slot_label := Label.new()
 		slot_label.custom_minimum_size = Vector2(190, 32)
-		slot_label.text = "位置%d：%s" % [i + 1, battle.actors.get(current, {}).get("name", "空位") if not current.is_empty() else "空位"]
+		slot_label.text = "位置%d：%s" % [i + 1, battle.actor_display_name(current) if not current.is_empty() else "空位"]
 		row.add_child(slot_label)
 		var assign := Button.new()
 		assign.text = "将选中角色上阵/替换"
@@ -824,7 +827,7 @@ func build_strategy() -> void:
 		selected_skill_actor = p.roster[0]
 	var actor_select := OptionButton.new()
 	for actor_id in p.roster:
-		actor_select.add_item("Lv.%d　%s" % [p.actor_level(actor_id), battle.actors[actor_id].name])
+		actor_select.add_item("Lv.%d　%s" % [p.actor_level(actor_id), battle.actor_display_name(str(actor_id))])
 		actor_select.set_item_metadata(actor_select.item_count - 1, actor_id)
 		if actor_id == selected_skill_actor: actor_select.select(actor_select.item_count - 1)
 	actor_select.item_selected.connect(func(index): selected_skill_actor = actor_select.get_item_metadata(index); skill_feedback = ""; refresh())
@@ -878,7 +881,7 @@ func build_strategy() -> void:
 
 func _upgrade_selected_skill(kind: String) -> void:
 	if battle.progression.upgrade_skill(selected_skill_actor, kind):
-		skill_feedback = "%s的%s技能升级成功，战斗单位已刷新。" % [battle.actors[selected_skill_actor].name, "主动" if kind == "active" else "被动"]
+		skill_feedback = "%s的%s技能升级成功，战斗单位已刷新。" % [battle.actor_display_name(selected_skill_actor), "主动" if kind == "active" else "被动"]
 		battle.rebuild_party()
 		battle.log_message.emit(skill_feedback)
 	else:
@@ -965,7 +968,7 @@ func update_stats_view() -> void:
 		var key := "hps" if stats_sort_mode == "HPS" else "dps"
 		return float(snap.actors.get(a, {}).get(key, 0.0)) > float(snap.actors.get(b, {}).get(key, 0.0)))
 	var team: Dictionary = snap.get("team", {})
-	stats_summary.text = "[b]统计时长[/b] %.1f秒　[b][color=#FFB86B]队伍伤害[/color][/b] %s　[b]DPS[/b] %s\n[b][color=#77E89A]队伍治疗[/color][/b] %s　[b]HPS[/b] %s　累计击杀 %d\n装备 %d件　材料 %d个　装备收益 %.2f件/分钟\n自动出售 %d件 / 金币%d　自动分解 %d件 / 材料%d" % [snap.duration, compact_number(float(team.get("damage", 0))), compact_number(float(team.get("dps", 0))), compact_number(float(team.get("healing", 0))), compact_number(float(team.get("hps", 0))), int(team.get("kills", 0)), int(snap.resources.equipment), int(snap.resources.materials), float(snap.get("equipment_per_minute", 0.0)), int(snap.resources.get("auto_sold_count", 0)), int(snap.resources.get("auto_sold_gold", 0)), int(snap.resources.get("auto_dismantled_count", 0)), int(snap.resources.get("auto_dismantled_material", 0))]
+	stats_summary.text = "[b]统计时长[/b] %.1f秒　[b][color=#FFB86B]队伍伤害[/color][/b] %s　[b]DPS[/b] %s（生命%s / 敌盾%s）\n[b][color=#77E89A]治疗贡献[/color][/b] %s　[b]HPS[/b] %s（有效治疗%s / 护盾吸收%s）　累计击杀 %d\n装备 %d件　材料 %d个　装备收益 %.2f件/分钟\n自动出售 %d件 / 金币%d　自动分解 %d件 / 材料%d" % [snap.duration, compact_number(float(team.get("damage", 0))), compact_number(float(team.get("dps", 0))), compact_number(float(team.get("life_damage", 0))), compact_number(float(team.get("enemy_shield_damage", 0))), compact_number(float(team.get("healing", 0))), compact_number(float(team.get("hps", 0))), compact_number(float(team.get("effective_healing", 0))), compact_number(float(team.get("friendly_shield_absorbed", 0))), int(team.get("kills", 0)), int(snap.resources.equipment), int(snap.resources.materials), float(snap.get("equipment_per_minute", 0.0)), int(snap.resources.get("auto_sold_count", 0)), int(snap.resources.get("auto_sold_gold", 0)), int(snap.resources.get("auto_dismantled_count", 0)), int(snap.resources.get("auto_dismantled_material", 0))]
 	var total_damage := maxf(1.0, float(team.get("damage", 0.0)))
 	for index in range(ids.size()):
 		var actor_id := ids[index]
@@ -973,16 +976,18 @@ func update_stats_view() -> void:
 		var controls: Dictionary = stats_actor_rows[actor_id]
 		stats_rows_box.move_child(controls.root, index)
 		var deployed: bool = actor_id in battle.progression.party
-		controls.values.text = "[b]%s[/b] %s　[color=#FFB86B]伤害 %s｜DPS %s[/color]　[color=#77E89A]治疗 %s｜HPS %s[/color]\n普攻 %s　技能 %s　特效 %s　承伤 %s　施法 %d　击杀 %d" % [battle.actors.get(actor_id, {"name":actor_id}).get("name", actor_id), "●上阵" if deployed else "○本次历史", compact_number(float(row.get("damage", 0))), compact_number(float(row.get("dps", 0))), compact_number(float(row.get("healing", 0))), compact_number(float(row.get("hps", 0))), compact_number(float(row.get("basic", 0))), compact_number(float(row.get("skill", 0))), compact_number(float(row.get("effect", 0))), compact_number(float(row.get("taken", 0))), int(row.get("skills", 0)), int(row.get("kills", 0))]
+		controls.values.text = "[b]%s[/b] %s　[color=#FFB86B]伤害 %s｜DPS %s（生命%s / 敌盾%s）[/color]\n[color=#77E89A]治疗贡献 %s｜HPS %s（治疗%s / 护盾%s）[/color]　承伤 %s　施法 %d　击杀 %d" % [battle.actor_display_name(actor_id), "●上阵" if deployed else "○本次历史", compact_number(float(row.get("damage", 0))), compact_number(float(row.get("dps", 0))), compact_number(float(row.get("life_damage", 0))), compact_number(float(row.get("enemy_shield_damage", 0))), compact_number(float(row.get("healing", 0))), compact_number(float(row.get("hps", 0))), compact_number(float(row.get("effective_healing", 0))), compact_number(float(row.get("friendly_shield_absorbed", 0))), compact_number(float(row.get("taken", 0))), int(row.get("skills", 0)), int(row.get("kills", 0))]
 		controls.values.tooltip_text = "伤害 %.0f｜DPS %.2f｜治疗 %.0f｜HPS %.2f｜承伤 %.0f" % [float(row.get("damage", 0)), float(row.get("dps", 0)), float(row.get("healing", 0)), float(row.get("hps", 0)), float(row.get("taken", 0))]
 		controls.share.value = float(row.get("damage", 0.0)) * 100.0 / total_damage
 		var sources: Dictionary = row.get("damage_sources", {})
-		controls.toggle.disabled = sources.is_empty()
-		controls.toggle.text = "无伤害明细" if sources.is_empty() else "收起技能伤害" if bool(stats_expanded.get(actor_id, false)) else "查看技能伤害"
-		controls.detail.visible = bool(stats_expanded.get(actor_id, false)) and not sources.is_empty()
-		if controls.detail.visible: controls.detail.text = _damage_source_detail(sources)
+		var heal_sources: Dictionary = row.get("heal_sources", {})
+		controls.toggle.disabled = sources.is_empty() and heal_sources.is_empty()
+		controls.toggle.text = "无技能明细" if controls.toggle.disabled else "收起贡献明细" if bool(stats_expanded.get(actor_id, false)) else "查看技能贡献"
+		controls.detail.visible = bool(stats_expanded.get(actor_id, false)) and not controls.toggle.disabled
+		if controls.detail.visible: controls.detail.text = _damage_source_detail(sources) + _healing_source_detail(heal_sources)
 
 func _damage_source_detail(sources: Dictionary) -> String:
+	if sources.is_empty(): return ""
 	var ids: Array = sources.keys()
 	ids.sort_custom(func(a, b): return float(sources[a].get("damage", 0.0)) > float(sources[b].get("damage", 0.0)))
 	var lines: Array[String] = ["[color=#8A6840][b]伤害来源　　　　　　　　　伤害　　占比　次数　平均[/b][/color]"]
@@ -991,15 +996,26 @@ func _damage_source_detail(sources: Dictionary) -> String:
 		lines.append("%s　[color=#D06A32]%s[/color]　%.1f%%　%d　%s" % [_damage_source_name(str(source_id)), compact_number(float(row.get("damage", 0.0))), float(row.get("percent", 0.0)), int(row.get("hits", 0)), compact_number(float(row.get("average", 0.0)))])
 	return "\n".join(lines)
 
+func _healing_source_detail(sources: Dictionary) -> String:
+	if sources.is_empty(): return ""
+	var ids: Array = sources.keys()
+	ids.sort_custom(func(a, b): return float(sources[a].get("contribution", 0.0)) > float(sources[b].get("contribution", 0.0)))
+	var lines: Array[String] = ["\n[color=#467A55][b]治疗来源　　　　　　　　　有效治疗　护盾吸收　总贡献　占比[/b][/color]"]
+	for source_id in ids:
+		var row: Dictionary = sources[source_id]
+		lines.append("%s　%s　%s　[color=#4B9D68]%s[/color]　%.1f%%" % [_damage_source_name(str(source_id)), compact_number(float(row.get("healing", 0.0))), compact_number(float(row.get("shield", 0.0))), compact_number(float(row.get("contribution", 0.0))), float(row.get("percent", 0.0))])
+	return "\n".join(lines)
+
 func _damage_source_name(source_id: String) -> String:
 	if source_id == "basic": return "普通攻击"
+	if source_id == "basic_heal": return "普通攻击治疗"
 	if source_id == "effect": return "其他战斗效果"
 	if source_id.begins_with("summon:"):
 		var summon_id := source_id.trim_prefix("summon:")
 		return str(battle.actors.get(summon_id, {"name":summon_id}).get("name", summon_id)) + "·召唤攻击"
 	var suffix := ""
 	var base_id := source_id
-	for spec in [[":burn", "·燃烧"], [":poison", "·中毒"], [":frost", "·冰霜"]]:
+	for spec in [[":burn", "·燃烧"], [":poison", "·中毒"], [":frost", "·冰霜"], [":hot", "·持续治疗"]]:
 		if base_id.ends_with(spec[0]):
 			base_id = base_id.substr(0, base_id.length() - str(spec[0]).length())
 			suffix = spec[1]
@@ -1135,7 +1151,7 @@ func exchange_actor(index: int, list: ItemList) -> void:
 
 func assign_selected_party(index: int) -> void:
 	if battle.progression.set_party_member(index, selected_party_actor):
-		recruit_feedback = "%s已放入位置%d，战场已立即更新。" % [battle.actors[selected_party_actor].name, index + 1]
+		recruit_feedback = "%s已放入位置%d，战场已立即更新。" % [battle.actor_display_name(selected_party_actor), index + 1]
 		battle.rebuild_party()
 		refresh()
 

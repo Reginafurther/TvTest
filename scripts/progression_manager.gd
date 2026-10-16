@@ -22,7 +22,7 @@ const FENGYUN_HERO_IDS := ["fy_nie_feng", "fy_bu_jingyun", "fy_wuming", "fy_swor
 const ALL_HERO_IDS := HERO_IDS + FENGYUN_HERO_IDS
 
 var save_path := NORMAL_PATH
-var materials := {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0, "fengyun_token": 0}
+var materials := {"salvage_dust": 0, "breakthrough_stone":0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0, "fengyun_token": 0}
 var gold := 0
 var guide_step := 0
 var guide_finished := false
@@ -44,6 +44,7 @@ var team_progression_version := TEAM_PROGRESSION_VERSION
 var team_level_history: Array = []
 var actor_levels: Dictionary = {}
 var actor_experience: Dictionary = {}
+var actor_breakthrough_tiers: Dictionary = {}
 var skill_levels: Dictionary = {}
 var transaction_log: Array = []
 var pending_offline := {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal":0, "jianghu_token":0, "azeroth_token":0, "wuxia_token":0, "qin_moon_token":0, "ninja_scroll":0, "huangyi_token":0, "fengyun_token":0}
@@ -281,6 +282,21 @@ func spend_material(id: String, amount: int) -> bool:
 	changed.emit()
 	save_to_disk()
 	return true
+
+func breakthrough_tier(actor_id: String, native_tier: int) -> int:
+	return maxi(native_tier, int(actor_breakthrough_tiers.get(actor_id, native_tier)))
+
+func breakthrough_actor(actor_id: String, native_tier: int, maximum_tier: int) -> bool:
+	if actor_id not in roster or native_tier < 1:
+		return false
+	var current := breakthrough_tier(actor_id, native_tier)
+	if current >= maximum_tier or int(materials.get("breakthrough_stone", 0)) < 1:
+		return false
+	materials["breakthrough_stone"] = int(materials.get("breakthrough_stone", 0)) - 1
+	actor_breakthrough_tiers[actor_id] = current + 1
+	record_transaction("角色破限", "%s提升至凡%d" % [actor_id, current + 1], 0)
+	changed.emit()
+	return save_to_disk()
 
 func add_gold(amount: int) -> void:
 	gold = maxi(0, gold + amount)
@@ -625,7 +641,7 @@ func set_combat_difficulty(value: float, autosave: bool = true) -> float:
 	return combat_difficulty
 
 func reset_to_new_game() -> bool:
-	materials = {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0, "fengyun_token": 0}
+	materials = {"salvage_dust": 0, "breakthrough_stone":0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0, "fengyun_token": 0}
 	gold = 0
 	guide_step = 0
 	guide_finished = false
@@ -642,6 +658,7 @@ func reset_to_new_game() -> bool:
 	team_level_history = []
 	actor_levels = {}
 	actor_experience = {}
+	actor_breakthrough_tiers = {}
 	skill_levels = {}
 	transaction_log = []
 	pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token":0, "wuxia_token":0, "qin_moon_token":0, "ninja_scroll":0, "huangyi_token":0, "fengyun_token":0}
@@ -687,7 +704,7 @@ func reset_to_new_game() -> bool:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "team_progression_version": TEAM_PROGRESSION_VERSION, "team_level": team_level, "team_exp": team_exp, "team_level_history": team_level_history, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "skill_levels": skill_levels, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "team_progression_version": TEAM_PROGRESSION_VERSION, "team_level": team_level, "team_exp": team_exp, "team_level_history": team_level_history, "actor_breakthrough_tiers":actor_breakthrough_tiers, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "skill_levels": skill_levels, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -759,6 +776,8 @@ func apply_payload(parsed) -> bool:
 	if payload_version not in [VERSION, "0.9", "0.8", "0.7", "0.6.1"]:
 		return false
 	materials.merge(parsed.get("materials", {}), true)
+	var stored_breakthrough_tiers = parsed.get("actor_breakthrough_tiers", {})
+	actor_breakthrough_tiers = stored_breakthrough_tiers.duplicate(true) if typeof(stored_breakthrough_tiers) == TYPE_DICTIONARY else {}
 	gold = maxi(0, int(parsed.get("gold", 0)))
 	guide_step = clampi(int(parsed.get("guide_step", 6)), 0, 6)
 	guide_finished = bool(parsed.get("guide_finished", true))

@@ -34,7 +34,6 @@ var objective_chip: PanelContainer
 var objective_button: Button
 var backdrop: ColorRect
 var character_ui
-var character_button: Button
 var camp_ui
 
 func _ready() -> void:
@@ -178,6 +177,24 @@ func _process(_delta: float) -> void:
 	if Input.is_key_pressed(KEY_R) and battle.game_over:
 		battle.restart()
 
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"): return
+	# Close exactly one top-most modal before closing its owning feature panel.
+	var dialogs: Array = []
+	if character_ui != null: dialogs.append_array([character_ui.breakthrough_dialog, character_ui.optimize_dialog])
+	if v03_ui != null: dialogs.append_array([v03_ui.auto_equipment_warning_dialog, v03_ui.reset_dialog, v03_ui.bulk_sell_dialog, v03_ui.confirm_dialog])
+	for dialog in dialogs:
+		if is_instance_valid(dialog) and dialog.visible:
+			dialog.hide()
+			get_viewport().set_input_as_handled()
+			return
+	if camp_ui != null and camp_ui.panel.visible: camp_ui.close_panel()
+	elif character_ui != null and character_ui.panel.visible: character_ui.close_panel()
+	elif inventory_ui != null and inventory_ui.panel.visible: inventory_ui.toggle()
+	elif v03_ui != null and v03_ui.panel.visible: v03_ui.close_panel()
+	else: return
+	get_viewport().set_input_as_handled()
+
 func build_background() -> void:
 	backdrop = ColorRect.new()
 	backdrop.color = Color("#284D55")
@@ -252,13 +269,6 @@ func build_ui() -> void:
 	V035ThemeScript.button(settings_button, "blue")
 	settings_button.pressed.connect(_open_settings)
 	add_child(settings_button)
-	character_button = Button.new()
-	character_button.text = "角色"
-	character_button.tooltip_text = "角色养成：属性、编队、装备位与技能"
-	character_button.size = Vector2(82, 38)
-	V035ThemeScript.button(character_button, "gold")
-	character_button.pressed.connect(func(): character_ui.open("stats"))
-	add_child(character_button)
 	objective_chip = PanelContainer.new()
 	objective_chip.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#FFF3D9"), Color("#C9934D"), 13, 7))
 	add_child(objective_chip)
@@ -305,8 +315,6 @@ func _layout_ui() -> void:
 	stats_label.scale = Vector2.ONE * factor
 	gold_label.position = Vector2(offset_x + 1190 * factor, 5 * factor)
 	gold_label.scale = Vector2.ONE * factor
-	character_button.position = Vector2(offset_x + 1250 * factor, 8 * factor)
-	character_button.scale = Vector2.ONE * factor
 	settings_button.position = Vector2(offset_x + 1340 * factor, 8 * factor)
 	settings_button.scale = Vector2.ONE * factor
 	cards.position = Vector2(offset_x + 10 * factor, footer_y + 14 * factor)
@@ -485,7 +493,7 @@ func update_party(party: Array) -> void:
 			row.add_child(avatar)
 		else:
 			var avatar_placeholder := Label.new()
-			avatar_placeholder.text = str(actor_data.get("name", actor_id)).substr(0, 1)
+			avatar_placeholder.text = battle.actor_display_name(actor_id).substr(0, 1)
 			avatar_placeholder.custom_minimum_size = Vector2(61, 100)
 			avatar_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			avatar_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -497,7 +505,7 @@ func update_party(party: Array) -> void:
 		details.add_theme_constant_override("separation", 3)
 		row.add_child(details)
 		var name_label := Label.new()
-		name_label.text = "Lv.%d %s" % [battle.progression.actor_level(actor_id), str(actor_data.get("name", actor_id))]
+		name_label.text = "Lv.%d %s" % [battle.progression.actor_level(actor_id), battle.actor_display_name(actor_id)]
 		V035ThemeScript.label(name_label, 17, Color("#3C3027"))
 		details.add_child(name_label)
 		var hp_label := Label.new()

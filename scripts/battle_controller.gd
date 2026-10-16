@@ -269,6 +269,10 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 	var unit = BattleUnitScript.new()
 	var data: Dictionary = actors.get(id, {}).duplicate(true)
 	data.merge(overrides, true)
+	if faction == "heroes" and id in ProgressionManagerScript.ALL_HERO_IDS:
+		var breakthrough_stats := breakthrough_base_stats(id)
+		for stat in ["max_hp", "attack", "defense"]:
+			data[stat] = float(breakthrough_stats.get(stat, data.get(stat, 0.0)))
 	var skill: Dictionary = skills.get(data.get("skill", ""), {})
 	if skill.is_empty() and faction == "enemies" and data.has("boss_id"):
 		skill = {"name":data.get("name", "首领技能"), "type":"boss_area", "power":0.82, "cooldown":7.0, "range":230.0}
@@ -294,6 +298,96 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 	else:
 		enemies.append(unit)
 	return unit
+
+func world_tier_for_name(world_name: String) -> int:
+	var first_stage := 999999
+	for map_id in worlds_config.get("maps", {}):
+		var map_data: Dictionary = worlds_config.maps[map_id]
+		if str(map_data.get("world", "")) == world_name:
+			first_stage = mini(first_stage, int(map_data.get("global_stage", 999999)))
+	return 1 if first_stage == 999999 else maxi(1, (first_stage - 1) / 10 + 1)
+
+func native_world_tier(actor_id: String) -> int:
+	return world_tier_for_name(str(actors.get(actor_id, {}).get("world", "")))
+
+func maximum_unlocked_world_tier() -> int:
+	var configured_max := 1
+	for actor_id in ProgressionManagerScript.ALL_HERO_IDS:
+		configured_max = maxi(configured_max, native_world_tier(str(actor_id)))
+	return mini(configured_max, 1 + progression.completed_stages.size() / 10)
+
+func _breakthrough_role(data: Dictionary) -> String:
+	var role := str(data.get("combat_role", ""))
+	var style := str(data.get("combat_style", ""))
+	if role == "tank" or style == "tank": return "tank"
+	if role == "healer" or style == "healer" or str(data.get("basic_action", "")) == "heal": return "healer"
+	if style == "melee":
+		var text := str(data.get("role", ""))
+		return "assassin" if "刺客" in text or "爆发" in text else "warrior"
+	if role == "support" or "辅助" in str(data.get("role", "")) or "控制" in str(data.get("role", "")): return "support"
+	return "ranged_dps"
+
+func _tier_role_target(tier: int, role: String) -> Dictionary:
+	var totals := {"max_hp":0.0,"attack":0.0,"defense":0.0}
+	var count := 0
+	for hero_id in ProgressionManagerScript.ALL_HERO_IDS:
+		var candidate: Dictionary = actors.get(hero_id, {})
+		if not candidate.is_empty() and native_world_tier(str(hero_id)) == tier and _breakthrough_role(candidate) == role:
+			for stat in totals: totals[stat] += float(candidate.get(stat, 0.0))
+			count += 1
+	if count > 0:
+		for stat in totals: totals[stat] = float(totals[stat]) / count
+		return totals
+	# Some worlds have no exact role peer. Use the nearest-world peer rather than
+	# changing a character's class or applying an arbitrary global multiplier.
+	for distance in range(1, 20):
+		for fallback_tier in [tier - distance, tier + distance]:
+			if fallback_tier < 1: continue
+			var fallback := _tier_role_target_exact(fallback_tier, role)
+			if not fallback.is_empty(): return fallback
+	return {}
+
+func _tier_role_target_exact(tier: int, role: String) -> Dictionary:
+	var totals := {"max_hp":0.0,"attack":0.0,"defense":0.0}
+	var count := 0
+	for hero_id in ProgressionManagerScript.ALL_HERO_IDS:
+		var candidate: Dictionary = actors.get(hero_id, {})
+		if not candidate.is_empty() and native_world_tier(str(hero_id)) == tier and _breakthrough_role(candidate) == role:
+			for stat in totals: totals[stat] += float(candidate.get(stat, 0.0))
+			count += 1
+	if count == 0: return {}
+	for stat in totals: totals[stat] = float(totals[stat]) / count
+	return totals
+
+func breakthrough_base_stats(actor_id: String, requested_tier: int = -1) -> Dictionary:
+	var data: Dictionary = actors.get(actor_id, {})
+	if data.is_empty(): return {}
+	var native_tier: int = native_world_tier(actor_id)
+	var tier: int = int(progression.breakthrough_tier(actor_id, native_tier)) if requested_tier < 0 else maxi(native_tier, requested_tier)
+	var result := {"max_hp":float(data.get("max_hp", 1.0)),"attack":float(data.get("attack", 1.0)),"defense":float(data.get("defense", 0.0))}
+	for target_tier in range(native_tier + 1, tier + 1):
+		var target: Dictionary = _tier_role_target(target_tier, _breakthrough_role(data))
+		for stat in result: result[stat] = maxf(float(result[stat]), float(target.get(stat, result[stat])))
+	return result
+
+func breakthrough_preview(actor_id: String) -> Dictionary:
+	var native_tier: int = native_world_tier(actor_id)
+	var current: int = int(progression.breakthrough_tier(actor_id, native_tier))
+	var maximum: int = maximum_unlocked_world_tier()
+	return {"native_tier":native_tier,"current_tier":current,"next_tier":mini(maximum, current + 1),"maximum_tier":maximum,"current_stats":breakthrough_base_stats(actor_id, current),"next_stats":breakthrough_base_stats(actor_id, mini(maximum, current + 1)),"stones":int(progression.materials.get("breakthrough_stone", 0)),"can_breakthrough":current < maximum and int(progression.materials.get("breakthrough_stone", 0)) > 0}
+
+func actor_display_name(actor_id: String) -> String:
+	var original := str(actors.get(actor_id, {}).get("name", actor_id))
+	if progression == null: return original
+	var native_tier: int = native_world_tier(actor_id)
+	var tier: int = int(progression.breakthrough_tier(actor_id, native_tier))
+	return "凡%d·%s" % [tier, original] if tier > native_tier else original
+
+func breakthrough_actor(actor_id: String) -> bool:
+	if not progression.breakthrough_actor(actor_id, native_world_tier(actor_id), maximum_unlocked_world_tier()): return false
+	rebuild_party()
+	log_message.emit("★ %s完成破限" % actor_display_name(actor_id))
+	return true
 
 func apply_playable_melee_survival_baseline() -> void:
 	# Balance only recruitable hero templates. Enemy and boss templates are kept
@@ -540,7 +634,8 @@ func _on_unit_died(unit) -> void:
 			var rift_reward: Dictionary = adventure.resolve_rift_victory()
 			if rift_reward.is_empty():
 				return
-			log_message.emit("★ 秘境第%d层完成：%d金币、材料×%d及%s。" % [int(rift_reward.get("floor", 0)), int(rift_reward.get("gold", 0)), int(rift_reward.get("material", 0)), str(rift_reward.get("equipment", {}).get("name", "装备"))])
+			var stone_text := "、破限石×1" if int(rift_reward.get("breakthrough_stone", 0)) > 0 else ""
+			log_message.emit("★ 秘境第%d层完成：%d金币、材料×%d%s及%s。" % [int(rift_reward.get("floor", 0)), int(rift_reward.get("gold", 0)), int(rift_reward.get("material", 0)), stone_text, str(rift_reward.get("equipment", {}).get("name", "装备"))])
 			active_rift_context.clear()
 			var next_mode := str(rift_reward.get("next_mode", ""))
 			if next_mode in ["climb", "repeat"]: call_deferred("continue_rift_auto", completed_world, int(rift_reward.next_floor), next_mode)
@@ -992,6 +1087,8 @@ func record_damage_resolution(source, target, result: Dictionary, context: Dicti
 		"reason":str(result.get("reason", "unknown")), "stage":int(worlds_config.maps.get(current_map_id, {}).get("global_stage", 1)),
 		"wave":maxi(1, wave - 1)
 	}
+	if is_instance_valid(target) and target.faction == "enemies" and float(result.get("shield_absorbed", 0.0)) > 0.0:
+		combat_stats.record_shield_damage(stats_actor_id(source) if is_instance_valid(source) else str(context.get("source_actor_id", "")), float(result.shield_absorbed), str(context.get("kind", "skill")), stats_damage_source_id(source, context))
 	damage_trace.append(row)
 	if damage_trace.size() > 600: damage_trace.pop_front()
 	if source_id.is_empty() or target_id.is_empty(): return
@@ -1011,7 +1108,12 @@ func record_damage_resolution(source, target, result: Dictionary, context: Dicti
 func on_heal(source, amount: float, source_snapshot: Dictionary = {}) -> void:
 	var source_id := stats_actor_id(source) if is_instance_valid(source) else str(source_snapshot.get("actor_id", ""))
 	if not source_id.is_empty():
-		combat_stats.record_heal(source_id, amount)
+		var source_key := str(source_snapshot.get("skill_id", ""))
+		if source_key.is_empty(): source_key = "healing"
+		combat_stats.record_heal(source_id, amount, source_key)
+
+func on_friendly_shield_absorbed(source_id: String, source_key: String, amount: float) -> void:
+	combat_stats.record_shield_absorb(source_id, amount, source_key if not source_key.is_empty() else "shield")
 
 func on_skill(source) -> void:
 	combat_stats.record_skill(stats_actor_id(source))

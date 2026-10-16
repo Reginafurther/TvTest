@@ -27,6 +27,7 @@ var actor_ids: Array = []
 var actor_names: Array = []
 var feature_ui
 var character_ui
+var pause_before_open := false
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -207,6 +208,7 @@ func open_for_actor_slot(actor_id: String, slot: String) -> void:
 		character_ui.close_panel()
 	if feature_ui != null and feature_ui.panel.visible:
 		feature_ui.close_panel()
+	if not panel.visible: pause_before_open = battle.is_paused
 	panel.visible = true
 	battle.is_paused = true
 	refresh_actor_choices()
@@ -229,13 +231,14 @@ func toggle() -> void:
 		feature_ui.close_panel()
 	panel.visible = not panel.visible
 	if panel.visible:
+		pause_before_open = battle.is_paused
 		battle.is_paused = true
 		battle.battle_state_changed.emit("背包整理中")
 		refresh_all()
 		set_status("先选择角色，再单击装备查看属性；双击装备可直接穿戴。")
 	else:
-		battle.is_paused = false
-		battle.battle_state_changed.emit("自动战斗中")
+		battle.is_paused = pause_before_open
+		battle.battle_state_changed.emit("已暂停" if battle.is_paused else "自动战斗中")
 
 func refresh_all() -> void:
 	refresh_actor_choices()
@@ -277,7 +280,7 @@ func refresh_inventory() -> void:
 		if owner == current_actor_id():
 			ownership = " · 当前角色%s" % slot_name(inventory.item_equipped_slot(str(item.instance_id), owner))
 		elif not owner.is_empty():
-			ownership = " · %s已穿戴（不可抢用）" % battle.actors.get(owner, {}).get("name", owner)
+			ownership = " · %s已穿戴（不可抢用）" % battle.actor_display_name(owner)
 		var label := "Lv.%d  %s  [%s]%s" % [item.level, item.name, slot_name(item.slot), ownership]
 		var icon: Texture2D = ArtCatalogScript.texture("equipment_icons", str(item.get("template_id", item.get("slot", ""))))
 		var index := item_list.add_item(label, icon)
@@ -311,7 +314,7 @@ func refresh_resource_category(category: String) -> void:
 	detail.text = "[b]%s[/b]\n共 %d 类物品；本页与角色、商店、秘境、奇遇和营地共用同一份真实存档。" % [category, rows.size()]
 
 func material_name(id: String) -> String:
-	return {"salvage_dust":"分解粉尘", "three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "qin_moon_token":"苍龙令", "ninja_scroll":"忍界卷轴", "huangyi_token":"战神令", "fengyun_token":"风云令", "rift_crystal":"秘境结晶", "rare_wood":"稀有木材"}.get(id, id)
+	return {"salvage_dust":"分解粉尘", "breakthrough_stone":"破限石", "three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "qin_moon_token":"苍龙令", "ninja_scroll":"忍界卷轴", "huangyi_token":"战神令", "fengyun_token":"风云令", "rift_crystal":"秘境结晶", "rare_wood":"稀有木材"}.get(id, id)
 
 func special_item_name(id: String) -> String:
 	return {"recruit_ticket":"招募令", "camp_coupon":"营地券", "rift_key":"秘境钥匙"}.get(id, id)
@@ -385,7 +388,7 @@ func _on_inventory_selected(index: int) -> void:
 		var owner: String = inventory.item_owner(selected_item_id)
 		equip_button.disabled = not owner.is_empty() and owner != current_actor_id()
 		if equip_button.disabled:
-			set_status("该装备正由%s穿戴；这里只能查看，请先从原角色卸下。" % battle.actors.get(owner, {}).get("name", owner), true)
+			set_status("该装备正由%s穿戴；这里只能查看，请先从原角色卸下。" % battle.actor_display_name(owner), true)
 			return
 		var slot := preferred_slot_for_item(item)
 		set_status("将为%s穿戴到%s；点击按钮确认，或双击装备。" % [actor_names[actor_select.selected], slot_name(slot)])
@@ -487,7 +490,7 @@ func refresh_actor_choices() -> void:
 	actor_names.clear()
 	actor_select.clear()
 	for actor_id in actor_ids:
-		var name_value: String = battle.actors.get(actor_id, {}).get("name", actor_id)
+		var name_value: String = battle.actor_display_name(str(actor_id))
 		actor_names.append(name_value)
 		actor_select.add_item(name_value)
 		actor_select.set_item_metadata(actor_select.item_count - 1, actor_id)

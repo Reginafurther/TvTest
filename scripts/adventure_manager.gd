@@ -139,6 +139,11 @@ func resolve_rift_victory() -> Dictionary:
 	var auto_result: Dictionary = battle.auto_process_new_equipment(item, not first)
 	if not auto_result.is_empty() or battle.inventory.add_item(item):
 		battle.combat_stats.resources.equipment += 1
+	var breakthrough_stones := 0
+	if battle.equipment_generator.rng.randf() < float(reward_cfg.get("breakthrough_stone_chance", 0.20)):
+		breakthrough_stones = 1
+		battle.progression.materials["breakthrough_stone"] = int(battle.progression.materials.get("breakthrough_stone", 0)) + 1
+		battle.combat_stats.resources.materials += 1
 	if first and floor % 5 == 0: grant_furniture("rift_beacon", 1)
 	battle.progression.record_transaction("秘境结算", "%s第%d层%s" % [config.rift.worlds[world_id].name, floor, "首通" if first else "重复"], gold)
 	var next_mode := ""
@@ -150,7 +155,7 @@ func resolve_rift_victory() -> Dictionary:
 		next_floor = floor + 1
 	state.selected_floor = next_floor
 	battle.progression.save_to_disk(); changed.emit()
-	var result := {"first":first,"gold":gold,"material":material,"equipment":item,"floor":floor,"world":world_id,"next_mode":next_mode,"next_floor":next_floor}
+	var result := {"first":first,"gold":gold,"material":material,"breakthrough_stone":breakthrough_stones,"equipment":item,"floor":floor,"world":world_id,"next_mode":next_mode,"next_floor":next_floor}
 	active_rift.clear()
 	return result
 

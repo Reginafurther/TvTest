@@ -100,9 +100,12 @@ func _initialize() -> void:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 	progression.save_path = "user://team_progression_validation.json"
+	progression.materials["breakthrough_stone"] = 1
+	if not progression.breakthrough_actor("liu_bei", 1, 3) or progression.breakthrough_tier("liu_bei", 1) != 2 or int(progression.materials.breakthrough_stone) != 0:
+		failures.append("破限未原子扣除材料或提升独立阶位")
 	progression.save_to_disk()
 	var saved = JSON.parse_string(FileAccess.get_file_as_string(progression.save_path))
-	if typeof(saved) != TYPE_DICTIONARY or saved.has("actor_levels") or saved.has("actor_experience") or int(saved.get("team_level", 0)) != 2:
+	if typeof(saved) != TYPE_DICTIONARY or saved.has("actor_levels") or saved.has("actor_experience") or int(saved.get("team_level", 0)) != 2 or int(saved.get("actor_breakthrough_tiers", {}).get("liu_bei", 0)) != 2:
 		failures.append("新存档仍写入独立角色等级或遗漏共享等级")
 	if FileAccess.file_exists(progression.save_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(progression.save_path))

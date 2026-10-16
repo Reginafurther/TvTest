@@ -32,7 +32,8 @@
     },
     "reward": {
       "gold_base":22,"gold_per_floor":8,"material_base":2,"first_clear_crystal":2,
-      "quality_weights":{"purple":0.80,"orange":0.10,"red":0.10}
+      "quality_weights":{"purple":0.80,"orange":0.10,"red":0.10},
+      "breakthrough_stone_chance":0.20
     },
     "legendary_drops": {
       "three_kingdoms":{"name":"朱雀扇","slot":"main_hand","stat":"elemental_damage","value":0.15,"affix_name":"元素伤害+15%"},

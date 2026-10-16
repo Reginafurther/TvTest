@@ -31,6 +31,9 @@ var selected_item_id := ""
 var preferred_equipment_slot := ""
 var pending_optimization: Array = []
 var optimize_dialog: ConfirmationDialog
+var breakthrough_button: Button
+var breakthrough_dialog: ConfirmationDialog
+var pause_before_open := false
 var party_box: VBoxContainer
 var skill_world_filter := "全部"
 var skill_category_filter := "全部"
@@ -116,6 +119,10 @@ func build_ui() -> void:
 	optimize_dialog.title = "确认一键优化"
 	optimize_dialog.confirmed.connect(_apply_optimization)
 	add_child(optimize_dialog)
+	breakthrough_dialog = ConfirmationDialog.new()
+	breakthrough_dialog.title = "角色破限"
+	breakthrough_dialog.confirmed.connect(_confirm_breakthrough)
+	add_child(breakthrough_dialog)
 
 func build_roster_column(parent: HBoxContainer) -> void:
 	var box := VBoxContainer.new()
@@ -154,11 +161,20 @@ func build_center_column(parent: HBoxContainer) -> void:
 	actor_role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	V035ThemeScript.label(actor_role, 15, Color("#765B3C"))
 	box.add_child(actor_role)
+	var exp_row := HBoxContainer.new()
+	box.add_child(exp_row)
 	exp_bar = ProgressBar.new()
-	exp_bar.custom_minimum_size = Vector2(390, 20)
+	exp_bar.custom_minimum_size = Vector2(300, 20)
+	exp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	exp_bar.show_percentage = false
 	exp_bar.tooltip_text = "全体角色（包括未招募角色）共享同一冒险团等级与经验。"
-	box.add_child(exp_bar)
+	exp_row.add_child(exp_bar)
+	breakthrough_button = Button.new()
+	breakthrough_button.text = "破限"
+	breakthrough_button.custom_minimum_size = Vector2(76, 28)
+	breakthrough_button.pressed.connect(_show_breakthrough_dialog)
+	V035ThemeScript.button(breakthrough_button, "gold")
+	exp_row.add_child(breakthrough_button)
 	exp_label = Label.new()
 	exp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	V035ThemeScript.label(exp_label, 13, Color("#493520"))
@@ -222,6 +238,9 @@ func build_detail_column(parent: HBoxContainer) -> void:
 	tabs.add_child(growth_text)
 
 func open(tab_name: String = "stats") -> void:
+	if not panel.visible:
+		pause_before_open = battle.is_paused
+		battle.is_paused = true
 	panel.visible = true
 	var names := {"stats": 0, "skills": 1, "growth": 2}
 	tabs.current_tab = int(names.get(tab_name, 0))
@@ -235,6 +254,7 @@ func toggle(tab_name: String = "stats") -> void:
 
 func close_panel() -> void:
 	panel.visible = false
+	battle.is_paused = pause_before_open
 
 func refresh_all(rebuild_skills: bool = true, reset_skill_scroll: bool = false) -> void:
 	if battle == null or panel == null:
@@ -269,7 +289,7 @@ func refresh_roster() -> void:
 	for actor_id in ids:
 		var data: Dictionary = battle.actors.get(actor_id, {})
 		var deployed: bool = actor_id in battle.progression.party
-		actor_list.add_item("%s  Lv.%d\n%s  %s" % [data.get("name", actor_id), battle.progression.actor_level(actor_id), data.get("role", ""), "●上阵" if deployed else "○待命"])
+		actor_list.add_item("%s  Lv.%d\n%s  %s" % [battle.actor_display_name(str(actor_id)), battle.progression.actor_level(actor_id), data.get("role", ""), "●上阵" if deployed else "○待命"])
 		actor_list.set_item_metadata(actor_list.item_count - 1, actor_id)
 		if actor_id == selected_actor: actor_list.select(actor_list.item_count - 1)
 
@@ -284,7 +304,7 @@ func refresh_party_controls() -> void:
 		var current := str(battle.progression.party[index])
 		var label := Label.new()
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.text = "%d. %s" % [index + 1, battle.actors.get(current, {}).get("name", "空位") if not current.is_empty() else "空位"]
+		label.text = "%d. %s" % [index + 1, battle.actor_display_name(current) if not current.is_empty() else "空位"]
 		row.add_child(label)
 		var assign := Button.new()
 		assign.text = "替换"
@@ -304,11 +324,14 @@ func refresh_center() -> void:
 	var level: int = battle.progression.team_level
 	var xp: int = int(battle.progression.team_exp)
 	var needed: int = battle.progression.experience_to_next(level)
-	actor_name.text = "%s  Lv.%d" % [data.get("name", selected_actor), level]
+	actor_name.text = "%s  Lv.%d" % [battle.actor_display_name(selected_actor), level]
 	actor_role.text = "%s · %s · %s · %s" % [data.get("world", ""), data.get("role", ""), basic_attack_label(data), "上阵中" if selected_actor in battle.progression.party else "未上阵，可正常培养"]
 	exp_bar.max_value = needed
 	exp_bar.value = xp
 	exp_label.text = "冒险团 Lv.%d / 上限Lv.%d　共享经验 %d / %d（%.1f%%）" % [level, battle.progression.actor_level_cap(), xp, needed, 100.0 * xp / maxf(1.0, needed)]
+	var preview: Dictionary = battle.breakthrough_preview(selected_actor)
+	breakthrough_button.disabled = not bool(preview.get("can_breakthrough", false))
+	breakthrough_button.tooltip_text = "已达到当前世界上限" if int(preview.current_tier) >= int(preview.maximum_tier) else "需要破限石×1（现有%d）" % int(preview.stones)
 	var layout := ArtCatalogScript.layout("portraits", selected_actor)
 	var scale := clampf(float(layout.get("scale", 1.0)), 0.25, 2.5)
 	var portrait_size := Vector2(170, 270) * scale
@@ -334,13 +357,29 @@ func refresh_stats() -> void:
 	if selected_actor.is_empty(): return
 	var data: Dictionary = battle.actors[selected_actor]
 	var level: int = battle.progression.actor_level(selected_actor)
-	var base: Dictionary = {"health": float(data.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(data.attack) * (1.0 + (level - 1) * 0.06), "defense": float(data.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0, "physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0, "damage_reduction":0.0, "healing_effect":0.0}
+	var breakthrough_stats: Dictionary = battle.breakthrough_base_stats(selected_actor)
+	var base: Dictionary = {"health": float(breakthrough_stats.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(breakthrough_stats.attack) * (1.0 + (level - 1) * 0.06), "defense": float(breakthrough_stats.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0, "physical_damage":0.0,"elemental_damage":0.0,"final_damage":0.0,"damage_reduction":0.0,"healing_effect":0.0}
 	var gear: Dictionary = battle.inventory.get_actor_stats(selected_actor)
 	var final: Dictionary = base.duplicate(true)
 	for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
 	var live = battle.get_hero(selected_actor)
 	if live != null: final = live.combat_snapshot()
-	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n冒险团共享等级 Lv.%d / 当前上限 Lv.%d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [data.name, level, battle.progression.actor_level_cap(), stat_rows(base, gear, final)]
+	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n冒险团共享等级 Lv.%d / 当前上限 Lv.%d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [battle.actor_display_name(selected_actor), level, battle.progression.actor_level_cap(), stat_rows(base, gear, final)]
+
+func _show_breakthrough_dialog() -> void:
+	if selected_actor.is_empty(): return
+	var preview: Dictionary = battle.breakthrough_preview(selected_actor)
+	var current: Dictionary = preview.current_stats
+	var next: Dictionary = preview.next_stats
+	breakthrough_dialog.dialog_text = "当前：凡%d　→　下一阶：凡%d\n基础生命 %.0f → %.0f\n基础攻击 %.0f → %.0f\n基础防御 %.0f → %.0f\n\n破限石：%d，本次消耗1颗。" % [int(preview.current_tier), int(preview.next_tier), float(current.max_hp), float(next.max_hp), float(current.attack), float(next.attack), float(current.defense), float(next.defense), int(preview.stones)]
+	breakthrough_dialog.popup_centered()
+
+func _confirm_breakthrough() -> void:
+	if battle.breakthrough_actor(selected_actor):
+		feedback.text = "%s已提升到新的世界阶位。" % battle.actor_display_name(selected_actor)
+		refresh_all(false)
+	else:
+		feedback.text = "破限失败：请检查破限石或当前已解锁世界阶位。"
 
 func stat_rows(base: Dictionary, gear: Dictionary, final: Dictionary) -> String:
 	var labels := {"health":"[基础] 生命", "attack":"[基础] 攻击", "defense":"[基础] 防御", "crit_chance":"[攻击] 暴击率", "crit_damage":"[攻击] 暴击伤害", "attack_speed":"[攻击] 攻击速度", "physical_damage":"[攻击] 物理增伤", "elemental_damage":"[攻击] 元素增伤", "final_damage":"[攻击] 最终伤害", "damage_reduction":"[防御] 减伤", "healing_effect":"[治疗] 治疗效果", "cooldown_reduction":"[特殊] 冷却缩减"}
@@ -575,19 +614,20 @@ func refresh_growth() -> void:
 	var history: Array = battle.progression.team_level_history
 	var lines: Array[String] = []
 	for entry in history.slice(0, 8): lines.append("Lv.%d · %s" % [int(entry.level), entry.get("source", "战斗")])
-	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n\n当前培养：冒险团共享Lv.%d / 当前上限Lv.%d；专属主动Lv.%d；专属被动Lv.%d\n\n[b]冒险团最近升级历程[/b]\n%s" % [data.name, data.role, ai_description(data), position_description(data), battle.progression.team_level, battle.progression.actor_level_cap(), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
+	var preview: Dictionary = battle.breakthrough_preview(selected_actor)
+	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n原生阶位：凡%d　当前属性阶位：凡%d　当前可达：凡%d\n\n当前培养：冒险团共享Lv.%d / 当前上限Lv.%d；专属主动Lv.%d；专属被动Lv.%d\n\n[b]冒险团最近升级历程[/b]\n%s" % [battle.actor_display_name(selected_actor), data.role, ai_description(data), position_description(data), int(preview.native_tier), int(preview.current_tier), int(preview.maximum_tier), battle.progression.team_level, battle.progression.actor_level_cap(), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
 
 func _select_actor(index: int) -> void:
 	selected_actor = str(actor_list.get_item_metadata(index))
 	selected_item_id = ""
 	preferred_equipment_slot = ""
-	feedback.text = "正在查看%s；编队未改变。" % battle.actors[selected_actor].name
+	feedback.text = "正在查看%s；编队未改变。" % battle.actor_display_name(selected_actor)
 	skills_dirty = true
 	refresh_all(true, true)
 
 func _assign_selected_actor(index: int) -> void:
 	if battle.progression.set_party_member(index, selected_actor):
-		feedback.text = "%s已上阵到位置%d；战场立即重建。" % [battle.actors[selected_actor].name, index + 1]
+		feedback.text = "%s已上阵到位置%d；战场立即重建。" % [battle.actor_display_name(selected_actor), index + 1]
 		battle.rebuild_party()
 		refresh_all(false)
 

@@ -4,6 +4,7 @@ extends CanvasLayer
 const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 
 signal actor_requested(actor_id: String)
+var pause_before_open := false
 
 class FurnitureDragButton extends Button:
 	var furniture_id := ""
@@ -103,10 +104,11 @@ func build_ui() -> void:
 	var achievement_scroll := ScrollContainer.new(); achievement_scroll.name = "成就"; achievement_box = VBoxContainer.new(); achievement_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL; achievement_scroll.add_child(achievement_box); right.add_child(achievement_scroll)
 
 func open() -> void:
+	if not panel.visible: pause_before_open = battle.is_paused
 	panel.visible = true; battle.is_paused = true; battle.battle_state_changed.emit("营地装修中"); refresh_all()
 
 func close_panel() -> void:
-	panel.visible = false; battle.is_paused = false; battle.battle_state_changed.emit("自动战斗中")
+	panel.visible = false; battle.is_paused = pause_before_open; battle.battle_state_changed.emit("已暂停" if battle.is_paused else "自动战斗中")
 
 func refresh_all() -> void:
 	if panel == null: return
