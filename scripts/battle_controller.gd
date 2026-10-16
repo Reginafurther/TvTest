@@ -13,6 +13,7 @@ const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
 const ShopManagerScript = preload("res://scripts/shop_manager.gd")
 const AdventureManagerScript = preload("res://scripts/adventure_manager.gd")
 const ResetManagerScript = preload("res://scripts/reset_manager.gd")
+const WORLD_ENEMY_DEFENSE_MULTIPLIER := 0.90
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
@@ -266,6 +267,14 @@ func apply_custom_difficulty(unit) -> void:
 	unit.set_meta("custom_difficulty_applied", true)
 	unit.set_meta("custom_difficulty_coefficient", float(profile.coefficient))
 
+func apply_world_enemy_defense_adjustment(unit) -> void:
+	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("world_defense_adjusted"): return
+	# The active combat context, rather than the reused actor template, decides
+	# whether the 10% world-map adjustment applies. Rift summons stay exempt.
+	if not active_rift_context.is_empty(): return
+	unit.defense *= WORLD_ENEMY_DEFENSE_MULTIPLIER
+	unit.set_meta("world_defense_adjusted", true)
+
 func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary = {}):
 	var unit = BattleUnitScript.new()
 	var data: Dictionary = actors.get(id, {}).duplicate(true)
@@ -286,6 +295,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 		unit.monster_level = int(worlds_config.maps.get(current_map_id, {}).get("difficulty_level", 1))
 		unit.enemy_type = str(data.get("enemy_type", "normal"))
 		apply_custom_difficulty(unit)
+		apply_world_enemy_defense_adjustment(unit)
 	unit.position = pos
 	unit.died.connect(_on_unit_died)
 	unit.combat_event.connect(_on_combat_event)
@@ -955,6 +965,24 @@ func rebuild_party() -> void:
 		battle_state_changed.emit("自动战斗中")
 	else:
 		battle_state_changed.emit("等待招募并上阵输出角色")
+
+func assign_party_member(index: int, actor_id: String) -> bool:
+	if index < 0 or index >= progression.party.size() or (not actor_id.is_empty() and actor_id not in progression.roster):
+		return false
+	var outgoing := str(progression.party[index])
+	var incoming_index: int = progression.party.find(actor_id) if not actor_id.is_empty() else -1
+	var should_swap_equipment: bool = not actor_id.is_empty() and incoming_index < 0 and not outgoing.is_empty() and outgoing != actor_id
+	if should_swap_equipment and not inventory.can_swap_actor_equipment(outgoing, actor_id):
+		log_message.emit("替换失败：%s" % inventory.last_error)
+		return false
+	if should_swap_equipment and not inventory.swap_actor_equipment(outgoing, actor_id, false):
+		return false
+	if not progression.set_party_member(index, actor_id, false):
+		if should_swap_equipment: inventory.swap_actor_equipment(outgoing, actor_id, false)
+		return false
+	if should_swap_equipment: inventory.save_to_disk()
+	progression.save_to_disk()
+	return true
 
 func has_damage_dealer_in_party() -> bool:
 	for actor_id in progression.party:

@@ -545,7 +545,7 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 		lines.append("当前实际效果：生命 +%.1f%%，防御 +%.1f%%" % [health_now * 100.0, defense_now * 100.0])
 		if level < max_level: lines.append("升级至Lv.%d：生命/防御各再提高 %.1f%%" % [level + 1, float(data.get("power_per_level", 0.0)) * 100.0])
 	elif current > 0.0:
-		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect in ["regeneration", "low_hp_regeneration"] else "普攻吸血" if effect == "life_steal" else "攻击/效果"
+		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect in ["regeneration", "low_hp_regeneration"] else "对护盾目标增伤" if effect == "shield_target_damage" else "防御穿透（补偿）" if effect == "defense_compensation" else "普攻吸血" if effect == "life_steal" else "攻击/效果"
 		lines.append("当前实际倍率：%.1f%% %s" % [current * 100.0, unit_name])
 	if data.has("hits"): lines.append("段数：%d" % int(data.hits))
 	if data.has("targets"): lines.append("最多目标：%d" % int(data.targets))
@@ -553,9 +553,13 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 	elif effect == "chain": lines.append("最多目标：3")
 	elif effect in ["heal", "hot", "cleanse", "damage", "armor_break", "burn", "poison", "shock", "freeze", "stun", "low_hp_damage", "leech_damage", "self_cost_damage"]: lines.append("目标：1")
 	if data.has("cooldown"):
-		var cooldown := float(data.cooldown)
+		var base_cooldown := float(data.cooldown)
+		var cooldown := base_cooldown
 		if exclusive: cooldown *= 1.0 - float(data.get("cooldown_per_level", 0.0)) * (level - 1)
-		lines.append("基础冷却：%.2f秒（装备冷却缩减另行结算）" % cooldown)
+		lines.append("当前冷却：%.2f秒（装备冷却缩减另行结算）" % cooldown)
+		if exclusive and level < max_level and float(data.get("cooldown_per_level", 0.0)) > 0.0:
+			var next_cooldown := roundf((base_cooldown * (1.0 - float(data.cooldown_per_level) * level) + 0.000001) * 100.0) / 100.0
+			lines.append("升级至Lv.%d冷却：%.2f秒" % [level + 1, next_cooldown])
 	if data.has("duration"): lines.append("持续：%.1f秒" % float(data.duration))
 	if data.has("damage_reduction"): lines.append("限时减伤：%.1f%%" % (float(data.damage_reduction) * 100.0))
 	if data.has("threshold"): lines.append("触发血线：≤%.1f%%" % (float(data.threshold) * 100.0))
@@ -635,13 +639,13 @@ func _select_actor(index: int) -> void:
 	refresh_all(true, true)
 
 func _assign_selected_actor(index: int) -> void:
-	if battle.progression.set_party_member(index, selected_actor):
+	if battle.assign_party_member(index, selected_actor):
 		feedback.text = "%s已上阵到位置%d；战场立即重建。" % [battle.actor_display_name(selected_actor), index + 1]
 		battle.rebuild_party()
 		refresh_all(false)
 
 func _clear_party_slot(index: int) -> void:
-	if battle.progression.set_party_member(index, ""):
+	if battle.assign_party_member(index, ""):
 		feedback.text = "位置%d已清空，角色培养数据保持不变。" % (index + 1)
 		battle.rebuild_party()
 		refresh_all(false)

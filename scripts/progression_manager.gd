@@ -358,13 +358,13 @@ func unlock_boss_actor(boss_id: String, actor_id: String) -> bool:
 		save_to_disk()
 	return first
 
-func set_party_member(index: int, actor_id: String) -> bool:
+func set_party_member(index: int, actor_id: String, autosave: bool = true) -> bool:
 	if index < 0 or index >= 4 or (not actor_id.is_empty() and actor_id not in roster):
 		return false
 	if actor_id.is_empty():
 		party[index] = ""
 		changed.emit()
-		save_to_disk()
+		if autosave: save_to_disk()
 		return true
 	var existing := party.find(actor_id)
 	if existing >= 0 and existing != index:
@@ -374,7 +374,7 @@ func set_party_member(index: int, actor_id: String) -> bool:
 	else:
 		party[index] = actor_id
 	changed.emit()
-	save_to_disk()
+	if autosave: save_to_disk()
 	return true
 
 func active_party() -> Array:

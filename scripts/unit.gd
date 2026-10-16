@@ -140,6 +140,8 @@ var vulnerability_time := 0.0
 var vulnerability_power := 0.0
 var metamorphosis_time := 0.0
 var metamorphosis_cooldown := 0.0
+var war_banner_icd_remaining := 0.0
+var war_banner_trigger_count := 0
 
 func valid_combat_source(source):
 	return source if is_instance_valid(source) else null
@@ -254,6 +256,8 @@ func _physics_process(delta: float) -> void:
 	vulnerability_time = maxf(0.0, vulnerability_time - delta)
 	metamorphosis_time = maxf(0.0, metamorphosis_time - delta)
 	metamorphosis_cooldown = maxf(0.0, metamorphosis_cooldown - delta)
+	war_banner_icd_remaining = maxf(0.0, war_banner_icd_remaining - delta)
+	if war_banner_icd_remaining < 0.0001: war_banner_icd_remaining = 0.0
 	if passive_skill_id == "wow_metamorphosis" and hp / maxf(1.0, max_hp) <= 0.40 and metamorphosis_time <= 0.0 and metamorphosis_cooldown <= 0.0:
 		metamorphosis_time = 7.0
 		metamorphosis_cooldown = 18.0
@@ -572,9 +576,6 @@ func basic_attack() -> void:
 		battle.note_passive(actor_id, passive_skill_id)
 	if passive_data.get("effect", "") == "execute_damage" and target.hp / maxf(1.0, target.max_hp) <= 0.35:
 		amount *= 1.0 + passive_value()
-		battle.note_passive(actor_id, passive_skill_id)
-	if passive_data.get("effect", "") == "burn_master" and target.burn_time > 0.0:
-		amount *= 1.0 + passive_value() * 0.65
 		battle.note_passive(actor_id, passive_skill_id)
 	if passive_data.get("effect", "") == "armor_ignore":
 		amount += target.defense * 0.55 * passive_value()
@@ -938,7 +939,6 @@ func try_use_skill() -> bool:
 				if actor_data.get("boss_id", "") == "mewtwo":
 					add_shield(max_hp * 0.12)
 				skill_timer = cooldown
-				if actor_data.has("boss_id"): on_boss_skill_cast()
 				battle.on_skill(self)
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
 				return true
@@ -994,7 +994,7 @@ func try_use_skill() -> bool:
 				battle.spawn_tracer(position, target.position, _skill_color()); skill_timer = cooldown; battle.on_skill(self); return true
 		"charm_control":
 			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 230.0)))):
-				target.take_damage(attack * 0.55, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
+				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				target.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.16)) * armor_break_multiplier()), 5.0)
 				target.apply_hard_control(float(skill_data.get("duration", 2.2)))
 				var haste := passive_value() if passive_data.get("effect", "") == "control_haste" else power
@@ -1192,6 +1192,13 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	var typed_amount := raw_amount
 	if damage_type == "physical": typed_amount *= 1.0 + float(source_snapshot.get("physical_damage", 0.0))
 	elif damage_type == "elemental": typed_amount *= 1.0 + float(source_snapshot.get("elemental_damage", 0.0))
+	# 九阴真经 checks the shield state before this hit consumes any layer.
+	if shield > 0.0 and live_source != null and live_source.has_general_passive("jy_nine_yin"):
+		typed_amount *= 1.0 + live_source.general_passive_by_id("jy_nine_yin")
+	# 北冥神功 uses Huang Zhong's defense-compensation model. It is additive
+	# raw compensation for direct basic/active hits, with no 75% shared cap.
+	if live_source != null and str(safe_context.get("kind", "")) in ["basic", "skill"] and live_source.has_general_passive("jy_beiming"):
+		typed_amount += defense * 0.55 * live_source.general_passive_by_id("jy_beiming")
 	if live_source != null and has_negative_status():
 		var status_bonus: float = live_source.passive_effect_total("status_amplifier")
 		if live_source.passive_data.get("effect", "") == "status_amplifier": status_bonus += live_source.passive_value()
@@ -1518,7 +1525,10 @@ func on_boss_skill_cast() -> void:
 	match str(actor_data.get("boss_mechanic", "")):
 		"shield_cycle": add_shield(max_hp * 0.08, 3.0)
 		"war_banner":
-			for ally in allied_units(8): ally.add_shield(max_hp * 0.04)
+			if war_banner_icd_remaining <= 0.0:
+				for ally in allied_units(8): ally.add_shield(max_hp * 0.04)
+				war_banner_icd_remaining = 12.0
+				war_banner_trigger_count += 1
 		"burning_aura":
 			for victim in battle.enemies_near(position, faction, 210.0, 8): victim.apply_burn(attack * 0.1, 4.0, self)
 		"charge_burn":

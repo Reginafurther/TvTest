@@ -140,6 +140,47 @@ func unequip_slot(actor_id: String, slot: String) -> bool:
 	save_to_disk()
 	return true
 
+func can_swap_actor_equipment(first_actor: String, second_actor: String) -> bool:
+	last_error = ""
+	if first_actor.is_empty() or second_actor.is_empty() or first_actor == second_actor:
+		last_error = "装备交换需要两个不同角色。"
+		return false
+	if not equipped.has(first_actor) or not equipped.has(second_actor):
+		last_error = "角色装备栏尚未初始化。"
+		return false
+	var proposed: Dictionary = equipped.duplicate(true)
+	proposed[first_actor] = equipped[second_actor].duplicate(true)
+	proposed[second_actor] = equipped[first_actor].duplicate(true)
+	var seen: Dictionary = {}
+	for actor_id in proposed:
+		var mapping: Dictionary = proposed[actor_id]
+		for slot in config.get("slots", {}):
+			if not mapping.has(slot):
+				last_error = "%s缺少装备栏%s。" % [actor_id, slot]
+				return false
+			var instance_id := str(mapping[slot])
+			if instance_id.is_empty(): continue
+			if seen.has(instance_id) or _item_instance_count(instance_id) != 1:
+				last_error = "装备实例ID重复或不存在，交换已取消。"
+				return false
+			var item = find_item(instance_id)
+			if item == null or slot not in item.get("compatible_slots", [item.get("slot", "")]):
+				last_error = "装备与目标栏位不兼容，交换已取消。"
+				return false
+			seen[instance_id] = true
+	return true
+
+func swap_actor_equipment(first_actor: String, second_actor: String, autosave: bool = true) -> bool:
+	if not can_swap_actor_equipment(first_actor, second_actor): return false
+	var first_mapping: Dictionary = equipped[first_actor].duplicate(true)
+	equipped[first_actor] = equipped[second_actor].duplicate(true)
+	equipped[second_actor] = first_mapping
+	equipment_changed.emit(first_actor)
+	equipment_changed.emit(second_actor)
+	inventory_changed.emit()
+	if autosave: save_to_disk()
+	return true
+
 func get_equipped_item(actor_id: String, slot: String):
 	if not equipped.has(actor_id):
 		return null

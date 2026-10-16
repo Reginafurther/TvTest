@@ -9,7 +9,7 @@
     "power": 1.05,
     "power_per_level": 0.06,
     "range": 135,
-    "description": "对周围最多6名敌人造成范围物理伤害。"
+    "description": "对目标附近最多6名敌人造成105% → 161.7%攻击力的范围物理伤害。"
   },
   "tk_triple_slash": {
     "damage_type": "physical",
@@ -22,7 +22,7 @@
     "power_per_level": 0.035,
     "hits": 3,
     "range": 95,
-    "description": "快速攻击当前目标3次。"
+    "description": "对单体连续攻击3次，每次造成52% → 68.38%攻击力的物理伤害，总计156% → 205.14%，每段独立结算防御。"
   },
   "tk_armor_break": {
     "damage_type": "physical",
@@ -36,7 +36,7 @@
     "armor_break": 0.28,
     "duration": 5.0,
     "range": 120,
-    "description": "造成伤害并使目标防御降低28%。"
+    "description": "对单体造成90% → 130.5%攻击力的物理伤害，并降低目标防御28%，持续5秒。"
   },
   "tk_flame_arrow": {
     "damage_type": "physical",
@@ -48,7 +48,7 @@
     "power": 0.72,
     "power_per_level": 0.045,
     "range": 220,
-    "description": "远距离贯穿射击，对单体造成物理伤害。"
+    "description": "远距离攻击单体，造成72% → 101.16%攻击力的物理伤害。"
   },
   "tk_poison_dart": {
     "damage_type": "elemental",
@@ -62,7 +62,7 @@
     "dot_power": 0.18,
     "duration": 6.0,
     "range": 210,
-    "description": "造成伤害并附加持续燃烧。"
+    "description": "对单体造成62% → 84.32%攻击力的伤害，并附加每秒18%攻击力、持续6秒的燃烧。"
   },
   "tk_thunder_talisman": {
     "damage_type": "physical",
@@ -75,7 +75,7 @@
     "power_per_level": 0.055,
     "duration": 1.5,
     "range": 210,
-    "description": "震击目标并确定造成1.5秒硬直（Boss受控制抗性与累计上限约束）。"
+    "description": "对单体造成100% → 149.5%攻击力的伤害，并施加1.5秒硬直；Boss受到控制抗性和累计控制上限限制。"
   },
   "tk_frost_strategy": {
     "damage_type": "physical",
@@ -87,7 +87,7 @@
     "power": 0.75,
     "power_per_level": 0.04,
     "range": 205,
-    "description": "造成重击，自身生命不高于40%时本次伤害提高65%。"
+    "description": "对单体造成75% → 102%攻击力的伤害；自身生命不高于40%时，本次伤害额外提高65%。"
   },
   "tk_benevolent_heal": {
     "damage_type": "none",
@@ -99,7 +99,7 @@
     "power": 1.0,
     "power_per_level": 0.06,
     "range": 280,
-    "description": "立即治疗生命比例最低的队友。"
+    "description": "治疗生命比例最低的受伤队友，基础治疗倍率为100% → 154%攻击力，实际治疗受到主动治疗系数及治疗加成影响。"
   },
   "tk_recovery_banner": {
     "damage_type": "none",
@@ -112,7 +112,7 @@
     "power_per_level": 0.02,
     "duration": 6.0,
     "range": 280,
-    "description": "使生命最低的队友在6秒内持续恢复。"
+    "description": "使受伤队友在6秒内持续恢复生命，基础总治疗倍率为22% → 25.96%攻击力，并受到治疗加成影响。"
   },
   "tk_purify": {
     "damage_type": "none",
@@ -124,7 +124,7 @@
     "power": 0.45,
     "power_per_level": 0.03,
     "range": 300,
-    "description": "清除队友的负面状态并恢复少量生命。"
+    "description": "清除一名队友的负面状态，并恢复相当于45% → 57.15%攻击力的基础治疗量。"
   },
   "tk_challenge_shout": {
     "damage_type": "none",
@@ -137,7 +137,7 @@
     "power_per_level": 0.012,
     "duration": 3.5,
     "range": 190,
-    "description": "嘲讽周围敌人并获得护盾。"
+    "description": "嘲讽附近最多12名敌人3.5秒，并获得相当于自身最大生命8% → 8.864%的护盾，持续6秒。"
   },
   "tk_iron_wall": {
     "damage_type": "none",
@@ -149,7 +149,7 @@
     "power": 0.16,
     "power_per_level": 0.015,
     "targets": 4,
-    "description": "为全队附加基于施法者生命的护盾。"
+    "description": "为最多4名队友附加护盾，每人的护盾量为施法者最大生命的16% → 18.16%，持续6秒。"
   },
   "tk_guard_order": {
     "damage_type": "none",
@@ -162,7 +162,7 @@
     "power_per_level": 0.012,
     "duration": 5.0,
     "targets": 1,
-    "description": "为生命最低的一名队友分担部分伤害。"
+    "description": "为一名受伤队友分担22% → 24.376%的伤害，持续5秒。"
   },
   "tk_shared_fate": {
     "damage_type": "none",
@@ -174,7 +174,7 @@
     "power": 0.28,
     "power_per_level": 0.01,
     "duration": 5.0,
-    "description": "短时间提高自身移动与攻击速度。"
+    "description": "自身移动速度和普通攻击频率提高28% → 30.52%，持续5秒。"
   },
   "tk_swift_step": {
     "damage_type": "none",
@@ -186,7 +186,7 @@
     "power": 0.38,
     "power_per_level": 0.02,
     "duration": 4.0,
-    "description": "短时间大幅提高自身闪避。"
+    "description": "自身闪避率临时提高38% → 44.84%，持续4秒。"
   },
   "tk_counter_stance": {
     "damage_type": "physical",
@@ -198,7 +198,7 @@
     "power": 0.65,
     "power_per_level": 0.035,
     "duration": 5.0,
-    "description": "进入反击架势，受击时反伤攻击者。"
+    "description": "进入持续5秒的反击状态，受到有效伤害后，对攻击者造成相当于自身攻击力65% → 85.475%的反击伤害。"
   },
   "pk_thunder_chain": {
     "damage_type": "elemental",
@@ -414,7 +414,7 @@
     "effect": "stat_attack",
     "power": 0.09,
     "power_per_level": 0.012,
-    "description": "持续提高最终攻击。"
+    "description": "常驻提高自身攻击力9% → 19.8%。"
   },
   "tk_iron_will": {
     "name": "铜墙铁壁",
@@ -424,7 +424,7 @@
     "health": 0.1,
     "defense": 0.1,
     "power_per_level": 0.012,
-    "description": "持续提高生命与防御。"
+    "description": "常驻提高自身最大生命和防御10% → 20.8%。"
   },
   "tk_swift_assault": {
     "name": "连战之势",
@@ -433,7 +433,7 @@
     "effect": "attack_speed",
     "power": 0.1,
     "power_per_level": 0.012,
-    "description": "持续提高攻击速度。"
+    "description": "常驻提高自身攻击速度10% → 20.8%。"
   },
   "tk_strategic_mind": {
     "name": "仁心妙手",
@@ -442,7 +442,7 @@
     "effect": "healing",
     "power": 0.08,
     "power_per_level": 0.01,
-    "description": "提高所有治疗效果。"
+    "description": "常驻提高自身治疗效果8% → 17%，作用于符合条件的普通攻击治疗与主动技能治疗。"
   },
   "tk_veteran_guard": {
     "name": "破阵之力",
@@ -451,7 +451,7 @@
     "effect": "damage_reduction",
     "power": 0.07,
     "power_per_level": 0.008,
-    "description": "持续降低受到的伤害。"
+    "description": "常驻降低自身受到的伤害7% → 14.2%，与其他独立减伤层共同结算。"
   },
   "tk_poison_edge": {
     "name": "越战越勇",
@@ -459,9 +459,9 @@
     "category": "passive",
     "effect": "stat_attack",
     "status": "poison",
-    "power": 0.22,
-    "power_per_level": 0.02,
-    "description": "持续提高最终攻击。"
+    "power": 0.09,
+    "power_per_level": 0.012,
+    "description": "常驻提高自身攻击力9% → 19.8%。"
   },
   "tk_burning_will": {
     "name": "浴火战意",
@@ -471,7 +471,7 @@
     "status": "burn",
     "power": 0.22,
     "power_per_level": 0.02,
-    "description": "提高燃烧伤害与持续时间。"
+    "description": "提高自身施加的燃烧伤害与持续时间22% → 40%。"
   },
   "tk_kill_momentum": {
     "name": "乘胜追击",
@@ -481,7 +481,7 @@
     "power": 0.12,
     "power_per_level": 0.012,
     "duration": 5.0,
-    "description": "击杀后短暂提高攻击与攻击速度。"
+    "description": "击杀敌人后，自身攻击力与普通攻击速度提高12% → 22.8%，持续5秒。"
   },
   "tk_counter_training": {
     "name": "避实击虚",
@@ -490,7 +490,7 @@
     "effect": "critical",
     "power": 0.14,
     "power_per_level": 0.012,
-    "description": "持续提高暴击率。"
+    "description": "常驻提高自身暴击率14% → 24.8%。"
   },
   "tk_formation_aegis": {
     "name": "同袍协战",
@@ -499,7 +499,7 @@
     "effect": "friend_guard",
     "power": 0.06,
     "power_per_level": 0.006,
-    "description": "降低自身与附近队友受到的伤害。"
+    "description": "使自身及附近220距离内的队友受到的伤害降低6% → 11.4%，多个光环遵循现有减伤上限。"
   },
   "pk_electric_skin": {
     "name": "静电传导",

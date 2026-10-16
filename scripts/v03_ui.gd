@@ -1121,19 +1121,19 @@ func exchange_actor(index: int, list: ItemList) -> void:
 	_recruit_selected_actor()
 
 func assign_selected_party(index: int) -> void:
-	if battle.progression.set_party_member(index, selected_party_actor):
+	if battle.assign_party_member(index, selected_party_actor):
 		recruit_feedback = "%s已放入位置%d，战场已立即更新。" % [battle.actor_display_name(selected_party_actor), index + 1]
 		battle.rebuild_party()
 		refresh()
 
 func clear_party_slot(index: int) -> void:
-	if battle.progression.set_party_member(index, ""):
+	if battle.assign_party_member(index, ""):
 		recruit_feedback = "位置%d已清空。" % (index + 1)
 		battle.rebuild_party()
 		refresh()
 
 func change_party(index: int, select_index: int, select: OptionButton) -> void:
-	if battle.progression.set_party_member(index, select.get_item_metadata(select_index)):
+	if battle.assign_party_member(index, select.get_item_metadata(select_index)):
 		battle.rebuild_party()
 		refresh()
 
