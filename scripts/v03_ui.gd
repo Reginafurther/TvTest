@@ -17,7 +17,6 @@ var pending_dismantle := ""
 var toolbar_buttons: Dictionary = {}
 var inventory_ui
 var character_ui
-var camp_ui
 var toolbar_root: GridContainer
 var aux_root: ScrollContainer
 var aux_list: VBoxContainer
@@ -28,8 +27,6 @@ var selected_shop_product := ""
 var selected_shop_item := ""
 var shop_quantity := 1
 var shop_feedback := ""
-var selected_skill_actor := ""
-var skill_feedback := ""
 var rewards_feedback := ""
 var shop_icon_cache: Dictionary = {}
 var selected_party_actor := ""
@@ -75,7 +72,7 @@ func build_toolbar() -> void:
 	backpack_space.custom_minimum_size = Vector2(105, 57)
 	backpack_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toolbar_root.add_child(backpack_space)
-	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["挑战", "challenge"], ["营地", "camp"], ["锻造", "craft"], ["技能", "strategy"], ["暂停", "pause"]]:
+	for spec in [["角色", "party"], ["招募", "recruit"], ["世界", "world"], ["挑战", "challenge"], ["锻造", "craft"], ["图鉴", "codex"], ["暂停", "pause"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(105, 57)
@@ -83,10 +80,8 @@ func build_toolbar() -> void:
 		V035ThemeScript.button(button, "gold" if spec[1] in ["recruit", "boss"] else "cream")
 		if spec[1] == "pause":
 			button.pressed.connect(_toggle_pause)
-		elif spec[1] == "camp":
-			button.pressed.connect(_open_camp)
-		elif spec[1] in ["party", "strategy"]:
-			button.pressed.connect(_open_character_view.bind("growth" if spec[1] == "party" else "skills"))
+		elif spec[1] == "party":
+			button.pressed.connect(_open_character_view.bind("growth"))
 		else:
 			button.pressed.connect(open_view.bind(spec[1]))
 		toolbar_root.add_child(button)
@@ -101,7 +96,7 @@ func build_toolbar() -> void:
 	aux_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	aux_list.add_theme_constant_override("separation", 2)
 	aux_root.add_child(aux_list)
-	for spec in [["商店", "shop"], ["奇遇", "encounters"], ["成就", "achievements"], ["收益", "rewards"], ["目标", "objectives"], ["日志", "logs"], ["战斗统计", "stats"]]:
+	for spec in [["商店", "shop"], ["奇遇", "encounters"], ["成就", "achievements"], ["收益", "rewards"], ["挂机设置", "objectives"], ["日志", "logs"], ["战斗统计", "stats"]]:
 		var button := Button.new()
 		button.text = spec[0]
 		button.custom_minimum_size = Vector2(115, 27)
@@ -123,10 +118,6 @@ func apply_layout(viewport_size: Vector2, factor: float, offset_x: float, footer
 func _toggle_pause() -> void:
 	battle.is_paused = not battle.is_paused
 	battle.battle_state_changed.emit("已暂停" if battle.is_paused else "自动战斗中")
-
-func _open_camp() -> void:
-	if panel.visible: close_panel()
-	if camp_ui != null: camp_ui.open()
 
 func _remember_log(message: String) -> void:
 	log_lines.append(message)
@@ -178,7 +169,7 @@ func build_panel() -> void:
 	add_child(bulk_sell_dialog)
 	reset_dialog = ConfirmationDialog.new()
 	reset_dialog.title = "二次确认：备份并重新开始"
-	reset_dialog.dialog_text = "系统将先完整备份并校验现有存档，然后重置角色、装备、技能、主线、秘境、营地与成就。\n\n备份失败时绝不会执行重置。此操作完成后将重新载入游戏。"
+	reset_dialog.dialog_text = "系统将先完整备份并校验现有存档，然后重置角色、装备、技能、主线、秘境与成就。\n\n备份失败时绝不会执行重置。此操作完成后将重新载入游戏。"
 	reset_dialog.ok_button_text = "确认备份并重新开始"
 	reset_dialog.cancel_button_text = "取消"
 	reset_dialog.confirmed.connect(_confirm_safe_reset)
@@ -240,7 +231,7 @@ func refresh() -> void:
 		"recruit", "party": build_recruit()
 		"boss", "rift", "challenge": build_challenge()
 		"craft": build_craft()
-		"strategy": build_strategy()
+		"codex": build_codex()
 		"stats": build_stats()
 		"rewards": build_rewards()
 		"objectives": build_objectives()
@@ -360,7 +351,7 @@ func _claim_offline_rewards() -> void:
 	refresh()
 
 func build_objectives() -> void:
-	title.text = "关卡目标"
+	title.text = "挂机设置"
 	var info := Label.new()
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—100关推进；每10关依次开放下一世界。" % battle.worlds_config.maps[battle.current_map_id].name
@@ -374,6 +365,48 @@ func build_objectives() -> void:
 	auto_push.button_pressed = battle.progression.auto_push
 	auto_push.toggled.connect(func(enabled: bool): battle.set_auto_push(enabled))
 	content.add_child(auto_push)
+	var p = battle.progression
+	var preset_label := Label.new(); preset_label.text = "自动战斗策略"; preset_label.add_theme_font_size_override("font_size", 18); content.add_child(preset_label)
+	var preset := OptionButton.new()
+	for name in p.strategy_presets:
+		preset.add_item(name); preset.set_item_metadata(preset.item_count - 1, name)
+		if name == p.active_strategy: preset.select(preset.item_count - 1)
+	preset.item_selected.connect(func(i): p.active_strategy = str(preset.get_item_metadata(i)); p.save_to_disk(); refresh())
+	content.add_child(preset)
+	var data: Dictionary = p.strategy_presets[p.active_strategy]
+	for spec in [["自身生命阈值", "self_hp"], ["队友生命阈值", "ally_hp"], ["周围敌人数阈值", "enemy_count"]]:
+		var row := HBoxContainer.new(); content.add_child(row)
+		var label := Label.new(); label.text = spec[0]; label.custom_minimum_size = Vector2(180, 24); row.add_child(label)
+		var spin := SpinBox.new(); spin.min_value = 1 if spec[1] == "enemy_count" else 0.05; spin.max_value = 8 if spec[1] == "enemy_count" else 1.0; spin.step = 1 if spec[1] == "enemy_count" else 0.05; spin.value = float(data.get(spec[1], 1)); spin.value_changed.connect(update_strategy.bind(spec[1])); row.add_child(spin)
+	var priority_title := Label.new(); priority_title.text = "上阵角色技能释放优先级"; priority_title.add_theme_font_size_override("font_size", 18); content.add_child(priority_title)
+	for actor_id in p.party:
+		if str(actor_id).is_empty(): continue
+		var row := HBoxContainer.new(); content.add_child(row)
+		var label := Label.new(); label.text = battle.actor_display_name(str(actor_id)); label.custom_minimum_size = Vector2(150, 28); row.add_child(label)
+		var select := OptionButton.new(); select.add_item("专属优先"); select.add_item("通用优先")
+		select.selected = 0 if p.skill_priorities.get(actor_id, ["exclusive", "general"])[0] == "exclusive" else 1
+		select.item_selected.connect(_set_party_skill_priority.bind(str(actor_id))); row.add_child(select)
+		var ai := Label.new(); ai.text = _idle_ai_description(battle.actors.get(actor_id, {})); ai.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; ai.size_flags_horizontal = Control.SIZE_EXPAND_FILL; row.add_child(ai)
+
+func _set_party_skill_priority(index: int, actor_id: String) -> void:
+	battle.progression.set_skill_priority(actor_id, index == 0)
+	battle.rebuild_party()
+
+func _idle_ai_description(data: Dictionary) -> String:
+	if str(data.get("basic_action", "")) == "heal" or str(data.get("combat_role", "")) == "healer": return "后排治疗低生命队友，受威胁时后撤。"
+	if str(data.get("combat_role", "")) == "tank": return "前排接敌并保护队友。"
+	if str(data.get("combat_style", "")) == "ranged": return "保持安全距离进行远程输出或辅助。"
+	return "主动接近目标进行近战输出。"
+
+func build_codex() -> void:
+	title.text = "世界传说装备图鉴"
+	var intro := Label.new(); intro.text = "各世界大秘境独有红色传说装备（固定专属词条不占普通词条数量）"; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
+	var drops: Dictionary = battle.adventure.config.get("rift", {}).get("legendary_drops", {})
+	for world_id in drops:
+		var item: Dictionary = drops[world_id]
+		var world_name := str(battle.adventure.config.get("rift", {}).get("worlds", {}).get(world_id, {}).get("name", world_id)).replace("大秘境", "")
+		var slot_name := str(battle.equipment_config.get("slots", {}).get(item.get("slot", ""), item.get("slot", "")))
+		var line := Label.new(); line.text = "%s｜%s｜%s｜%s" % [world_name, item.get("name", "未知传说"), slot_name, item.get("affix_name", "")]; line.add_theme_color_override("font_color", Color("#D84A4A")); line.add_theme_font_size_override("font_size", 18); content.add_child(line)
 
 func build_logs() -> void:
 	title.text = "战斗日志"
@@ -755,7 +788,9 @@ func build_craft() -> void:
 	var list := ItemList.new()
 	list.custom_minimum_size = Vector2(0, 235)
 	for item in battle.inventory.items:
-		var idx := list.add_item("Lv.%d %s" % [item.level, item.name])
+		var owner: String = battle.inventory.item_owner(str(item.instance_id))
+		var wearer := "｜%s穿戴" % battle.actor_display_name(owner) if not owner.is_empty() else ""
+		var idx := list.add_item("Lv.%d %s%s" % [item.level, item.name, wearer])
 		list.set_item_metadata(idx, item.instance_id)
 	list.item_selected.connect(func(index): selected_item_id = list.get_item_metadata(index); refresh_craft_actions())
 	content.add_child(list)
@@ -777,7 +812,9 @@ func refresh_craft_actions() -> void:
 	actions.add_child(dismantle)
 	var affix_select := OptionButton.new()
 	for i in range(item.get("affixes", []).size()):
-		affix_select.add_item("词条%d：%s" % [i + 1, item.affixes[i].stat])
+		var stat_id := str(item.affixes[i].stat)
+		var stat_name := str(battle.equipment_config.get("affixes", {}).get(stat_id, {}).get("name", stat_id))
+		affix_select.add_item("词条%d：%s" % [i + 1, stat_name])
 		affix_select.set_item_metadata(i, i)
 	affix_select.item_selected.connect(func(i): selected_affix = i)
 	actions.add_child(affix_select)
@@ -809,7 +846,9 @@ func begin_reroll() -> void:
 		return
 	var row := HBoxContainer.new()
 	var label := Label.new()
-	label.text = "候选：%s %.3f（已扣%d材料）" % [result.candidate.stat, result.candidate.value, result.cost]
+	var stat_id := str(result.candidate.stat)
+	var stat_name := str(battle.equipment_config.get("affixes", {}).get(stat_id, {}).get("name", stat_id))
+	label.text = "候选：%s %.3f（已扣%d材料）" % [stat_name, result.candidate.value, result.cost]
 	row.add_child(label)
 	var accept := Button.new(); accept.text = "接受新词条"; accept.pressed.connect(resolve_reroll.bind(true)); row.add_child(accept)
 	var keep := Button.new(); keep.text = "保留旧词条"; keep.pressed.connect(resolve_reroll.bind(false)); row.add_child(keep)
@@ -818,74 +857,6 @@ func begin_reroll() -> void:
 func resolve_reroll(accept: bool) -> void:
 	battle.crafting.resolve_reroll(accept)
 	battle.log_message.emit("已%s重铸候选" % ("接受" if accept else "放弃"))
-	refresh()
-
-func build_strategy() -> void:
-	title.text = "主动 / 被动技能与自动策略"
-	var p = battle.progression
-	if selected_skill_actor.is_empty() or selected_skill_actor not in p.roster:
-		selected_skill_actor = p.roster[0]
-	var actor_select := OptionButton.new()
-	for actor_id in p.roster:
-		actor_select.add_item("Lv.%d　%s" % [p.actor_level(actor_id), battle.actor_display_name(str(actor_id))])
-		actor_select.set_item_metadata(actor_select.item_count - 1, actor_id)
-		if actor_id == selected_skill_actor: actor_select.select(actor_select.item_count - 1)
-	actor_select.item_selected.connect(func(index): selected_skill_actor = actor_select.get_item_metadata(index); skill_feedback = ""; refresh())
-	content.add_child(actor_select)
-	var actor: Dictionary = battle.actors[selected_skill_actor]
-	var active: Dictionary = battle.skills.get(actor.get("skill", ""), {})
-	var passive: Dictionary = battle.passives_config.get(actor.get("passive_skill", actor.get("talent", "")), {})
-	var active_level: int = p.skill_level(selected_skill_actor, "active")
-	var passive_level: int = p.skill_level(selected_skill_actor, "passive")
-	var active_power: float = float(active.get("power", 1.0)) * (1.0 + float(active.get("power_per_level", 0.0)) * (active_level - 1))
-	var next_power: float = float(active.get("power", 1.0)) * (1.0 + float(active.get("power_per_level", 0.0)) * active_level)
-	var cooldown: float = float(active.get("cooldown", 0.0)) * (1.0 - float(active.get("cooldown_per_level", 0.0)) * (active_level - 1))
-	var next_cooldown: float = float(active.get("cooldown", 0.0)) * (1.0 - float(active.get("cooldown_per_level", 0.0)) * active_level)
-	var passive_value: float = float(passive.get("value", 0.0)) + float(passive.get("per_level", 0.0)) * (passive_level - 1)
-	var next_passive: float = passive_value + float(passive.get("per_level", 0.0))
-	var detail := RichTextLabel.new()
-	detail.bbcode_enabled = true
-	detail.custom_minimum_size = Vector2(0, 150)
-	detail.text = "[b][color=#72D8FF]主动 · %s　Lv.%d[/color][/b]\n%s\n威力 %.2f → %.2f　冷却 %.2fs → %.2fs\n\n[b][color=#FFD06A]被动 · %s　Lv.%d[/color][/b]\n%s\n效果 %.1f%% → %.1f%%" % [active.get("name", "未配置"), active_level, active.get("description", ""), active_power, next_power, cooldown, next_cooldown, passive.get("name", "未配置"), passive_level, passive.get("description", ""), passive_value * 100.0, next_passive * 100.0]
-	content.add_child(detail)
-	var upgrades := HBoxContainer.new()
-	content.add_child(upgrades)
-	for kind in ["active", "passive"]:
-		var cost: Dictionary = p.skill_upgrade_cost(selected_skill_actor, kind)
-		var button := Button.new()
-		button.text = "升级%s（%d金币+%d材料）" % ["主动" if kind == "active" else "被动", int(cost.gold), int(cost.salvage_dust)]
-		button.disabled = p.skill_level(selected_skill_actor, kind) >= 10
-		button.pressed.connect(_upgrade_selected_skill.bind(kind))
-		upgrades.add_child(button)
-	var feedback := Label.new()
-	feedback.text = skill_feedback if not skill_feedback.is_empty() else "技能升级会立即进入实际战斗计算并自动存档。"
-	feedback.add_theme_color_override("font_color", Color("#FFD27A"))
-	content.add_child(feedback)
-	content.add_child(HSeparator.new())
-	var strategy_label := Label.new()
-	strategy_label.text = "自动施放策略"
-	strategy_label.add_theme_font_size_override("font_size", 17)
-	content.add_child(strategy_label)
-	var preset := OptionButton.new()
-	for name in p.strategy_presets:
-		preset.add_item(name)
-		preset.set_item_metadata(preset.item_count - 1, name)
-		if name == p.active_strategy: preset.select(preset.item_count - 1)
-	preset.item_selected.connect(func(i): p.active_strategy = preset.get_item_metadata(i); p.save_to_disk(); refresh())
-	content.add_child(preset)
-	var data: Dictionary = p.strategy_presets[p.active_strategy]
-	for spec in [["自身生命阈值", "self_hp"], ["队友生命阈值", "ally_hp"], ["周围敌人数阈值", "enemy_count"]]:
-		var row := HBoxContainer.new(); content.add_child(row)
-		var label := Label.new(); label.text = spec[0]; label.custom_minimum_size = Vector2(180, 24); row.add_child(label)
-		var spin := SpinBox.new(); spin.min_value = 1 if spec[1] == "enemy_count" else 0.05; spin.max_value = 8 if spec[1] == "enemy_count" else 1.0; spin.step = 1 if spec[1] == "enemy_count" else 0.05; spin.value = data[spec[1]]; spin.value_changed.connect(update_strategy.bind(spec[1])); row.add_child(spin)
-
-func _upgrade_selected_skill(kind: String) -> void:
-	if battle.progression.upgrade_skill(selected_skill_actor, kind):
-		skill_feedback = "%s的%s技能升级成功，战斗单位已刷新。" % [battle.actor_display_name(selected_skill_actor), "主动" if kind == "active" else "被动"]
-		battle.rebuild_party()
-		battle.log_message.emit(skill_feedback)
-	else:
-		skill_feedback = "升级失败：请检查金币、重铸材料或技能是否已满级。"
 	refresh()
 
 func build_stats() -> void:

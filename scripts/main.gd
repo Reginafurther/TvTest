@@ -9,7 +9,6 @@ const ArtCatalogScript = preload("res://scripts/art_catalog.gd")
 const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 const V035ThemeScript = preload("res://scripts/v035_theme.gd")
 const CharacterUIScript = preload("res://scripts/character_ui.gd")
-const CampUIScript = preload("res://scripts/camp_ui.gd")
 const ResetManagerScript = preload("res://scripts/reset_manager.gd")
 
 var battle: Node2D
@@ -34,7 +33,6 @@ var objective_chip: PanelContainer
 var objective_button: Button
 var backdrop: ColorRect
 var character_ui
-var camp_ui
 
 func _ready() -> void:
 	DisplayServer.window_set_title("万界冒险团 V1.0")
@@ -55,16 +53,11 @@ func _ready() -> void:
 	character_ui.setup(battle)
 	inventory_ui.character_ui = character_ui
 	character_ui.inventory_ui = inventory_ui
-	camp_ui = CampUIScript.new()
-	add_child(camp_ui)
-	camp_ui.setup(battle)
-	camp_ui.actor_requested.connect(func(actor_id): camp_ui.close_panel(); character_ui.selected_actor = actor_id; character_ui.open("stats"))
 	v03_ui = V03UIScript.new()
 	add_child(v03_ui)
 	v03_ui.setup(battle)
 	v03_ui.inventory_ui = inventory_ui
 	v03_ui.character_ui = character_ui
-	v03_ui.camp_ui = camp_ui
 	inventory_ui.feature_ui = v03_ui
 	tutorial_ui = TutorialUIScript.new()
 	add_child(tutorial_ui)
@@ -88,8 +81,6 @@ func _ready() -> void:
 		call_deferred("_save_v05_preview", Vector2i(1920, 1080), "v05_1920.png", "")
 	elif "--v05-preview-shop" in OS.get_cmdline_user_args():
 		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_shop.png", "shop")
-	elif "--v05-preview-skills" in OS.get_cmdline_user_args():
-		call_deferred("_save_v05_preview", Vector2i(1440, 768), "v05_skills.png", "strategy")
 	elif "--v06-preview-character-1440" in OS.get_cmdline_user_args():
 		call_deferred("_save_v06_character_preview", Vector2i(1440, 768), "v06_character_1440.png")
 	elif "--v06-preview-character-1920" in OS.get_cmdline_user_args():
@@ -188,8 +179,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			dialog.hide()
 			get_viewport().set_input_as_handled()
 			return
-	if camp_ui != null and camp_ui.panel.visible: camp_ui.close_panel()
-	elif character_ui != null and character_ui.panel.visible: character_ui.close_panel()
+	if character_ui != null and character_ui.panel.visible: character_ui.close_panel()
 	elif inventory_ui != null and inventory_ui.panel.visible: inventory_ui.toggle()
 	elif v03_ui != null and v03_ui.panel.visible: v03_ui.close_panel()
 	else: return
@@ -277,7 +267,7 @@ func build_ui() -> void:
 	V035ThemeScript.label(objective_label, 16, Color("#493520"))
 	objective_chip.add_child(objective_label)
 	objective_button = Button.new()
-	objective_button.text = "查看目标"
+	objective_button.text = "挂机设置"
 	objective_button.size = Vector2(88, 36)
 	V035ThemeScript.button(objective_button, "gold")
 	objective_button.pressed.connect(func(): v03_ui.open_view("objectives"))
@@ -1036,10 +1026,11 @@ func finish_v05_skill_test() -> void:
 	var after_power: float = float(battle.skills.spear_flurry.power) * (1.0 + float(battle.skills.spear_flurry.power_per_level) * (after_level - 1))
 	if after_level != before_level + 1 or after_power <= before_power:
 		failures.append("技能升级未真实提高战斗倍率")
-	v03_ui.selected_skill_actor = "zhao_yun"
-	v03_ui.open_view("strategy")
-	if "主动" not in v03_ui.title.text or v03_ui.content.get_child_count() < 8:
+	character_ui.selected_actor = "zhao_yun"
+	character_ui.open("skills")
+	if character_ui.skills_box.get_child_count() < 8:
 		failures.append("技能详情与升级界面未构建")
+	character_ui.close_panel()
 	var reload_progress = ProgressionManagerScript.new()
 	reload_progress.save_path = p.save_path
 	if not reload_progress.load_from_disk() or reload_progress.skill_level("zhao_yun", "active") != after_level:
@@ -1938,7 +1929,7 @@ func finish_v061_playtest_fixes_test() -> void:
 	var shield_result: Dictionary = defender.take_damage(50.0, attacker, false, {"kind":"skill", "skill_id":"test_shield", "allow_triggers":false})
 	if shield_result.reason != "shield_absorbed" or float(shield_result.shield_absorbed) <= 0.0 or defender.hp != defender.max_hp:
 		failures.append("护盾吸收未返回明确原因或错误扣除生命")
-	defender.shield_time = 0.01
+	for layer in defender.shield_layers: layer.duration = 0.01
 	defender._physics_process(0.02)
 	if defender.shield > 0.0: failures.append("限时护盾未正常消散")
 	defender.defense = 9999.0
@@ -2005,7 +1996,7 @@ func finish_v061_playtest_fixes_test() -> void:
 	battle.reset_combat_stats()
 	if not battle.combat_stats.actors.is_empty() or battle.combat_stats.resources.equipment != 0 or p.gold != permanent_before.gold or p.roster != permanent_before.roster or p.party != permanent_before.party or p.completed_stages != permanent_before.completed:
 		failures.append("清空统计影响永久成长或未清空会话计数")
-	defender.defense = 0.0; defender.temporary_reduction_time = 0.0; defender.shield = 0.0
+	defender.defense = 0.0; defender.temporary_reduction_time = 0.0; defender.clear_shields()
 	defender.take_damage(20.0, attacker, false, {"kind":"basic", "allow_triggers":false})
 	if float(battle.combat_stats.actors.get("zhao_yun", {}).get("damage", 0.0)) <= 0.0: failures.append("清空后新伤害未重新计数")
 	# 原设计名称完整恢复，ID保持不变以兼容V0.6.1学习记录和槽位。
@@ -2153,9 +2144,6 @@ func finish_v07_ui_actors_test() -> void:
 		if not Rect2(Vector2.ZERO, Vector2(resolution)).encloses(character_ui.panel.get_global_rect()): failures.append("%s角色页超出窗口" % str(resolution))
 		character_ui.close_panel(); inventory_ui.toggle(); await get_tree().process_frame
 		if not Rect2(Vector2.ZERO, Vector2(resolution)).encloses(inventory_ui.panel.get_global_rect()): failures.append("%s背包页超出窗口 rect=%s" % [str(resolution), str(inventory_ui.panel.get_global_rect())])
-		inventory_ui.toggle(); camp_ui.open(); await get_tree().process_frame
-		if not Rect2(Vector2.ZERO, Vector2(resolution)).encloses(camp_ui.panel.get_global_rect()): failures.append("%s营地页超出窗口" % str(resolution))
-		camp_ui.close_panel()
 	if failures.is_empty():
 		print("V07_UI_ACTORS_TEST_PASS pages=separate shared_inventory=true categories=5 actors=20 new_recruitable=10 active_runtime=10 passive_runtime=%d slots=3+4 equipment=9 layouts=1440x768,1920x1080" % passive_runtime)
 	else:
@@ -2194,16 +2182,10 @@ func finish_v07_adventure_test() -> void:
 		if not battle.adventure.buy_merchant_item(0) or JSON.stringify(p.encounter_state.merchant_stock) == stock_before: failures.append("商人购买未扣费或库存未固定为售罄")
 		battle.adventure.finish_encounter(false, {})
 	if event_success != 3: failures.append("战斗型奇遇真实结算%d/3" % event_success)
-	battle.adventure.grant_furniture("small_table", 2)
-	if not battle.adventure.place_furniture("small_table", Vector2i(0,0)): failures.append("家具无法摆放")
-	if battle.adventure.place_furniture("small_table", Vector2i(1,1)): failures.append("家具重叠检测失效")
-	var placement_id := str(p.camp_layout[0].placement_id)
-	if not battle.adventure.move_furniture(placement_id, Vector2i(4,2)): failures.append("家具无法移动")
-	if not battle.adventure.return_furniture(placement_id): failures.append("家具无法收回")
 	p.party = ["zhang_fei","zhao_yun","liu_bei","pikachu"]
 	if not battle.adventure.claim_achievement("party_four") or battle.adventure.claim_achievement("party_four"): failures.append("成就奖励重复领取保护失效")
 	if failures.is_empty():
-		print("V07_ADVENTURE_TEST_PASS rifts=2 dynamic_cap=20 no_floor21=true affixes=3 first_clear_once=true encounters=4 actual_enemies=3 merchant_fixed=true camp_place_move_return=true achievements_once=true")
+		print("V07_ADVENTURE_TEST_PASS rifts=2 dynamic_cap=20 no_floor21=true affixes=3 first_clear_once=true encounters=4 actual_enemies=3 merchant_fixed=true achievements_once=true")
 	else:
 		for failure in failures: push_error("V07_ADVENTURE_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)

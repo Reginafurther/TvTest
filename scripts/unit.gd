@@ -234,13 +234,7 @@ func _physics_process(delta: float) -> void:
 	hit_flash = maxf(0.0, hit_flash - delta)
 	taunt_timer = maxf(0.0, taunt_timer - delta)
 	temporary_reduction_time = maxf(0.0, temporary_reduction_time - delta)
-	if shield_time > 0.0:
-		shield_time = maxf(0.0, shield_time - delta)
-		if shield_time <= 0.0 and shield > 0.0:
-			shield = 0.0
-			shield_layers.clear()
-			show_number("护盾消散", Color("#A8D9FF"))
-			queue_redraw()
+	_tick_shield_layers(delta)
 	temporary_evasion_time = maxf(0.0, temporary_evasion_time - delta)
 	temporary_counter_time = maxf(0.0, temporary_counter_time - delta)
 	damage_share_time = maxf(0.0, damage_share_time - delta)
@@ -695,7 +689,10 @@ func try_use_general_skill(skill_id: String) -> bool:
 			if valid_enemy_in_range(enemy, cast_range):
 				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
 				enemy.apply_armor_break(minf(0.8, float(data.get("armor_break", 0.25)) * armor_break_multiplier()), float(data.get("duration", 5.0)))
-				if skill_id == "dz_alchemy_seal" and enemy.shield > 0.0: enemy.shield *= 1.0 - minf(0.45, float(data.get("armor_break", 0.25)))
+				if skill_id == "dz_alchemy_seal" and enemy.shield > 0.0:
+					var stripped: float = enemy.remove_shield_amount(enemy.shield * minf(0.45, float(data.get("armor_break", 0.25))))
+					if stripped > 0.0:
+						battle.combat_stats.record_shield_damage(battle.stats_actor_id(self), stripped, "skill", skill_id)
 				used = true
 		"burn", "poison":
 			if valid_enemy_in_range(enemy, cast_range):
@@ -1183,7 +1180,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	if exclusive_reduction_active:
 		reduction_factor *= 1.0 - clampf(passive_value(), 0.0, 0.85)
 		battle.note_passive(actor_id, passive_skill_id)
-		if shield > 0.0: reduction_factor *= 0.88
+		if passive_skill_id == "immovable_mountain" and shield > 0.0:
+			reduction_factor *= 0.88
 	if passive_data.get("effect", "") == "high_hp_guard" and hp / maxf(1.0, max_hp) >= 0.70:
 		reduction_factor *= 1.0 - clampf(passive_value(), 0.0, 0.45)
 		battle.note_passive(actor_id, passive_skill_id)
@@ -1196,7 +1194,6 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	amount = maxf(1.0, roundf(amount * reduction_factor))
 	if shield > 0.0:
 		var absorbed := minf(shield, amount)
-		shield -= absorbed
 		amount -= absorbed
 		result.shield_absorbed = absorbed
 		consume_shield_layers(absorbed)
@@ -1307,16 +1304,12 @@ func set_rally(point: Vector2) -> void:
 func add_shield(amount: float, duration: float = 6.0, provider = null, source_key: String = "") -> void:
 	if not is_finite(amount) or amount <= 0.0:
 		return
-	var previous := shield
-	shield = maxf(shield, amount)
-	var added := shield - previous
 	var live_provider = valid_combat_source(provider) if provider != null else self
 	if live_provider == null: live_provider = self
-	if added > 0.0:
-		var provider_id := str(live_provider.summon_owner_id) if bool(live_provider.is_summon) and not str(live_provider.summon_owner_id).is_empty() else str(live_provider.actor_id)
-		var key := source_key if not source_key.is_empty() else str(live_provider.actor_data.get("skill", "shield"))
-		shield_layers.append({"remaining":added,"provider_id":provider_id,"source_key":key})
-	shield_time = maxf(shield_time, duration)
+	var provider_id := str(live_provider.summon_owner_id) if bool(live_provider.is_summon) and not str(live_provider.summon_owner_id).is_empty() else str(live_provider.actor_id)
+	var key := source_key if not source_key.is_empty() else str(live_provider.actor_data.get("skill", "shield"))
+	shield_layers.append({"remaining":amount, "duration":maxf(0.01, duration), "provider_id":provider_id, "source_key":key})
+	_refresh_shield_totals()
 	show_number("◆ 护盾", Color("#80C8FF"))
 	queue_redraw()
 
@@ -1331,6 +1324,47 @@ func consume_shield_layers(amount: float) -> void:
 			battle.on_friendly_shield_absorbed(str(layer.get("provider_id", "")), str(layer.get("source_key", "shield")), consumed)
 		if float(layer.remaining) <= 0.001: shield_layers.pop_front()
 		else: shield_layers[0] = layer
+	_refresh_shield_totals()
+
+func remove_shield_amount(amount: float) -> float:
+	var before := shield
+	var remaining := maxf(0.0, amount)
+	while remaining > 0.0 and not shield_layers.is_empty():
+		var layer: Dictionary = shield_layers[0]
+		var removed := minf(remaining, float(layer.get("remaining", 0.0)))
+		layer.remaining = float(layer.get("remaining", 0.0)) - removed
+		remaining -= removed
+		if float(layer.remaining) <= 0.001: shield_layers.pop_front()
+		else: shield_layers[0] = layer
+	_refresh_shield_totals()
+	return before - shield
+
+func clear_shields() -> void:
+	shield_layers.clear()
+	_refresh_shield_totals()
+	queue_redraw()
+
+func _tick_shield_layers(delta: float) -> void:
+	var expired := false
+	for index in range(shield_layers.size() - 1, -1, -1):
+		var layer: Dictionary = shield_layers[index]
+		layer.duration = float(layer.get("duration", 0.0)) - delta
+		if float(layer.duration) <= 0.0:
+			shield_layers.remove_at(index)
+			expired = true
+		else:
+			shield_layers[index] = layer
+	_refresh_shield_totals()
+	if expired:
+		show_number("护盾消散", Color("#A8D9FF"))
+		queue_redraw()
+
+func _refresh_shield_totals() -> void:
+	shield = 0.0
+	shield_time = 0.0
+	for layer in shield_layers:
+		shield += maxf(0.0, float(layer.get("remaining", 0.0)))
+		shield_time = maxf(shield_time, float(layer.get("duration", 0.0)))
 
 func apply_poison(damage_per_second: float, duration: float, source, source_snapshot: Dictionary = {}) -> void:
 	poison_damage = maxf(poison_damage, damage_per_second)

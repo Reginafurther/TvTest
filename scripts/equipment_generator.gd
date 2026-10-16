@@ -33,6 +33,7 @@ func generate(level: int, source: String, forced_quality: String = "", forced_sl
 	var level_factor := 1.0 + maxf(0.0, level - 1) * 0.12
 	var base_value := rng.randf_range(float(template.get("base_min", 1)), float(template.get("base_max", 2)))
 	base_value *= level_factor * float(quality.get("base_multiplier", 1.0))
+	if base_stat == "defense": base_value *= float(config.get("rules", {}).get("defense_base_multiplier", 0.45))
 	var affix_count := rng.randi_range(int(quality.get("affix_min", 0)), int(quality.get("affix_max", 0)))
 	var affixes := roll_affixes(level, quality, affix_count)
 	sequence += 1
@@ -71,8 +72,10 @@ func roll_affixes(level: int, quality: Dictionary, count: int) -> Array:
 		var affix_id: String = weighted_affix(available)
 		available.erase(affix_id)
 		var affix: Dictionary = config.get("affixes", {}).get(affix_id, {})
-		var raw := rng.randf_range(float(affix.get("min", 0)), float(affix.get("max", 0)))
-		raw += maxf(0.0, level - 1) * float(affix.get("level_scale", 0))
+		var level_step := maxf(0.0, level - 1)
+		var minimum := float(affix.get("min", 0)) + level_step * float(affix.get("min_level_scale", affix.get("level_scale", 0)))
+		var maximum := float(affix.get("max", 0)) + level_step * float(affix.get("max_level_scale", affix.get("level_scale", 0)))
+		var raw := rng.randf_range(minimum, maximum)
 		raw *= float(quality.get("value_multiplier", 1.0))
 		result.append({"stat": affix_id, "value": snappedf(raw, 0.0001)})
 	return result

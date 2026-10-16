@@ -302,7 +302,7 @@ func refresh_resource_category(category: String) -> void:
 					rows.append([id, str(battle.general_skills_config.get(id, {}).get("name", id)) + "技能书", int(battle.progression.skill_books[id])])
 		"特殊道具":
 			for id in battle.progression.special_items:
-				if int(battle.progression.special_items[id]) > 0:
+				if id != "camp_coupon" and int(battle.progression.special_items[id]) > 0:
 					rows.append([id, special_item_name(id), int(battle.progression.special_items[id])])
 		"收藏品":
 			for id in battle.progression.collectibles:
@@ -311,13 +311,13 @@ func refresh_resource_category(category: String) -> void:
 	for row in rows:
 		item_list.add_item("%s  ×%d" % [row[1], row[2]])
 		item_list.set_item_metadata(item_list.item_count - 1, "%s:%s" % [category, row[0]])
-	detail.text = "[b]%s[/b]\n共 %d 类物品；本页与角色、商店、秘境、奇遇和营地共用同一份真实存档。" % [category, rows.size()]
+	detail.text = "[b]%s[/b]\n共 %d 类物品；本页与角色、商店、秘境和奇遇共用同一份真实存档。" % [category, rows.size()]
 
 func material_name(id: String) -> String:
 	return {"salvage_dust":"分解粉尘", "breakthrough_stone":"破限石", "three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "qin_moon_token":"苍龙令", "ninja_scroll":"忍界卷轴", "huangyi_token":"战神令", "fengyun_token":"风云令", "rift_crystal":"秘境结晶", "rare_wood":"稀有木材"}.get(id, id)
 
 func special_item_name(id: String) -> String:
-	return {"recruit_ticket":"招募令", "camp_coupon":"营地券", "rift_key":"秘境钥匙"}.get(id, id)
+	return {"recruit_ticket":"招募令", "rift_key":"秘境钥匙"}.get(id, id)
 
 func refresh_equipment() -> void:
 	equipment_list.clear()

@@ -30,9 +30,9 @@
     "guard_ring": {"name": "守望戒指", "slot": "ring_2", "compatible_slots": ["ring_1", "ring_2"], "base_pool": ["defense", "health"], "base_min": 5.0, "base_max": 11.0}
   },
   "affixes": {
-    "health": {"name": "生命", "unit": "flat", "min": 10.0, "max": 24.0, "level_scale": 1.8, "weight": 15},
+    "health": {"name": "生命", "unit": "flat", "min": 10.0, "max": 24.0, "min_level_scale": 2.32231, "max_level_scale": 3.53619, "weight": 15},
     "attack": {"name": "攻击", "unit": "flat", "min": 2.0, "max": 5.0, "level_scale": 0.42, "weight": 14},
-    "defense": {"name": "防御", "unit": "flat", "min": 1.0, "max": 3.5, "level_scale": 0.28, "weight": 14},
+    "defense": {"name": "防御", "unit": "flat", "min": 1.0, "max": 3.5, "min_level_scale": 1.13953, "max_level_scale": 1.78562, "weight": 14},
     "crit_chance": {"name": "暴击率", "unit": "percent", "min": 0.012, "max": 0.032, "level_scale": 0.0008, "weight": 10},
     "crit_damage": {"name": "暴击伤害", "unit": "percent", "min": 0.035, "max": 0.09, "level_scale": 0.0015, "weight": 8},
     "attack_speed": {"name": "攻击速度", "unit": "percent", "min": 0.018, "max": 0.055, "level_scale": 0.001, "weight": 9},
@@ -44,7 +44,8 @@
     "healing_effect": {"name": "治疗效果", "unit": "percent", "min": 0.02, "max": 0.05, "level_scale": 0.0008, "weight": 6}
   },
   "rules": {
-    "inventory_capacity": 120,
+    "inventory_capacity": 300,
+    "defense_base_multiplier": 0.45,
     "max_crit_chance": 0.75,
     "max_cooldown_reduction": 0.50,
     "max_attack_speed": 1.50,

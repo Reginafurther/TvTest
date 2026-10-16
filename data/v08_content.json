@@ -56,7 +56,7 @@
     "kazama_glass":{"name":"风间琉璃","effect":"status_amplifier","value":0.15,"per_level":0.012,"description":"强化受上限约束的异常与控制效果。"},
     "precision_calculation":{"name":"精密演算","effect":"cooldown_reduction","value":0.08,"per_level":0.006,"description":"提高技能效率与战术辅助节奏。"},
     "blood_spear_soul":{"name":"血战枪魂","effect":"combo","value":0.38,"per_level":0.025,"description":"连续命中触发枪魂追击并获得少量续航。"},
-    "immovable_mountain":{"name":"不动如山","effect":"damage_reduction","value":0.16,"per_level":0.012,"description":"受击时获得有上限的防御收益。"},
+    "immovable_mountain":{"name":"不动如山","effect":"damage_reduction","value":0.16,"per_level":0.0088889,"description":"持续获得16%—24%减伤；拥有任意护盾时额外获得12%减伤（多层护盾不重复叠加）。"},
     "shadow_blade_combo":{"name":"影刃连击","effect":"combo","value":0.48,"per_level":0.025,"description":"连续命中后追加影刃并强化暴击。"},
     "qin_resonance":{"name":"琴心共鸣","effect":"elemental_damage","value":0.2,"per_level":0.014,"description":"元素与燃烧技能交替时强化伤害。"},
     "pure_heart_benevolence":{"name":"素心仁术","effect":"healing","value":0.24,"per_level":0.018,"description":"强化持续治疗，并允许彩翼有限净化。"},

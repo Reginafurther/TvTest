@@ -12,24 +12,27 @@ const LEGACY_V061_SAVE_PATH := "user://wanjie_v061_inventory.json"
 const MIGRATION_BACKUP_PATH := "user://wanjie_v07_inventory.pre_v08_backup.json"
 const AFFIX_MIGRATION_BACKUP_PATH := "user://wanjie_v08_inventory.pre_affix_v2_backup.json"
 const EFFECT_REMOVAL_BACKUP_PATH := "user://wanjie_v08_inventory.pre_effect_removal_backup.json"
+const BALANCE_MIGRATION_BACKUP_PATH := "user://wanjie_v08_inventory.pre_balance_v3_backup.json"
 const TEST_SAVE_PATH := "user://wanjie_v08_test_inventory.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade", "hy_long_ying", "hy_wu_zhao", "hy_kou_zhong", "hy_xu_ziling", "hy_wan_wan", "hy_fa_ming", "hy_yan_fei", "hy_sun_en", "hy_ling_donglai", "hy_lang_fanyun"]
 const FENGYUN_HERO_IDS := ["fy_nie_feng", "fy_bu_jingyun", "fy_wuming", "fy_sword_saint", "fy_wu_wudi", "fy_xiao_wu", "fy_duan_lang", "fy_di_er_meng", "fy_jian_chen", "fy_di_shitian"]
 const ALL_HERO_IDS := HERO_IDS + FENGYUN_HERO_IDS
 const AFFIX_CONFIG_VERSION := 2
+const EQUIPMENT_BALANCE_VERSION := 3
 
 var config: Dictionary
 var items: Array = []
 var equipped: Dictionary = {}
-var capacity := 120
+var capacity := 300
 var save_path := SAVE_PATH
 var last_error := ""
 var affix_config_version := AFFIX_CONFIG_VERSION
+var equipment_balance_version := EQUIPMENT_BALANCE_VERSION
 
 func setup(equipment_config: Dictionary) -> void:
 	config = equipment_config
-	capacity = int(config.get("rules", {}).get("inventory_capacity", 120))
+	capacity = int(config.get("rules", {}).get("inventory_capacity", 300))
 	for value in OS.get_cmdline_user_args():
 		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-") or str(value).begins_with("--v09-") or str(value).begins_with("--v10-"):
 			save_path = TEST_SAVE_PATH
@@ -174,11 +177,19 @@ func set_item_locked(instance_id: String, locked: bool) -> bool:
 	save_to_disk()
 	return true
 
-func item_score(item: Dictionary, combat_role: String = "") -> float:
+func item_score(item: Dictionary, combat_role: String = "", scoring_context: Dictionary = {}) -> float:
 	var stats := item_stats(item)
+	if combat_role == "tank":
+		var base_health := maxf(1.0, float(scoring_context.get("base_health", 1.0)))
+		var boss_attack := maxf(1.0, float(scoring_context.get("boss_attack", 1.0)))
+		return (
+			float(stats.get("health", 0.0)) / 1.5 / base_health * 100.0
+			+ float(stats.get("defense", 0.0)) / boss_attack * 100.0
+			+ float(stats.get("damage_reduction", 0.0)) * 100.0
+			+ float(stats.get("cooldown_reduction", 0.0)) * 50.0
+		)
 	var weights := {"attack":5.0,"defense":3.0,"health":0.3,"crit_chance":300.0,"crit_damage":120.0,"attack_speed":180.0,"cooldown_reduction":180.0,"physical_damage":140.0,"elemental_damage":140.0,"final_damage":260.0,"damage_reduction":240.0,"healing_effect":180.0}
 	match combat_role:
-		"tank": weights.merge({"attack":2.2,"defense":7.0,"health":0.7,"damage_reduction":520.0,"cooldown_reduction":130.0}, true)
 		"healer": weights.merge({"attack":4.5,"defense":3.5,"health":0.45,"cooldown_reduction":300.0,"attack_speed":220.0,"healing_effect":520.0}, true)
 		"ranged_dps": weights.merge({"attack":5.8,"defense":1.8,"health":0.2,"crit_chance":360.0,"crit_damage":155.0,"elemental_damage":230.0,"cooldown_reduction":210.0}, true)
 		"melee_dps": weights.merge({"attack":6.2,"defense":2.5,"health":0.28,"crit_chance":350.0,"physical_damage":230.0,"attack_speed":220.0}, true)
@@ -186,7 +197,7 @@ func item_score(item: Dictionary, combat_role: String = "") -> float:
 	for stat_id in weights: score += float(stats.get(stat_id, 0.0)) * float(weights[stat_id])
 	return score
 
-func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: int = 9, combat_role: String = "") -> Array:
+func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: int = 9, combat_role: String = "", scoring_context: Dictionary = {}) -> Array:
 	var choices: Array = []
 	var chosen_ids: Array = []
 	if not equipped.has(actor_id):
@@ -197,7 +208,7 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: i
 		var current = get_equipped_item(actor_id, slot)
 		if current != null and bool(current.get("locked", false)):
 			continue
-		var current_score := item_score(current, combat_role) if current != null else 0.0
+		var current_score := item_score(current, combat_role, scoring_context) if current != null else 0.0
 		var best_item
 		var best_gain := 0.0
 		for item in items:
@@ -212,20 +223,20 @@ func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: i
 				continue
 			if slot not in item.get("compatible_slots", [item.get("slot", "")]):
 				continue
-			var gain := item_score(item, combat_role) - current_score
+			var gain := item_score(item, combat_role, scoring_context) - current_score
 			if gain > best_gain and str(item.get("instance_id", "")) != str(equipped[actor_id][slot]):
 				best_gain = gain
 				best_item = item
 		if best_item != null:
-			choices.append({"instance_id": best_item.instance_id, "slot": slot, "gain": best_gain, "name": best_item.get("name", "装备"), "combat_role": combat_role})
+			choices.append({"instance_id": best_item.instance_id, "slot": slot, "gain": best_gain, "name": best_item.get("name", "装备"), "combat_role": combat_role, "scoring_context":scoring_context.duplicate(true)})
 			chosen_ids.append(str(best_item.instance_id))
-	choices.append_array(_optimize_ring_pair(actor_id, min_quality_rank, combat_role))
+	choices.append_array(_optimize_ring_pair(actor_id, min_quality_rank, combat_role, scoring_context))
 	choices.sort_custom(func(a, b): return float(a.gain) > float(b.gain))
 	if choices.size() > maximum:
 		choices.resize(maximum)
 	return choices
 
-func _optimize_ring_pair(actor_id: String, min_quality_rank: int, combat_role: String) -> Array:
+func _optimize_ring_pair(actor_id: String, min_quality_rank: int, combat_role: String, scoring_context: Dictionary = {}) -> Array:
 	var slots := ["ring_1", "ring_2"]
 	var current_ids := [str(equipped[actor_id].get("ring_1", "")), str(equipped[actor_id].get("ring_2", ""))]
 	var current_items := [find_item(current_ids[0]), find_item(current_ids[1])]
@@ -242,7 +253,7 @@ func _optimize_ring_pair(actor_id: String, min_quality_rank: int, combat_role: S
 			continue
 		options.append(item)
 	var best_items: Array = current_items.duplicate()
-	var best_score := _pair_score(best_items, combat_role)
+	var best_score := _pair_score(best_items, combat_role, scoring_context)
 	var best_stability := 2
 	for left in options:
 		if not _ring_option_valid(left, "ring_1", current_items[0]):
@@ -253,13 +264,13 @@ func _optimize_ring_pair(actor_id: String, min_quality_rank: int, combat_role: S
 			if left != null and right != null and str(left.get("instance_id", "")) == str(right.get("instance_id", "")):
 				continue
 			var proposal := [left, right]
-			var score := _pair_score(proposal, combat_role)
+			var score := _pair_score(proposal, combat_role, scoring_context)
 			var stability := int(_item_id(left) == current_ids[0]) + int(_item_id(right) == current_ids[1])
 			if score > best_score + 0.0001 or (is_equal_approx(score, best_score) and stability > best_stability):
 				best_items = proposal
 				best_score = score
 				best_stability = stability
-	var old_score := _pair_score(current_items, combat_role)
+	var old_score := _pair_score(current_items, combat_role, scoring_context)
 	if best_score <= old_score + 0.0001:
 		return []
 	var result: Array = []
@@ -268,8 +279,8 @@ func _optimize_ring_pair(actor_id: String, min_quality_rank: int, combat_role: S
 		var next_id := _item_id(next_item)
 		if next_id.is_empty() or next_id == current_ids[index]:
 			continue
-		var replaced_score := item_score(current_items[index], combat_role) if current_items[index] != null else 0.0
-		result.append({"instance_id": next_id, "slot": slots[index], "gain": item_score(next_item, combat_role) - replaced_score, "name": next_item.get("name", "戒指"), "pair_gain": best_score - old_score, "combat_role": combat_role})
+		var replaced_score := item_score(current_items[index], combat_role, scoring_context) if current_items[index] != null else 0.0
+		result.append({"instance_id": next_id, "slot": slots[index], "gain": item_score(next_item, combat_role, scoring_context) - replaced_score, "name": next_item.get("name", "戒指"), "pair_gain": best_score - old_score, "combat_role": combat_role, "scoring_context":scoring_context.duplicate(true)})
 	return result
 
 func _ring_option_valid(item, slot: String, current) -> bool:
@@ -282,11 +293,11 @@ func _ring_option_valid(item, slot: String, current) -> bool:
 func _item_id(item) -> String:
 	return "" if item == null else str(item.get("instance_id", ""))
 
-func _pair_score(pair: Array, combat_role: String) -> float:
+func _pair_score(pair: Array, combat_role: String, scoring_context: Dictionary = {}) -> float:
 	var score := 0.0
 	for item in pair:
 		if item != null:
-			score += item_score(item, combat_role)
+			score += item_score(item, combat_role, scoring_context)
 	return score
 
 func apply_optimization(actor_id: String, choices: Array) -> int:
@@ -331,7 +342,8 @@ func apply_optimization(actor_id: String, choices: Array) -> int:
 		last_error = "优化后的全局装备映射存在重复实例。"
 		return 0
 	var combat_role := str(choices[0].get("combat_role", ""))
-	if _mapping_score(final_mapping, combat_role) + 0.0001 < _mapping_score(original, combat_role):
+	var scoring_context: Dictionary = choices[0].get("scoring_context", {})
+	if _mapping_score(final_mapping, combat_role, scoring_context) + 0.0001 < _mapping_score(original, combat_role, scoring_context):
 		last_error = "优化方案会降低综合装备评分，已取消。"
 		return 0
 	equipped[actor_id] = final_mapping
@@ -351,12 +363,12 @@ func _mapping_is_unique(mapping: Dictionary) -> bool:
 		seen[instance_id] = true
 	return true
 
-func _mapping_score(mapping: Dictionary, combat_role: String) -> float:
+func _mapping_score(mapping: Dictionary, combat_role: String, scoring_context: Dictionary = {}) -> float:
 	var score := 0.0
 	for slot in mapping:
 		var item = find_item(str(mapping[slot]))
 		if item != null:
-			score += item_score(item, combat_role)
+			score += item_score(item, combat_role, scoring_context)
 	return score
 
 func _all_equipped_instances_unique_with(replaced_actor: String = "", replacement: Dictionary = {}) -> bool:
@@ -414,6 +426,7 @@ func save_to_disk() -> bool:
 	var payload := {
 		"version": SAVE_VERSION,
 		"affix_config_version": AFFIX_CONFIG_VERSION,
+		"equipment_balance_version": EQUIPMENT_BALANCE_VERSION,
 		"items": items,
 		"equipped": equipped
 	}
@@ -465,15 +478,45 @@ func load_from_disk() -> bool:
 			DirAccess.copy_absolute(ProjectSettings.globalize_path(source_path), ProjectSettings.globalize_path(AFFIX_MIGRATION_BACKUP_PATH))
 		migrate_legacy_life_regen_affixes()
 		affix_config_version = AFFIX_CONFIG_VERSION
+	equipment_balance_version = int(parsed.get("equipment_balance_version", 2))
+	var upgraded_equipment_balance := equipment_balance_version < EQUIPMENT_BALANCE_VERSION
+	if upgraded_equipment_balance:
+		if save_path == SAVE_PATH and not FileAccess.file_exists(BALANCE_MIGRATION_BACKUP_PATH):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(source_path), ProjectSettings.globalize_path(BALANCE_MIGRATION_BACKUP_PATH))
+		migrate_equipment_balance_v3()
+		equipment_balance_version = EQUIPMENT_BALANCE_VERSION
 	for item in items:
 		item["locked"] = bool(item.get("locked", false))
 	equipped = parsed.get("equipped", {})
 	remove_broken_references()
 	ensure_equipment_layout()
 	inventory_changed.emit()
-	if upgraded_affix_config or removed_legacy_effects:
+	if upgraded_affix_config or removed_legacy_effects or upgraded_equipment_balance:
 		save_to_disk()
 	return true
+
+func migrate_equipment_balance_v3() -> bool:
+	var changed := false
+	for item in items:
+		var level := maxi(1, int(item.get("level", 1)))
+		var quality: Dictionary = config.get("qualities", {}).get(str(item.get("quality", "white")), {})
+		var value_multiplier := float(quality.get("value_multiplier", 1.0))
+		var base_stats = item.get("base_stats", {})
+		if typeof(base_stats) == TYPE_DICTIONARY and base_stats.has("defense"):
+			base_stats.defense = snappedf(float(base_stats.defense) * float(config.get("rules", {}).get("defense_base_multiplier", 0.45)), 0.01)
+			changed = true
+		for affix in item.get("affixes", []):
+			var stat := str(affix.get("stat", ""))
+			if stat not in ["health", "defense"]: continue
+			var old_min := (10.0 + (level - 1) * 1.8) * value_multiplier if stat == "health" else (1.0 + (level - 1) * 0.28) * value_multiplier
+			var old_max := (24.0 + (level - 1) * 1.8) * value_multiplier if stat == "health" else (3.5 + (level - 1) * 0.28) * value_multiplier
+			var percentile := clampf((float(affix.get("value", old_min)) - old_min) / maxf(0.0001, old_max - old_min), 0.0, 1.0)
+			var cfg: Dictionary = config.affixes[stat]
+			var new_min := (float(cfg.min) + (level - 1) * float(cfg.min_level_scale)) * value_multiplier
+			var new_max := (float(cfg.max) + (level - 1) * float(cfg.max_level_scale)) * value_multiplier
+			affix.value = snappedf(lerpf(new_min, new_max, percentile), 0.0001)
+			changed = true
+	return changed
 
 func migrate_legacy_life_regen_affixes() -> bool:
 	var changed := false

@@ -57,27 +57,21 @@
       "hidden_boss":{"name":"时空裂隙领主","weight":13,"enemy":"mewtwo_boss","reward_pool":"hidden"}
     }
   },
-  "furniture": {
-    "camp_flag":{"name":"冒险团旗帜","size":[2,2]},"campfire":{"name":"温暖篝火","size":[2,2]},"tent":{"name":"旅行帐篷","size":[3,2]},"bench":{"name":"木制长椅","size":[2,1]},
-    "small_table":{"name":"野餐小桌","size":[2,2]},"potted_plant":{"name":"旅行盆栽","size":[1,1]},"weapon_rack":{"name":"装备展示架","size":[2,1]},"trophy_stand":{"name":"战利品展台","size":[2,2]},"camp_rug":{"name":"团纹地毯","size":[3,2]},
-    "lu_bu_trophy":{"name":"无双战旗","size":[2,2]},"mewtwo_trophy":{"name":"超能结晶台","size":[2,2]},"mimic_chest":{"name":"宝箱怪纪念箱","size":[2,1]},"rift_beacon":{"name":"秘境信标","size":[1,2]}
-  },
   "achievements": {
-    "party_four":{"name":"四人同行","condition":"party_size","target":4,"reward":{"furniture":"small_table"}},
-    "clear_tk":{"name":"平定三国","condition":"stage","target":10,"reward":{"furniture":"lu_bu_trophy"}},
-    "clear_pk":{"name":"跨越双界","condition":"stage","target":20,"reward":{"furniture":"mewtwo_trophy"}},
+    "party_four":{"name":"四人同行","condition":"party_size","target":4,"reward":{"gold":120}},
+    "clear_tk":{"name":"平定三国","condition":"stage","target":10,"reward":{"gold":200}},
+    "clear_pk":{"name":"跨越双界","condition":"stage","target":20,"reward":{"gold":300}},
     "clear_qin":{"name":"问鼎阴阳","condition":"stage","target":70,"reward":{"gold":700}},
     "clear_naruto":{"name":"八界远征","condition":"stage","target":80,"reward":{"collectible":"eight_world_badge"}},
     "clear_huangyi":{"name":"破碎虚空","condition":"stage","target":90,"reward":{"gold":900}},
     "orange_item":{"name":"橙光初现","condition":"orange_item","target":1,"reward":{"gold":120}},
     "hidden_boss":{"name":"发现裂隙领主","condition":"encounter_hidden_boss","target":1,"reward":{"collectible":"rift_core"}},
-    "mimic":{"name":"会咬人的宝箱","condition":"encounter_chest_mimic","target":1,"reward":{"furniture":"mimic_chest"}},
-    "rift_10":{"name":"秘境十层","condition":"rift_floor","target":10,"reward":{"furniture":"rift_beacon"}},
+    "mimic":{"name":"会咬人的宝箱","condition":"encounter_chest_mimic","target":1,"reward":{"gold":160}},
+    "rift_10":{"name":"秘境十层","condition":"rift_floor","target":10,"reward":{"gold":250}},
     "all_tk":{"name":"三国群英","condition":"roster_world","world":"三国","target":10,"reward":{"collectible":"tk_roster_badge"}},
     "all_pk":{"name":"宝可梦伙伴","condition":"roster_world","world":"宝可梦","target":10,"reward":{"collectible":"pk_roster_badge"}},
     "all_qin":{"name":"诸子百家","condition":"roster_world","world":"秦时明月","target":10,"reward":{"collectible":"qin_roster_badge"}},
     "all_naruto":{"name":"忍界同盟","condition":"roster_world","world":"火影忍者","target":10,"reward":{"collectible":"naruto_roster_badge"}},
-    "all_huangyi":{"name":"武道群英","condition":"roster_world","world":"黄易","target":10,"reward":{"gold":820}},
-    "furniture_8":{"name":"温馨营地","condition":"furniture_count","target":8,"reward":{"gold":180}}
+    "all_huangyi":{"name":"武道群英","condition":"roster_world","world":"黄易","target":10,"reward":{"gold":820}}
   }
 }

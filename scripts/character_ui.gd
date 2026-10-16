@@ -133,7 +133,7 @@ func build_roster_column(parent: HBoxContainer) -> void:
 	V035ThemeScript.label(label, 19, Color("#493520"))
 	box.add_child(label)
 	sort_select = OptionButton.new()
-	for value in ["按等级", "按战力", "按定位"]: sort_select.add_item(value)
+	for value in ["按出战", "按战力", "按定位"]: sort_select.add_item(value)
 	sort_select.item_selected.connect(func(_index): refresh_roster())
 	box.add_child(sort_select)
 	actor_list = ItemList.new()
@@ -283,7 +283,20 @@ func refresh_roster() -> void:
 	actor_list.clear()
 	var ids: Array = battle.progression.roster.duplicate()
 	match sort_select.selected:
-		0: ids.sort_custom(func(a, b): return battle.progression.actor_level(a) > battle.progression.actor_level(b))
+		0:
+			var party_order: Dictionary = {}
+			for index in range(battle.progression.party.size()):
+				var party_id := str(battle.progression.party[index])
+				if not party_id.is_empty(): party_order[party_id] = index
+			ids.sort_custom(func(a, b):
+				var a_party := party_order.has(a)
+				var b_party := party_order.has(b)
+				if a_party != b_party: return a_party
+				if a_party: return int(party_order[a]) < int(party_order[b])
+				var a_level: int = battle.progression.actor_level(a)
+				var b_level: int = battle.progression.actor_level(b)
+				return a_level > b_level if a_level != b_level else str(a) < str(b)
+			)
 		1: ids.sort_custom(func(a, b): return actor_power(a) > actor_power(b))
 		2: ids.sort_custom(func(a, b): return str(battle.actors[a].role) < str(battle.actors[b].role))
 	for actor_id in ids:
@@ -429,10 +442,6 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 			slot.pressed.connect(_unequip_general.bind(category, slot_index))
 			row.add_child(slot)
 		skills_box.add_child(row)
-	var priority := Button.new()
-	priority.text = "切换专属 / 通用释放优先级"
-	priority.pressed.connect(func(): p.toggle_skill_priority(selected_actor); battle.rebuild_party(); refresh_skills())
-	skills_box.add_child(priority)
 	for skill_id in battle.general_skills_config:
 		var skill: Dictionary = battle.general_skills_config[skill_id]
 		if skill_world_filter != "全部" and str(skill.get("world", "")) != skill_world_filter: continue
@@ -679,7 +688,8 @@ func _inventory_action(action: String) -> void:
 
 func _preview_optimization() -> void:
 	var role := str(battle.actors.get(selected_actor, {}).get("combat_role", ""))
-	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 9, role)
+	var scoring_context: Dictionary = battle.tank_scoring_context(selected_actor) if role == "tank" else {}
+	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 9, role, scoring_context)
 	if pending_optimization.is_empty():
 		feedback.text = "当前装备已是最优配置。"
 		return

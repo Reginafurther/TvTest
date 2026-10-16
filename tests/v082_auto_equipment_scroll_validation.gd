@@ -9,6 +9,7 @@ const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 const ShopManagerScript = preload("res://scripts/shop_manager.gd")
 
 class FakeBattle extends Node:
+	var is_paused := false
 	var progression
 	var inventory
 	var equipment_config: Dictionary
@@ -18,6 +19,12 @@ class FakeBattle extends Node:
 	var general_skills_config: Dictionary
 	func get_hero(_actor_id: String): return null
 	func rebuild_party() -> void: pass
+	func actor_display_name(actor_id: String) -> String: return str(actors.get(actor_id, {}).get("name", actor_id))
+	func breakthrough_base_stats(actor_id: String) -> Dictionary:
+		var data: Dictionary = actors.get(actor_id, {})
+		return {"max_hp":data.get("max_hp", 1.0), "attack":data.get("attack", 1.0), "defense":data.get("defense", 0.0)}
+	func breakthrough_preview(actor_id: String) -> Dictionary:
+		return {"current_tier":1, "maximum_tier":1, "stones":0, "can_breakthrough":false, "current_stats":breakthrough_base_stats(actor_id), "next_stats":breakthrough_base_stats(actor_id)}
 
 var equipment_config: Dictionary
 
@@ -39,7 +46,7 @@ func _item(id: String, quality: String, rank: int, special: bool = false) -> Dic
 		"instance_id":id, "template_id":"test", "name":id, "slot":"helmet",
 		"compatible_slots":["helmet"], "quality":quality, "quality_rank":rank,
 		"level":5, "base_stats":{"defense":1.0}, "affixes":[],
-		"special_effects":["test_effect"] if special else [], "locked":false
+		"auto_process_protected":special, "locked":false
 	}
 
 func _auto_controller():

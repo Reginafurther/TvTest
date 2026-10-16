@@ -144,7 +144,6 @@ func resolve_rift_victory() -> Dictionary:
 		breakthrough_stones = 1
 		battle.progression.materials["breakthrough_stone"] = int(battle.progression.materials.get("breakthrough_stone", 0)) + 1
 		battle.combat_stats.resources.materials += 1
-	if first and floor % 5 == 0: grant_furniture("rift_beacon", 1)
 	battle.progression.record_transaction("秘境结算", "%s第%d层%s" % [config.rift.worlds[world_id].name, floor, "首通" if first else "重复"], gold)
 	var next_mode := ""
 	var next_floor := floor
@@ -226,9 +225,8 @@ func reward_for_encounter(event_id: String) -> Dictionary:
 	if event_id == "chest_mimic":
 		var skill_ids: Array = battle.general_skills_config.keys()
 		var book_id := str(skill_ids[randi() % skill_ids.size()]); battle.progression.skill_books[book_id] = int(battle.progression.skill_books.get(book_id, 0)) + 1; reward.skill_book = book_id
-		grant_furniture("mimic_chest", 1)
 	if event_id == "hidden_boss":
-		grant_collectible("rift_core", "裂隙领主核心"); grant_furniture("trophy_stand", 1)
+		grant_collectible("rift_core", "裂隙领主核心")
 	return reward
 
 func finish_encounter(success: bool, reward: Dictionary) -> void:
@@ -244,7 +242,6 @@ func build_merchant_stock() -> void:
 	var rng := RandomNumberGenerator.new(); rng.seed = serial * 7919 + 17
 	var stock: Array = [
 		{"id":"rift_key","name":"秘境钥匙","type":"special","price":90,"amount":1,"sold":false},
-		{"id":"potted_plant","name":"旅行盆栽","type":"furniture","price":140,"amount":1,"sold":false},
 		{"id":"rare_wood","name":"稀有木材","type":"material","price":75,"amount":3,"sold":false}
 	]
 	var skill_ids: Array = battle.general_skills_config.keys()
@@ -262,51 +259,12 @@ func buy_merchant_item(index: int) -> bool:
 		"special": battle.progression.special_items[row.id] = int(battle.progression.special_items.get(row.id, 0)) + int(row.amount)
 		"material": battle.progression.materials[row.id] = int(battle.progression.materials.get(row.id, 0)) + int(row.amount)
 		"skill_book": battle.progression.skill_books[row.id] = int(battle.progression.skill_books.get(row.id, 0)) + int(row.amount)
-		"furniture": grant_furniture(str(row.id), int(row.amount))
 	stock[index].sold = true; battle.progression.encounter_state.merchant_stock = stock; battle.progression.save_to_disk(); changed.emit(); return true
-
-func grant_furniture(id: String, amount: int = 1) -> void:
-	battle.progression.camp_inventory[id] = int(battle.progression.camp_inventory.get(id, 0)) + amount
 
 func grant_collectible(id: String, display_name: String) -> void:
 	var current: Dictionary = battle.progression.collectibles.get(id, {"name":display_name,"count":0})
 	current.count = int(current.count) + 1; battle.progression.collectibles[id] = current
 
-func furniture_available(id: String) -> int:
-	var placed := 0
-	for row in battle.progression.camp_layout:
-		if str(row.get("furniture_id", "")) == id: placed += 1
-	return maxi(0, int(battle.progression.camp_inventory.get(id, 0)) - placed)
-
-func place_furniture(id: String, cell: Vector2i) -> bool:
-	if furniture_available(id) <= 0 or not config.furniture.has(id): return false
-	var size_data: Array = config.furniture[id].get("size", [1,1])
-	var rect := Rect2i(cell, Vector2i(int(size_data[0]), int(size_data[1])))
-	if cell.x < 0 or cell.y < 0 or rect.end.x > 12 or rect.end.y > 8: return false
-	for row in battle.progression.camp_layout:
-		var other_size: Array = config.furniture[str(row.furniture_id)].get("size", [1,1])
-		if rect.intersects(Rect2i(Vector2i(int(row.x), int(row.y)), Vector2i(int(other_size[0]), int(other_size[1])))): return false
-	var placement_id := "%s_%d_%d" % [id, Time.get_ticks_msec(), battle.progression.camp_layout.size()]
-	battle.progression.camp_layout.append({"placement_id":placement_id,"furniture_id":id,"x":cell.x,"y":cell.y})
-	battle.progression.save_to_disk(); changed.emit(); return true
-
-func move_furniture(placement_id: String, cell: Vector2i) -> bool:
-	var removed: Dictionary = {}
-	for index in range(battle.progression.camp_layout.size()):
-		if str(battle.progression.camp_layout[index].placement_id) == placement_id:
-			removed = battle.progression.camp_layout[index]; battle.progression.camp_layout.remove_at(index); break
-	if removed.is_empty(): return false
-	if place_furniture(str(removed.furniture_id), cell):
-		battle.progression.camp_layout.back().placement_id = removed.placement_id
-		battle.progression.save_to_disk()
-		return true
-	battle.progression.camp_layout.append(removed); battle.progression.save_to_disk(); return false
-
-func return_furniture(placement_id: String) -> bool:
-	for index in range(battle.progression.camp_layout.size()):
-		if str(battle.progression.camp_layout[index].placement_id) == placement_id:
-			battle.progression.camp_layout.remove_at(index); battle.progression.save_to_disk(); changed.emit(); return true
-	return false
 
 func achievement_ready(id: String) -> bool:
 	if not config.achievements.has(id): return false
@@ -326,10 +284,6 @@ func achievement_ready(id: String) -> bool:
 			for actor_id in battle.progression.roster:
 				if str(battle.actors.get(actor_id, {}).get("world", "")) == str(row.world): count += 1
 			return count >= int(row.target)
-		"furniture_count":
-			var total := 0
-			for furniture_id in battle.progression.camp_inventory: total += int(battle.progression.camp_inventory[furniture_id])
-			return total >= int(row.target)
 		"orange_item":
 			for item in battle.inventory.items:
 				if str(item.get("quality", "")) == "orange": return true
@@ -339,7 +293,6 @@ func claim_achievement(id: String) -> bool:
 	if bool(battle.progression.achievements.get(id, {}).get("claimed", false)) or not achievement_ready(id): return false
 	var reward: Dictionary = config.achievements[id].reward
 	if reward.has("gold"): battle.progression.gold += int(reward.gold)
-	if reward.has("furniture"): grant_furniture(str(reward.furniture), 1)
 	if reward.has("collectible"): grant_collectible(str(reward.collectible), str(config.achievements[id].name))
 	battle.progression.achievements[id] = {"claimed":true,"time":int(Time.get_unix_time_from_system())}
 	battle.progression.save_to_disk(); changed.emit(); return true

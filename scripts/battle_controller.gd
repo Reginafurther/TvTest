@@ -93,6 +93,7 @@ func _ready() -> void:
 		worlds_config.bosses.merge(content.get("bosses", {}), true)
 		worlds_config.recruitment.costs.merge(content.get("recruitment", {}), true)
 	apply_playable_melee_survival_baseline()
+	apply_playable_attack_interval_baseline()
 	for skill_id in general_skills_config:
 		if not general_skills_config[skill_id].has("function_type"):
 			general_skills_config[skill_id].function_type = infer_skill_function(str(general_skills_config[skill_id].get("effect", "")))
@@ -383,6 +384,33 @@ func actor_display_name(actor_id: String) -> String:
 	var tier: int = int(progression.breakthrough_tier(actor_id, native_tier))
 	return "凡%d·%s" % [tier, original] if tier > native_tier else original
 
+func tank_scoring_context(actor_id: String) -> Dictionary:
+	var base := breakthrough_base_stats(actor_id)
+	var level: int = progression.actor_level(actor_id)
+	return {
+		"base_health": float(base.get("max_hp", 1.0)) * (1.0 + (level - 1) * 0.08),
+		"boss_attack": current_stage_boss_attack()
+	}
+
+func current_stage_boss_attack() -> float:
+	for enemy in enemies:
+		if is_instance_valid(enemy) and not enemy.dead and bool(enemy.actor_data.get("stage_boss", false)):
+			return maxf(1.0, float(enemy.attack))
+	var map_data: Dictionary = worlds_config.maps.get(current_map_id, {})
+	var template_id := str(map_data.get("main_boss", ""))
+	var template: Dictionary = actors.get(template_id, {})
+	var value := float(template.get("attack", 1.0))
+	var v08_scales: Dictionary = progression.progression_config.get("combat_difficulty", {}).get("v08_applied_scales", {})
+	value *= float(v08_scales.get("attack", 1.0))
+	value *= float(custom_difficulty_profile().attack)
+	var stage := int(map_data.get("global_stage", 1))
+	if template_id.begins_with("stage_guardian") or stage > 40:
+		value *= difficulty_multiplier("guardian_attack", stage)
+	else:
+		var final_scale: Dictionary = progression.progression_config.get("combat_difficulty", {}).get("final_boss", {}).get(str(stage), {})
+		value *= float(final_scale.get("attack", 1.0))
+	return maxf(1.0, value)
+
 func breakthrough_actor(actor_id: String) -> bool:
 	if not progression.breakthrough_actor(actor_id, native_world_tier(actor_id), maximum_unlocked_world_tier()): return false
 	rebuild_party()
@@ -418,6 +446,13 @@ func apply_playable_melee_survival_baseline() -> void:
 		data["melee_archetype"] = "assassin" if is_assassin else "warrior"
 		data["survival_reference_hp"] = reference_hp
 		data["max_hp"] = maxf(float(data.get("max_hp", 1.0)), ceilf(reference_hp * ratio))
+
+func apply_playable_attack_interval_baseline() -> void:
+	# Normalize only recruitable hero templates once after data loading.
+	for hero_id in ProgressionManagerScript.ALL_HERO_IDS:
+		var data: Dictionary = actors.get(hero_id, {})
+		if data.is_empty(): continue
+		data.attack_interval = clampf(float(data.get("attack_interval", 1.0)), 0.95, 1.05)
 
 func _process(delta: float) -> void:
 	if is_paused:

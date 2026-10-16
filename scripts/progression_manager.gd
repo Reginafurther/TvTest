@@ -58,7 +58,7 @@ var equipped_general_skills: Dictionary = {}
 var general_skill_levels: Dictionary = {}
 var skill_priorities: Dictionary = {}
 var skill_books: Dictionary = {}
-var special_items: Dictionary = {"recruit_ticket": 0, "camp_coupon": 0, "rift_key": 0}
+var special_items: Dictionary = {"recruit_ticket": 0, "rift_key": 0}
 var collectibles: Dictionary = {}
 var rift_progress: Dictionary = {
 	"three_kingdoms": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
@@ -75,7 +75,9 @@ var rift_progress: Dictionary = {
 var encounter_state: Dictionary = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
 var encounter_log: Array = []
 var encounter_counts: Dictionary = {}
-var camp_inventory: Dictionary = {"camp_flag": 1, "campfire": 1, "tent": 1, "bench": 1}
+# Deprecated compatibility payloads. They are preserved when loading an old
+# save, but no current gameplay or UI reads or mutates them.
+var camp_inventory: Dictionary = {}
 var camp_layout: Array = []
 var achievements: Dictionary = {}
 var auto_push := true
@@ -586,6 +588,11 @@ func toggle_skill_priority(actor_id: String) -> void:
 	changed.emit()
 	save_to_disk()
 
+func set_skill_priority(actor_id: String, exclusive_first: bool) -> void:
+	skill_priorities[actor_id] = ["exclusive", "general"] if exclusive_first else ["general", "exclusive"]
+	changed.emit()
+	save_to_disk()
+
 func record_transaction(action: String, detail: String, gold_delta: int) -> void:
 	transaction_log.push_front({"time": int(Time.get_unix_time_from_system()), "action": action, "detail": detail, "gold": gold_delta})
 	if transaction_log.size() > 30:
@@ -672,7 +679,7 @@ func reset_to_new_game() -> bool:
 	general_skill_levels = {}
 	skill_priorities = {}
 	skill_books = {}
-	special_items = {"recruit_ticket": 0, "camp_coupon": 0, "rift_key": 0}
+	special_items = {"recruit_ticket": 0, "rift_key": 0}
 	collectibles = {}
 	rift_progress = {
 		"three_kingdoms": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []},
@@ -689,7 +696,7 @@ func reset_to_new_game() -> bool:
 	encounter_state = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
 	encounter_log = []
 	encounter_counts = {}
-	camp_inventory = {"camp_flag": 1, "campfire": 1, "tent": 1, "bench": 1}
+	camp_inventory = {}
 	camp_layout = []
 	achievements = {}
 	auto_push = true
