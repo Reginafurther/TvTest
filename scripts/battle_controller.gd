@@ -92,6 +92,7 @@ func _ready() -> void:
 		worlds_config.maps.merge(content.get("maps", {}), true)
 		worlds_config.bosses.merge(content.get("bosses", {}), true)
 		worlds_config.recruitment.costs.merge(content.get("recruitment", {}), true)
+	apply_playable_melee_survival_baseline()
 	for skill_id in general_skills_config:
 		if not general_skills_config[skill_id].has("function_type"):
 			general_skills_config[skill_id].function_type = infer_skill_function(str(general_skills_config[skill_id].get("effect", "")))
@@ -293,6 +294,36 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 	else:
 		enemies.append(unit)
 	return unit
+
+func apply_playable_melee_survival_baseline() -> void:
+	# Balance only recruitable hero templates. Enemy and boss templates are kept
+	# completely separate, and the resulting max_hp remains the single base value
+	# used by level/equipment refreshes (so the ratio is never compounded).
+	var tank_hp_by_world: Dictionary = {}
+	var maximum_hero_hp_by_world: Dictionary = {}
+	for hero_id in ProgressionManagerScript.ALL_HERO_IDS:
+		var data: Dictionary = actors.get(hero_id, {})
+		if data.is_empty(): continue
+		var world := str(data.get("world", ""))
+		var hero_hp := float(data.get("max_hp", 1.0))
+		maximum_hero_hp_by_world[world] = maxf(float(maximum_hero_hp_by_world.get(world, 0.0)), hero_hp)
+		if str(data.get("combat_role", "")) == "tank" or str(data.get("combat_style", "")) == "tank":
+			tank_hp_by_world[world] = maxf(float(tank_hp_by_world.get(world, 0.0)), hero_hp)
+	for hero_id in ProgressionManagerScript.ALL_HERO_IDS:
+		var data: Dictionary = actors.get(hero_id, {})
+		if data.is_empty() or str(data.get("combat_style", "")) != "melee" or str(data.get("combat_role", "")) == "tank": continue
+		var world := str(data.get("world", ""))
+		var reference_hp := float(tank_hp_by_world.get(world, 0.0))
+		if reference_hp <= 0.0:
+			# Worlds without a formal tank keep their strongest existing frontliner
+			# as the warrior benchmark instead of borrowing another world's scale.
+			reference_hp = float(maximum_hero_hp_by_world.get(world, float(data.get("max_hp", 1.0)))) / 0.90
+		var role_text := str(data.get("role", ""))
+		var is_assassin := "刺客" in role_text or (str(data.get("target_priority", "")) == "low_health_enemy" and float(data.get("move_speed", 0.0)) >= 120.0 and float(data.get("attack_interval", 99.0)) <= 0.75)
+		var ratio := 0.80 if is_assassin else 0.90
+		data["melee_archetype"] = "assassin" if is_assassin else "warrior"
+		data["survival_reference_hp"] = reference_hp
+		data["max_hp"] = maxf(float(data.get("max_hp", 1.0)), ceilf(reference_hp * ratio))
 
 func _process(delta: float) -> void:
 	if is_paused:

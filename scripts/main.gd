@@ -1960,17 +1960,19 @@ func finish_v061_playtest_fixes_test() -> void:
 		v03_ui._recruit_selected_actor()
 		if "zhang_fei" not in p.roster or int(p.materials.three_kingdoms_token) != 110:
 			failures.append("明确招募按钮未真实扣材并获得角色")
-	# 全部功能页共用真实滚动容器，扩展后的40关按钮均在可滚动内容树内。
+	# 世界页使用固定横向世界导航，下面只构建当前世界的10关。
 	v03_ui.open_view("world")
 	await get_tree().process_frame
-	var stage_buttons: Array[Node] = v03_ui.content.find_children("*", "Button", true, false)
-	if v03_ui.content.get_parent() != v03_ui.content_scroll or stage_buttons.size() != 40:
-		failures.append("世界页不是可滚动内容或未构建全部40关")
-	v03_ui.content_scroll.scroll_vertical = 100
-	v03_ui.refresh()
+	var world_tabs: Array[Node] = v03_ui.content.find_children("WorldTabs", "HBoxContainer", true, false)
+	var stage_scrolls: Array[Node] = v03_ui.content.find_children("WorldStageScroll", "ScrollContainer", true, false)
+	if world_tabs.is_empty() or world_tabs[0].get_child_count() < 4 or stage_scrolls.is_empty() or stage_scrolls[0].find_children("*", "Button", true, false).size() != 10:
+		failures.append("世界分类导航或当前世界10关列表构建失败")
+	if not world_tabs.is_empty() and world_tabs[0].get_child_count() > 1:
+		world_tabs[0].get_child(1).pressed.emit()
 	await get_tree().process_frame
-	await get_tree().process_frame
-	if int(v03_ui.scroll_positions.get("world", -1)) < 0: failures.append("页面刷新未保存滚动位置")
+	var switched_stage_scrolls: Array[Node] = v03_ui.content.find_children("WorldStageScroll", "ScrollContainer", true, false)
+	if switched_stage_scrolls.is_empty() or switched_stage_scrolls[0].find_children("*", "Button", true, false).size() != 10:
+		failures.append("切换世界后未仅显示对应10关")
 	# 通用技能：书本学习、纯金币升级、重复书回收；UI说明取自真实配置。
 	p.roster = ["zhao_yun"]; p.party = ["zhao_yun", "", "", ""]; p.ensure_growth_layout()
 	p.learned_general_skills.zhao_yun = []; p.general_skill_levels.zhao_yun = {}; p.skill_books.clear(); p.gold = 1000

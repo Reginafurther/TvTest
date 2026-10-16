@@ -53,6 +53,7 @@ var difficulty_preview := 1.0
 var settings_feedback := ""
 var auto_equipment_warning_dialog: ConfirmationDialog
 var pending_auto_equipment_setting: Dictionary = {}
+var selected_world_tab := ""
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -230,6 +231,7 @@ func refresh() -> void:
 	if content_scroll != null and not current_view.is_empty():
 		scroll_positions[current_view] = content_scroll.scroll_vertical
 	clear_content()
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	match current_view:
 		"world": build_world()
 		"recruit", "party": build_recruit()
@@ -545,23 +547,85 @@ func _confirm_bulk_sell() -> void:
 	refresh()
 
 func build_world() -> void:
-	title.text = "100关主线 · 十世界冒险"
+	var maps_by_world: Dictionary = {}
+	var world_first_stage: Dictionary = {}
+	var maximum_stage := 0
+	for map_id in battle.worlds_config.maps:
+		var map_data: Dictionary = battle.worlds_config.maps[map_id]
+		var world_name := str(map_data.get("world", "未知世界"))
+		var stage := int(map_data.get("global_stage", 1))
+		maximum_stage = maxi(maximum_stage, stage)
+		if not maps_by_world.has(world_name): maps_by_world[world_name] = []
+		maps_by_world[world_name].append({"id":str(map_id), "data":map_data})
+		world_first_stage[world_name] = mini(int(world_first_stage.get(world_name, stage)), stage)
+	var world_names: Array = maps_by_world.keys()
+	world_names.sort_custom(func(a, b): return int(world_first_stage[a]) < int(world_first_stage[b]))
+	var current_world := str(battle.worlds_config.maps.get(battle.current_map_id, {}).get("world", ""))
+	if selected_world_tab.is_empty() or not maps_by_world.has(selected_world_tab): selected_world_tab = current_world
+	if selected_world_tab.is_empty() and not world_names.is_empty(): selected_world_tab = str(world_names[0])
+	title.text = "%d关主线 · %d世界冒险" % [maximum_stage, world_names.size()]
+	# The outer panel stays fixed; only the stage list below the horizontal world
+	# tabs scrolls vertically.
+	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var info := Label.new()
-	info.text = "当前：%s　｜三国✓ 宝可梦%s 龙族%s 逆水寒%s 魔兽%s 金庸%s 秦时%s 火影%s 黄易%s 风云%s" % [battle.worlds_config.maps[battle.current_map_id].name, "✓" if battle.progression.world_unlocked("宝可梦") else "🔒", "✓" if battle.progression.world_unlocked("龙族") else "🔒", "✓" if battle.progression.world_unlocked("逆水寒") else "🔒", "✓" if battle.progression.world_unlocked("魔兽世界") else "🔒", "✓" if battle.progression.world_unlocked("金庸") else "🔒", "✓" if battle.progression.world_unlocked("秦时明月") else "🔒", "✓" if battle.progression.world_unlocked("火影忍者") else "🔒", "✓" if battle.progression.world_unlocked("黄易") else "🔒", "✓" if battle.progression.world_unlocked("风云") else "🔒"]
+	info.text = "当前战斗：%s　｜正在查看：%s%s" % [str(battle.worlds_config.maps.get(battle.current_map_id, {}).get("name", "未知关卡")), selected_world_tab, "" if battle.progression.world_unlocked(selected_world_tab) else "（未解锁，可预览）"]
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(info)
-	for map_id in battle.worlds_config.maps:
-		var data: Dictionary = battle.worlds_config.maps[map_id]
+	var world_scroll := ScrollContainer.new()
+	world_scroll.name = "WorldNavigation"
+	world_scroll.custom_minimum_size = Vector2(0, 44)
+	world_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	world_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	world_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	content.add_child(world_scroll)
+	var world_tabs := HBoxContainer.new()
+	world_tabs.name = "WorldTabs"
+	world_tabs.add_theme_constant_override("separation", 6)
+	world_scroll.add_child(world_tabs)
+	for world_name in world_names:
+		var tab := Button.new()
+		tab.text = str(world_name) + ("" if battle.progression.world_unlocked(str(world_name)) else " 🔒")
+		tab.custom_minimum_size = Vector2(88, 36)
+		tab.focus_mode = Control.FOCUS_NONE
+		V035ThemeScript.button(tab, "gold" if str(world_name) == selected_world_tab else "blue")
+		tab.pressed.connect(_select_world_tab.bind(str(world_name)))
+		world_tabs.add_child(tab)
+	var stage_scroll := ScrollContainer.new()
+	stage_scroll.name = "WorldStageScroll"
+	stage_scroll.custom_minimum_size = Vector2(0, 365)
+	stage_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	stage_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	stage_scroll.follow_focus = false
+	stage_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	content.add_child(stage_scroll)
+	var stage_list := VBoxContainer.new()
+	stage_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage_list.add_theme_constant_override("separation", 6)
+	stage_scroll.add_child(stage_list)
+	var selected_maps: Array = maps_by_world.get(selected_world_tab, [])
+	selected_maps.sort_custom(func(a, b): return int(a.data.get("global_stage", 1)) < int(b.data.get("global_stage", 1)))
+	for row in selected_maps:
+		var map_id := str(row.id)
+		var data: Dictionary = row.data
 		var stage := int(data.get("global_stage", 1))
 		var complete: bool = battle.progression.is_stage_complete(stage)
 		var available: bool = battle.progression.can_enter_stage(stage)
 		var button := Button.new()
 		var state := "已通关" if complete else "可挑战" if available else "世界锁定" if not battle.progression.world_unlocked(str(data.world)) else "前置未通关"
-		button.text = "%s · 全局第%d关 · %s（难度Lv.%d） · %s" % [data.world, stage, data.name, int(data.get("difficulty_level", stage)), state]
+		button.text = "全局第%d关 · %s（难度Lv.%d） · %s" % [stage, data.name, int(data.get("difficulty_level", stage)), state]
 		button.disabled = (map_id == battle.current_map_id and battle.active_boss_id.is_empty() and not battle.stage_cleared) or not available
-		button.tooltip_text = "按全局1—100关顺序推进；角色等级上限随最高已通关主线开放。"
+		button.tooltip_text = "按全局主线顺序推进；切换分类仅预览，不会切换当前战斗。"
 		button.pressed.connect(_enter_stage.bind(map_id))
-		content.add_child(button)
+		stage_list.add_child(button)
+
+func _select_world_tab(world_name: String) -> void:
+	if selected_world_tab == world_name: return
+	selected_world_tab = world_name
+	scroll_positions["world"] = 0
+	content_scroll.scroll_vertical = 0
+	refresh()
 
 func _enter_stage(map_id: String) -> void:
 	if battle.switch_map(map_id):
