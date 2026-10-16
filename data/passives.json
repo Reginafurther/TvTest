@@ -6,17 +6,17 @@
   "team_haste": {"name": "卧龙谋略", "effect": "team_haste", "value": 0.08, "per_level": 0.012, "description": "诸葛亮存活并在战场时，全队专属主动技能的冷却缩短8% → 18.8%。"},
   "boss_slayer": {"name": "无双破军", "effect": "boss_slayer", "value": 0.22, "per_level": 0.03, "description": "对Boss造成的伤害提高22% → 49%，作用于普通攻击及专属范围主动技能。"},
   "static_charge": {"name": "静电加速", "effect": "attack_speed", "value": 0.16, "per_level": 0.02, "description": "持续提高攻击速度与雷电节奏。"},
-  "thick_fat": {"name": "厚脂守护", "effect": "health_regen", "value": 0.18, "regen": 2.0, "per_level": 0.02, "description": "提高最大生命并持续恢复。"},
-  "poison_master": {"name": "剧毒蔓延", "effect": "poison_master", "value": 0.25, "per_level": 0.035, "description": "提高中毒伤害与持续时间。"},
+  "thick_fat": {"name": "厚脂守护", "effect": "health_regen", "value": 0.18, "per_level": 0.02, "regen_ratio": 0.02, "regen_ratio_per_level": 0.0022222222222, "description": "常驻提高自身最大生命18% → 36%，并每秒恢复自身最大生命2% → 4%的生命值。"},
+  "poison_master": {"name": "剧毒蔓延", "effect": "poison_master", "value": 0.25, "per_level": 0.1944444444444, "duration_bonus": 0.125, "duration_bonus_per_level": 0.0175, "description": "提高「毒影诅咒」施加的中毒伤害25% → 200%，同时延长其中毒持续时间。"},
   "psychic_focus": {"name": "精神专注", "effect": "elemental_damage", "value": 0.20, "per_level": 0.03, "description": "持续提高技能与元素伤害。"},
   "executioner": {"name":"武圣斩将","effect":"execute_damage","value":0.22,"per_level":0.025,"description":"攻击生命不高于35%的敌人时，额外提高22% → 44.5%的伤害，包括普通攻击及专属主动技能。"},
-  "eagle_eye": {"name":"老将鹰眼","effect":"armor_ignore","value":0.16,"per_level":0.02,"description":"常驻提高16% → 34%的物理伤害，同时普通攻击和专属主动「百步穿杨」额外获得16% → 34%的防御穿透。"},
+  "eagle_eye": {"name":"老将鹰眼","effect":"armor_ignore","value":0.16,"per_level":0.02,"description":"普通攻击和专属主动「百步穿杨」额外获得16% → 34%的防御穿透。"},
   "moon_dance": {"name":"倾城舞姿","effect":"control_haste","value":0.08,"per_level":0.012,"description":"「闭月离间」命中后，立即缩短最多4名队友当前技能的剩余冷却8% → 18.8%。"},
   "burn_master": {"name":"都督火计","effect":"burn_master","value":0.24,"per_level":0.03,"description":"提高燃烧伤害，对燃烧目标额外增伤。"},
   "leech_growth": {"name":"茂盛共生","effect":"health_regen","value":0.10,"regen":1.5,"per_level":0.015,"description":"提高生命并持续恢复，寄生治疗得到强化。"},
-  "flame_synergy": {"name":"猛火联动","effect":"burn_master","value":0.20,"per_level":0.028,"description":"提高燃烧伤害，对燃烧敌人的普攻更强。"},
+  "flame_synergy": {"name":"猛火联动","effect":"burn_master","value":0.20,"per_level":0.0222222222222,"description":"对处于燃烧状态的敌人造成伤害时，额外提高20% → 40%的伤害。"},
   "shell_armor": {"name":"硬壳护体","effect":"damage_reduction","value":0.12,"per_level":0.012,"description":"持续减伤；护盾存在时额外降低受到的伤害。"},
   "aura_focus": {"name":"不屈波导","effect":"armor_ignore","value":0.12,"per_level":0.018,"description":"攻击忽略部分防御，技能命中更稳定。"},
   "protective_heart": {"name":"同步守护","effect":"shield_healing","value":0.16,"per_level":0.02,"description":"提高自身施加的护盾和治疗量。"},
-  "dragon_resolve": {"name":"多重鳞片","effect":"high_hp_guard","value":0.16,"per_level":0.015,"description":"生命高于70%时获得额外减伤。"}
+  "dragon_resolve": {"name":"多重鳞片","effect":"high_hp_guard","value":0.16,"per_level":0.0266666666667,"description":"自身当前生命不低于最大生命70%时，受到的伤害降低16% → 40%。"}
 }

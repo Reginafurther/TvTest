@@ -170,6 +170,11 @@ func spawn_wave() -> void:
 		if enemies.is_empty():
 			resolve_stage_wave()
 		return
+	# A wave boundary is authoritative for taunt readiness and front-line staging.
+	# The unit decides which equipped skills are taunts, so other cooldowns remain intact.
+	for hero in heroes:
+		if is_instance_valid(hero) and not hero.dead and not hero.is_summon:
+			hero.begin_combat_wave()
 	if not str(map_data.get("main_boss", "")).is_empty() and wave == target_wave:
 		stage_boss_active = true
 		stage_boss_spawned = true
@@ -1103,7 +1108,7 @@ func strategy_allows(unit) -> bool:
 	var preset: Dictionary = progression.strategy_presets.get(progression.active_strategy, {})
 	var self_ratio: float = unit.hp / maxf(1.0, unit.max_hp)
 	if unit.skill_data.get("type", "") == "self_heal":
-		return self_ratio <= float(preset.get("self_hp", 0.45))
+		return self_ratio < float(unit.skill_data.get("health_threshold", preset.get("self_hp", 0.45)))
 	if unit.skill_data.get("type", "") == "heal_aura":
 		var ally = lowest_health_ally(unit, unit.effective_cast_range(float(unit.skill_data.get("range", 240.0))))
 		return ally != null and ally.hp / ally.max_hp <= float(preset.get("ally_hp", 0.65))

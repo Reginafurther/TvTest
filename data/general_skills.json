@@ -221,10 +221,10 @@
     "effect": "multi_hit",
     "cooldown": 6.5,
     "power": 0.38,
-    "power_per_level": 0.03,
+    "power_per_level": 0.0570175438596,
     "hits": 4,
     "range": 110,
-    "description": "以极快速度连续攻击4次。"
+    "description": "对单体连续攻击4次，每次造成38% → 57.5%攻击力的物理伤害，总计152% → 230%，每段独立结算防御。"
   },
   "pk_psychic_wave": {
     "damage_type": "elemental",
@@ -273,12 +273,12 @@
     "category": "active",
     "effect": "poison",
     "cooldown": 10.0,
-    "power": 0.45,
-    "power_per_level": 0.03,
+    "power": 1.0,
+    "power_per_level": 0.0,
     "dot_power": 0.25,
     "duration": 7.0,
     "range": 220,
-    "description": "施加强力剧毒，持续伤害逐步加深。"
+    "description": "对单体固定造成100%攻击力的元素伤害，并附加持续7秒的中毒效果；连续施加中毒最多累积3层，每秒基础伤害分别为25%、31.25%、37.5%攻击力。"
   },
   "pk_paralyze": {
     "damage_type": "physical",
@@ -287,10 +287,10 @@
     "category": "active",
     "effect": "damage",
     "cooldown": 9.5,
-    "power": 0.55,
-    "power_per_level": 0.035,
+    "power": 1.5,
+    "power_per_level": 0.0,
     "range": 230,
-    "description": "投掷种子炸弹造成单体物理伤害。"
+    "description": "向单体投掷种子炸弹，固定造成150%攻击力的物理伤害。"
   },
   "pk_ice_beam": {
     "damage_type": "elemental",
@@ -301,10 +301,10 @@
     "cooldown": 11.0,
     "power": 0.9,
     "power_per_level": 0.05,
-    "slow": 0.7,
+    "attack_speed_slow": 0.3,
     "duration": 3.2,
     "range": 235,
-    "description": "冰冻光束造成伤害并强力减速。"
+    "description": "对单体造成90% → 130.5%攻击力的元素伤害，并降低目标30%的普通攻击速度，持续3.2秒。"
   },
   "pk_life_dew": {
     "damage_type": "none",
@@ -314,9 +314,9 @@
     "effect": "heal",
     "cooldown": 8.5,
     "power": 0.92,
-    "power_per_level": 0.055,
+    "power_per_level": 0.0942028985507,
     "range": 290,
-    "description": "用生命水滴治疗最虚弱的队友。"
+    "description": "治疗生命比例最低的受伤队友，基础治疗倍率为92% → 170%攻击力，实际治疗量另乘1.5倍主动治疗系数并受到治疗加成影响。"
   },
   "pk_aqua_ring": {
     "damage_type": "none",
@@ -378,10 +378,10 @@
     "effect": "damage_reduction",
     "cooldown": 13.0,
     "power": 0.34,
-    "power_per_level": 0.015,
+    "power_per_level": 0.0196078431373,
     "duration": 3.5,
     "targets": 1,
-    "description": "短时间大幅降低自身受到的伤害。"
+    "description": "使自身受到的伤害降低34% → 40%，持续3.5秒。"
   },
   "pk_agility": {
     "damage_type": "none",
@@ -423,8 +423,8 @@
     "effect": "stat_guard",
     "health": 0.1,
     "defense": 0.1,
-    "power_per_level": 0.012,
-    "description": "常驻提高自身最大生命和防御10% → 20.8%。"
+    "power_per_level": 0.0066666666667,
+    "description": "常驻提高自身最大生命和防御10% → 16%。"
   },
   "tk_swift_assault": {
     "name": "连战之势",
@@ -489,8 +489,8 @@
     "category": "passive",
     "effect": "critical",
     "power": 0.14,
-    "power_per_level": 0.012,
-    "description": "常驻提高自身暴击率14% → 24.8%。"
+    "power_per_level": 0.0066666666667,
+    "description": "常驻提高自身暴击率14% → 20%。"
   },
   "tk_formation_aegis": {
     "name": "同袍协战",
@@ -574,8 +574,8 @@
     "category": "passive",
     "effect": "critical",
     "power": 0.07,
-    "power_per_level": 0.008,
-    "description": "持续提高暴击率。"
+    "power_per_level": 0.0166666666667,
+    "description": "常驻提高自身暴击率7% → 22%。"
   },
   "pk_skill_link": {
     "name": "属性亲和",
@@ -592,8 +592,10 @@
     "category": "passive",
     "effect": "stat_guard",
     "power": 0.07,
-    "power_per_level": 0.006,
-    "description": "持续提高生命与防御。",
+    "power_per_level": 0.0,
+    "health_per_level": 0.0111111111111,
+    "defense_per_level": 0.0066666666667,
+    "description": "常驻提高自身最大生命8% → 18%，并提高防御12% → 18%。",
     "health": 0.08,
     "defense": 0.12
   }

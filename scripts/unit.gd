@@ -10,6 +10,9 @@ const HEALER_FOLLOW_RANGE_RATIO := 0.75
 const HEALER_FOLLOW_TOLERANCE := 24.0
 const PLAYER_RANGED_RANGE_MULTIPLIER := 2.0
 const ACTIVE_SKILL_CAST_RANGE := 420.0
+const HERO_TAUNT_RANGE := 420.0
+const WARRIOR_TANK_FOLLOW_DISTANCE := 210.0
+const WARRIOR_TANK_FOLLOW_TOLERANCE := 28.0
 const REMOTE_GENERAL_MIN_CONFIGURED_RANGE := 180.0
 const RANGED_INNER_RANGE_RATIO := 0.70
 const RANGED_OUTER_RANGE_RATIO := 0.85
@@ -116,6 +119,8 @@ var temporary_attack_bonus := 0.0
 var temporary_attack_bonus_time := 0.0
 var attack_weaken_power := 0.0
 var attack_weaken_time := 0.0
+var attack_speed_slow_power := 0.0
+var attack_speed_slow_time := 0.0
 var armor_break_time := 0.0
 var armor_break_power := 0.0
 var shock_time := 0.0
@@ -142,6 +147,8 @@ var metamorphosis_time := 0.0
 var metamorphosis_cooldown := 0.0
 var war_banner_icd_remaining := 0.0
 var war_banner_trigger_count := 0
+var warrior_committed_this_wave := false
+var tank_engaged_this_wave := false
 
 func valid_combat_source(source):
 	return source if is_instance_valid(source) else null
@@ -236,7 +243,12 @@ func _physics_process(delta: float) -> void:
 	rally_timeout = maxf(0.0, rally_timeout - delta)
 	repath_timer -= delta
 	hit_flash = maxf(0.0, hit_flash - delta)
+	var was_taunted := taunt_timer > 0.0
 	taunt_timer = maxf(0.0, taunt_timer - delta)
+	if was_taunted and taunt_timer <= 0.0 and faction == "enemies":
+		# Expired taunts return enemies to normal target selection immediately.
+		target = null
+		target_refresh_timer = 0.0
 	temporary_reduction_time = maxf(0.0, temporary_reduction_time - delta)
 	_tick_shield_layers(delta)
 	temporary_evasion_time = maxf(0.0, temporary_evasion_time - delta)
@@ -247,6 +259,8 @@ func _physics_process(delta: float) -> void:
 	if temporary_attack_bonus_time <= 0.0: temporary_attack_bonus = 0.0
 	attack_weaken_time = maxf(0.0, attack_weaken_time - delta)
 	if attack_weaken_time <= 0.0: attack_weaken_power = 0.0
+	attack_speed_slow_time = maxf(0.0, attack_speed_slow_time - delta)
+	if attack_speed_slow_time <= 0.0: attack_speed_slow_power = 0.0
 	slow_time = maxf(0.0, slow_time - delta)
 	armor_break_time = maxf(0.0, armor_break_time - delta)
 	shock_time = maxf(0.0, shock_time - delta)
@@ -312,6 +326,8 @@ func _physics_process(delta: float) -> void:
 		else:
 			move_toward_point(rally_target, delta)
 			return
+	if process_warrior_wait(delta):
+		return
 	if faction == "heroes" and actor_data.get("basic_action", "damage") == "heal":
 		process_healer(delta)
 		return
@@ -321,6 +337,8 @@ func _physics_process(delta: float) -> void:
 		return_to_formation(delta)
 		return
 	var distance := position.distance_to(target.position)
+	if faction == "heroes" and str(actor_data.get("combat_role", "")) == "tank" and distance <= maxf(90.0, attack_range + 18.0):
+		tank_engaged_this_wave = true
 	if is_player_ranged():
 		var configured_safe := float(actor_data.get("minimum_safe_distance", float(actor_data.get("attack_range", 60.0)) * RANGED_INNER_RANGE_RATIO))
 		var minimum_safe := maxf(resolved_ranged_spacing(configured_safe), attack_range * RANGED_INNER_RANGE_RATIO)
@@ -488,6 +506,62 @@ func is_player_ranged() -> bool:
 	var style := str(actor_data.get("combat_style", "melee"))
 	return faction == "heroes" and not bool(actor_data.get("summoned", false)) and (style in ["ranged", "healer"] or str(actor_data.get("basic_action", "damage")) == "heal")
 
+func is_taunt_skill(data: Dictionary) -> bool:
+	return str(data.get("effect", "")) == "taunt" or str(data.get("type", "")) in ["taunt", "shell_guard", "gravity_taunt"]
+
+func begin_combat_wave() -> void:
+	warrior_committed_this_wave = false
+	tank_engaged_this_wave = false
+	if is_taunt_skill(skill_data):
+		skill_timer = 0.0
+	for skill_id in general_active_ids:
+		var data: Dictionary = battle.general_skills_config.get(skill_id, {})
+		if is_taunt_skill(data):
+			general_active_timers[skill_id] = 0.0
+
+func is_waiting_warrior() -> bool:
+	return faction == "heroes" and not is_summon and str(actor_data.get("combat_style", "")) == "melee" and str(actor_data.get("combat_role", "")) != "tank" and str(actor_data.get("melee_archetype", "warrior")) == "warrior"
+
+func frontline_tank():
+	var candidates: Array = []
+	for member in battle.heroes:
+		if is_instance_valid(member) and not member.dead and not member.is_summon and str(member.actor_data.get("combat_role", "")) == "tank":
+			candidates.append(member)
+	if candidates.is_empty(): return null
+	candidates.sort_custom(func(a, b):
+		var enemy_a = battle.find_closest_enemy(a)
+		var enemy_b = battle.find_closest_enemy(b)
+		var distance_a: float = a.position.distance_squared_to(enemy_a.position) if is_instance_valid(enemy_a) else INF
+		var distance_b: float = b.position.distance_squared_to(enemy_b.position) if is_instance_valid(enemy_b) else INF
+		return distance_a < distance_b if not is_equal_approx(distance_a, distance_b) else position.distance_squared_to(a.position) < position.distance_squared_to(b.position)
+	)
+	return candidates[0]
+
+func process_warrior_wait(delta: float) -> bool:
+	if not is_waiting_warrior() or warrior_committed_this_wave:
+		return false
+	var tank = frontline_tank()
+	if not is_instance_valid(tank) or tank.dead:
+		warrior_committed_this_wave = true
+		return false
+	var threat = battle.find_closest_enemy(tank)
+	if tank.tank_engaged_this_wave or (is_instance_valid(threat) and tank.position.distance_to(threat.position) <= maxf(90.0, tank.attack_range + 18.0)):
+		warrior_committed_this_wave = true
+		return false
+	var away := Vector2.LEFT
+	if is_instance_valid(threat): away = threat.position.direction_to(tank.position)
+	if away.length_squared() < 0.01: away = Vector2.LEFT
+	var follow_point: Vector2 = tank.position + away.normalized() * WARRIOR_TANK_FOLLOW_DISTANCE
+	follow_point.x = clampf(follow_point.x, 24.0, BattleMapScript.ARENA_SIZE.x - 24.0)
+	follow_point.y = clampf(follow_point.y, 34.0, BattleMapScript.ARENA_SIZE.y - 24.0)
+	if position.distance_to(follow_point) > WARRIOR_TANK_FOLLOW_TOLERANCE:
+		current_action = "wait_behind_tank"
+		move_toward_point(follow_point, delta)
+	else:
+		current_action = "hold_behind_tank"
+		velocity = Vector2.ZERO
+	return true
+
 func resolved_attack_range() -> float:
 	var configured := float(actor_data.get("attack_range", 60.0))
 	return configured * PLAYER_RANGED_RANGE_MULTIPLIER if is_player_ranged() else configured
@@ -518,6 +592,7 @@ func exclusive_skill_uses_remote_delivery() -> bool:
 	]
 
 func exclusive_execution_range(configured_range: float) -> float:
+	if faction == "heroes" and not is_summon and is_taunt_skill(skill_data): return HERO_TAUNT_RANGE
 	return effective_cast_range(configured_range) if exclusive_skill_uses_remote_delivery() else configured_range
 
 func general_skill_requires_target(data: Dictionary) -> bool:
@@ -526,7 +601,7 @@ func general_skill_requires_target(data: Dictionary) -> bool:
 		"multi_hit", "evasion_strike", "multi_hit_knockback", "multi_hit_armor_break",
 		"area_damage", "area_slow_damage", "area_knockback", "vulnerability_strike",
 		"chain", "armor_break", "burn", "poison", "shock", "area_shock", "freeze",
-		"heal", "hot", "cleanse", "damage_share"
+		"heal", "hot", "cleanse", "damage_share", "taunt"
 	]
 
 func general_skill_is_remote(data: Dictionary) -> bool:
@@ -537,6 +612,7 @@ func general_skill_is_remote(data: Dictionary) -> bool:
 
 func general_active_cast_range(data: Dictionary) -> float:
 	var configured := float(data.get("range", maxf(float(actor_data.get("attack_range", 60.0)), 180.0)))
+	if faction == "heroes" and not is_summon and is_taunt_skill(data): return HERO_TAUNT_RANGE
 	return effective_cast_range(configured) if general_skill_is_remote(data) else configured
 
 func boss_aoe_safe_distance(enemy) -> float:
@@ -551,6 +627,10 @@ func boss_aoe_safe_distance(enemy) -> float:
 
 func basic_attack() -> void:
 	attack_timer = attack_interval / (1.0 + haste_power if haste_time > 0.0 else 1.0)
+	if attack_speed_slow_time > 0.0:
+		attack_timer /= maxf(0.10, 1.0 - attack_speed_slow_power)
+	if faction == "heroes" and str(actor_data.get("combat_role", "")) == "tank" and is_instance_valid(target) and target.faction != faction:
+		tank_engaged_this_wave = true
 	if passive_skill_id == "fy_mad_blood" and hp / maxf(1.0, max_hp) <= 0.40:
 		attack_timer /= 1.0 + passive_value()
 	current_action = "basic_attack"
@@ -767,7 +847,9 @@ func try_use_general_skill(skill_id: String) -> bool:
 				var freeze_mastery := 1.0 + passive_status_mastery("freeze")
 				var freeze_targets: Array = battle.enemies_near(enemy.position, faction, 120.0, 6) if skill_id == "nh_cold_resonance" else [enemy]
 				for freeze_target in freeze_targets:
-					freeze_target.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true}); freeze_target.apply_slow(minf(0.8, float(data.get("slow", 0.6)) * freeze_mastery), minf(7.0, float(data.get("duration", 3.0)) * freeze_mastery))
+					freeze_target.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+					if skill_id == "pk_ice_beam": freeze_target.apply_attack_speed_slow(float(data.get("attack_speed_slow", 0.30)), float(data.get("duration", 3.2)))
+					else: freeze_target.apply_slow(minf(0.8, float(data.get("slow", 0.6)) * freeze_mastery), minf(7.0, float(data.get("duration", 3.0)) * freeze_mastery))
 				used = true
 		"heal":
 			if is_instance_valid(ally) and ally.hp < ally.max_hp:
@@ -874,7 +956,8 @@ func try_use_skill() -> bool:
 				battle.on_skill(self)
 				return true
 		"self_heal":
-			if hp < max_hp * 0.72:
+			var health_threshold := float(skill_data.get("health_threshold", 0.72))
+			if hp < max_hp * health_threshold:
 				heal(active_heal_amount(max_hp * power), self, true, {"source_snapshot":combat_source_snapshot(self, "none", str(actor_data.get("skill", "")))})
 				battle.spawn_ring(position, _skill_color())
 				skill_timer = cooldown
@@ -911,7 +994,8 @@ func try_use_skill() -> bool:
 			if is_instance_valid(target) and position.distance_to(target.position) <= exclusive_execution_range(float(skill_data.get("range", 210))):
 				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				var poison_bonus := passive_value() if passive_data.get("effect", "") == "poison_master" else 0.0
-				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
+				var duration_bonus := float(passive_data.get("duration_bonus", poison_bonus * 0.5)) + float(passive_data.get("duration_bonus_per_level", 0.0)) * (passive_skill_level - 1)
+				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + duration_bonus), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				if poison_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
 				skill_timer = cooldown
 				battle.on_skill(self)
@@ -951,7 +1035,8 @@ func try_use_skill() -> bool:
 					victim.apply_hard_control(float(skill_data.get("duration", 1.2)) * control_multiplier)
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"taunt":
-			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 230)), 12)
+			var victims: Array = battle.enemies_near(position, faction, exclusive_execution_range(float(skill_data.get("range", 230))), 12)
+			if victims.is_empty(): return false
 			for victim in victims:
 				victim.target = self
 				victim.taunt_timer = float(skill_data.get("duration", 3.0))
@@ -1027,9 +1112,11 @@ func try_use_skill() -> bool:
 				if wounded != null: wounded.apply_hot(active_heal_amount(attack * power * 1.4), float(skill_data.get("duration", 6.0)), self, combat_source_snapshot(self, "none", str(actor_data.get("skill", "")) + ":hot"))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"shell_guard":
+			var taunt_victims: Array = battle.enemies_near(position, faction, exclusive_execution_range(float(skill_data.get("range", 220.0))), 12)
+			if taunt_victims.is_empty(): return false
 			var shield_power := power * shield_power_multiplier()
 			add_shield(max_hp * shield_power, float(skill_data.get("duration", 4.5)), self, str(actor_data.get("skill", "")))
-			for victim in battle.enemies_near(position, faction, float(skill_data.get("range", 220.0)), 12): victim.target = self; victim.taunt_timer = float(skill_data.get("duration", 4.5))
+			for victim in taunt_victims: victim.target = self; victim.taunt_timer = float(skill_data.get("duration", 4.5))
 			var protected = battle.lowest_health_ally(self, 9999.0)
 			if protected != null and protected != self: protected.add_shield(protected.max_hp * shield_power * 0.55, float(skill_data.get("duration", 4.5)), self, str(actor_data.get("skill", "")))
 			skill_timer = cooldown; battle.on_skill(self); return true
@@ -1038,7 +1125,8 @@ func try_use_skill() -> bool:
 				var ignore := passive_value() if passive_data.get("effect", "") == "armor_ignore" else 0.0
 				if passive_data.get("effect", "") == "armor_ignore": battle.note_passive(actor_id, passive_skill_id)
 				target.take_damage(attack * power + target.defense * 0.55 * ignore, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"bypass_evasion":str(actor_data.get("skill", "")) == "aura_sphere"})
-				target.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.25)) * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
+				var armor_break := float(skill_data.get("armor_break", 0.25)) + float(skill_data.get("armor_break_per_level", 0.0)) * (active_skill_level - 1)
+				target.apply_armor_break(minf(0.8, armor_break * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"ally_guard":
 			var ally = battle.lowest_health_ally(self, effective_cast_range(float(skill_data.get("range", 260.0))))
@@ -1106,10 +1194,10 @@ func try_use_skill() -> bool:
 					victim.take_damage(damage, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"gravity_taunt":
-			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 210.0)), 12)
+			var victims: Array = battle.enemies_near(position, faction, exclusive_execution_range(float(skill_data.get("range", 210.0))), 12)
 			if not victims.is_empty():
 				for victim in victims:
-					victim.apply_slow(float(skill_data.get("slow", 0.55)), float(skill_data.get("duration", 3.0))); victim.apply_hard_control(0.8); victim.target = self
+					victim.apply_slow(float(skill_data.get("slow", 0.55)), float(skill_data.get("duration", 3.0))); victim.apply_hard_control(0.8); victim.target = self; victim.taunt_timer = float(skill_data.get("duration", 3.0))
 					if actor_id == "qiao_feng": victim.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				add_shield(max_hp * power * shield_power_multiplier()); skill_timer = cooldown; battle.on_skill(self); return true
 		"nightmare":
@@ -1245,6 +1333,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	if vulnerability_time > 0.0: reduction_factor *= 1.0 + clampf(vulnerability_power, 0.0, 0.40)
 	result.reduction = 1.0 - reduction_factor
 	amount = maxf(1.0, roundf(amount * reduction_factor))
+	if faction == "heroes" and str(actor_data.get("combat_role", "")) == "tank" and is_instance_valid(live_source) and live_source.faction != faction:
+		tank_engaged_this_wave = true
 	if shield > 0.0:
 		var absorbed := minf(shield, amount)
 		amount -= absorbed
@@ -1462,6 +1552,11 @@ func apply_slow(power: float, duration: float) -> void:
 	slow_time = maxf(slow_time, duration)
 	show_number("❄ 减速", Color("#9DDBFF"))
 
+func apply_attack_speed_slow(power: float, duration: float) -> void:
+	attack_speed_slow_power = maxf(attack_speed_slow_power, clampf(power, 0.0, 0.80))
+	attack_speed_slow_time = maxf(attack_speed_slow_time, duration)
+	show_number("攻速降低", Color("#9DDBFF"))
+
 func apply_armor_break(power: float, duration: float) -> void:
 	armor_break_power = maxf(armor_break_power, clampf(power, 0.0, 0.8))
 	armor_break_time = maxf(armor_break_time, duration)
@@ -1482,7 +1577,7 @@ func apply_damage_share(source, ratio: float, duration: float) -> void:
 	damage_share_time = duration
 
 func cleanse_statuses() -> void:
-	poison_time = 0.0; burn_time = 0.0; frost_time = 0.0; slow_time = 0.0; armor_break_time = 0.0; shock_time = 0.0
+	poison_time = 0.0; burn_time = 0.0; frost_time = 0.0; slow_time = 0.0; armor_break_time = 0.0; shock_time = 0.0; attack_speed_slow_time = 0.0; attack_speed_slow_power = 0.0
 	poison_source = null; burn_source = null; frost_source = null
 	poison_source_snapshot.clear(); burn_source_snapshot.clear(); frost_source_snapshot.clear()
 	show_number("净化", Color("#F8F2C0"))
@@ -1629,8 +1724,9 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 		match str(general_data.get("effect", "")):
 			"stat_attack": attack *= 1.0 + value
 			"stat_guard":
-				max_hp *= 1.0 + float(general_data.get("health", 0.0)) + float(general_data.get("power_per_level", 0.0)) * (battle.progression.general_skill_level(actor_id, general_id) - 1)
-				defense *= 1.0 + float(general_data.get("defense", 0.0)) + float(general_data.get("power_per_level", 0.0)) * (battle.progression.general_skill_level(actor_id, general_id) - 1)
+				var guard_level: int = battle.progression.general_skill_level(actor_id, general_id)
+				max_hp *= 1.0 + float(general_data.get("health", 0.0)) + float(general_data.get("health_per_level", general_data.get("power_per_level", 0.0))) * (guard_level - 1)
+				defense *= 1.0 + float(general_data.get("defense", 0.0)) + float(general_data.get("defense_per_level", general_data.get("power_per_level", 0.0))) * (guard_level - 1)
 			"attack_speed": attack_speed += value
 			"cooldown_reduction": cooldown_reduction += value
 			"critical": crit_chance += value
@@ -1653,7 +1749,10 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	match passive_data.get("effect", ""):
 		"health_regen":
 			max_hp *= 1.0 + passive_value()
-			life_regen += float(passive_data.get("regen", 0.0)) * (1.0 + (passive_skill_level - 1) * 0.12)
+			if passive_data.has("regen_ratio"):
+				life_regen += max_hp * (float(passive_data.regen_ratio) + float(passive_data.get("regen_ratio_per_level", 0.0)) * (passive_skill_level - 1))
+			else:
+				life_regen += float(passive_data.get("regen", 0.0)) * (1.0 + (passive_skill_level - 1) * 0.12)
 		"attack_speed":
 			attack_speed = clampf(attack_speed + passive_value(), 0.0, float(rules.get("max_attack_speed", 1.5)))
 		"elemental_damage":
@@ -1663,7 +1762,10 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 			if passive_skill_id != "hunting_instinct": crit_chance += passive_value()
 		"cooldown_reduction": cooldown_reduction += passive_value()
 		"second_wind": emergency_regen += max_hp * passive_value()
-		"armor_ignore": physical_damage += float(passive_data.get("physical_bonus", 0.0)) + passive_value()
+		"armor_ignore":
+			# 老将鹰眼 is defense compensation only; other armor-ignore passives
+			# retain their existing permanent physical bonus.
+			if passive_skill_id != "eagle_eye": physical_damage += float(passive_data.get("physical_bonus", 0.0)) + passive_value()
 		"sword_mastery":
 			physical_damage += passive_value(); attack_range += float(passive_data.get("range_bonus", 0.0)); control_resistance += float(passive_data.get("control_resistance", 0.0))
 		"critical_control_power": crit_damage += float(passive_data.get("crit_damage", 0.25)) + passive_value()

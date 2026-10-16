@@ -540,12 +540,20 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 		next = float(data.get("power", 0.0)) * (1.0 + float(data.get("power_per_level", 0.0)) * level)
 	var effect := str(data.get("effect", data.get("type", "")))
 	if effect == "stat_guard":
-		var health_now := float(data.get("health", 0.0)) + float(data.get("power_per_level", 0.0)) * (level - 1)
-		var defense_now := float(data.get("defense", 0.0)) + float(data.get("power_per_level", 0.0)) * (level - 1)
+		var health_growth := float(data.get("health_per_level", data.get("power_per_level", 0.0)))
+		var defense_growth := float(data.get("defense_per_level", data.get("power_per_level", 0.0)))
+		var health_now := float(data.get("health", 0.0)) + health_growth * (level - 1)
+		var defense_now := float(data.get("defense", 0.0)) + defense_growth * (level - 1)
 		lines.append("当前实际效果：生命 +%.1f%%，防御 +%.1f%%" % [health_now * 100.0, defense_now * 100.0])
-		if level < max_level: lines.append("升级至Lv.%d：生命/防御各再提高 %.1f%%" % [level + 1, float(data.get("power_per_level", 0.0)) * 100.0])
+		if level < max_level: lines.append("升级至Lv.%d：生命 +%.1f%%，防御 +%.1f%%" % [level + 1, (health_now + health_growth) * 100.0, (defense_now + defense_growth) * 100.0])
+	elif effect == "health_regen" and data.has("regen_ratio"):
+		var regen_now := float(data.regen_ratio) + float(data.get("regen_ratio_per_level", 0.0)) * (level - 1)
+		lines.append("当前实际效果：最大生命 +%.1f%%；每秒恢复最大生命 %.1f%%" % [current * 100.0, regen_now * 100.0])
+		if level < max_level:
+			var regen_next := regen_now + float(data.get("regen_ratio_per_level", 0.0))
+			lines.append("升级至Lv.%d：最大生命 +%.1f%%；每秒恢复最大生命 %.1f%%" % [level + 1, next * 100.0, regen_next * 100.0])
 	elif current > 0.0:
-		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect in ["regeneration", "low_hp_regeneration"] else "对护盾目标增伤" if effect == "shield_target_damage" else "防御穿透（补偿）" if effect == "defense_compensation" else "普攻吸血" if effect == "life_steal" else "攻击/效果"
+		var unit_name := "最大生命" if effect == "self_heal" else "触发概率" if effect in ["on_hit_status", "counter"] and category == "passive" else "每秒最大生命" if effect in ["regeneration", "low_hp_regeneration"] else "对护盾目标增伤" if effect == "shield_target_damage" else "防御穿透（补偿）" if effect in ["defense_compensation", "armor_ignore"] else "燃烧目标增伤" if effect == "burn_master" else "中毒伤害增伤" if effect == "poison_master" else "减伤" if effect in ["high_hp_guard", "damage_reduction"] else "暴击率" if effect == "critical" else "普攻吸血" if effect == "life_steal" else "攻击/效果"
 		lines.append("当前实际倍率：%.1f%% %s" % [current * 100.0, unit_name])
 	if data.has("hits"): lines.append("段数：%d" % int(data.hits))
 	if data.has("targets"): lines.append("最多目标：%d" % int(data.targets))
@@ -563,15 +571,21 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 	if data.has("duration"): lines.append("持续：%.1f秒" % float(data.duration))
 	if data.has("damage_reduction"): lines.append("限时减伤：%.1f%%" % (float(data.damage_reduction) * 100.0))
 	if data.has("threshold"): lines.append("触发血线：≤%.1f%%" % (float(data.threshold) * 100.0))
+	if data.has("health_threshold"): lines.append("施放条件：生命严格低于 %.1f%%" % (float(data.health_threshold) * 100.0))
 	if data.has("rescue_cooldown"): lines.append("独立救援间隔：%.1f秒；每场每目标仅一次" % float(data.rescue_cooldown))
 	if data.has("health_cost"): lines.append("施法生命消耗：%.1f%%最大生命" % (float(data.health_cost) * 100.0))
 	if data.has("chance"): lines.append("触发概率：%.1f%%" % (float(data.chance) * 100.0))
 	if data.has("shock_chance"): lines.append("麻痹概率：%.1f%%" % (float(data.shock_chance) * 100.0))
-	if data.has("armor_break"): lines.append("降低防御：%.1f%%" % (float(data.armor_break) * 100.0))
+	if data.has("armor_break_per_level"):
+		var armor_break_now := float(data.armor_break) + float(data.armor_break_per_level) * (level - 1)
+		lines.append("当前破甲：%.1f%%" % (armor_break_now * 100.0))
+		if level < max_level: lines.append("升级至Lv.%d破甲：%.1f%%" % [level + 1, (armor_break_now + float(data.armor_break_per_level)) * 100.0])
+	elif data.has("armor_break"): lines.append("降低防御：%.1f%%" % (float(data.armor_break) * 100.0))
 	if data.has("armor_ignore"): lines.append("无视防御：%.1f%%" % (float(data.armor_ignore) * 100.0))
 	if data.has("execute_bonus"): lines.append("低血量额外伤害：%.1f%%" % (float(data.execute_bonus) * 100.0))
 	if data.has("boss_cap"): lines.append("Boss单次伤害上限：%.1f%%最大生命" % (float(data.boss_cap) * 100.0))
 	if data.has("slow"): lines.append("减速：%.1f%%" % (float(data.slow) * 100.0))
+	if data.has("attack_speed_slow"): lines.append("普通攻击速度降低：%.1f%%" % (float(data.attack_speed_slow) * 100.0))
 	if data.has("dot_power"): lines.append("每秒持续伤害：%.1f%%攻击" % (float(data.dot_power) * 100.0))
 	if data.has("regen"): lines.append("基础每秒恢复：%.1f生命" % float(data.regen))
 	if effect == "low_hp_damage": lines.append("自身生命≤40%%时，本次伤害额外×1.65")
