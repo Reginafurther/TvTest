@@ -15,7 +15,8 @@
     "green": {"name": "优秀", "rank": 1, "color": "72D889", "affix_min": 1, "affix_max": 2, "value_multiplier": 0.9, "base_multiplier": 0.95, "drop_weight": 27},
     "blue": {"name": "稀有", "rank": 2, "color": "67B7FF", "affix_min": 2, "affix_max": 3, "value_multiplier": 1.05, "base_multiplier": 1.05, "drop_weight": 14},
     "purple": {"name": "史诗", "rank": 3, "color": "C184FF", "affix_min": 3, "affix_max": 4, "value_multiplier": 1.22, "base_multiplier": 1.16, "drop_weight": 6},
-    "orange": {"name": "传说", "rank": 4, "color": "FFAA45", "affix_min": 4, "affix_max": 5, "value_multiplier": 1.42, "base_multiplier": 1.28, "drop_weight": 1}
+    "orange": {"name": "传说", "rank": 4, "color": "FFAA45", "affix_min": 4, "affix_max": 5, "value_multiplier": 1.42, "base_multiplier": 1.28, "drop_weight": 1},
+    "red": {"name": "世界传说", "rank": 5, "color": "FF4D55", "affix_min": 4, "affix_max": 5, "value_multiplier": 1.42, "base_multiplier": 1.28, "drop_weight": 0}
   },
   "templates": {
     "wanderer_blade": {"name": "万界旅者之刃", "slot": "main_hand", "base_pool": ["attack"], "base_min": 7.0, "base_max": 12.0},

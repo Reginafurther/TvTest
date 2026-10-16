@@ -410,6 +410,10 @@ func item_stats(item: Dictionary) -> Dictionary:
 	for affix in item.get("affixes", []):
 		var stat: String = affix.get("stat", "")
 		totals[stat] = float(totals.get(stat, 0)) + float(affix.get("value", 0))
+	var world_affix = item.get("world_affix", {})
+	if typeof(world_affix) == TYPE_DICTIONARY and not str(world_affix.get("stat", "")).is_empty():
+		var stat := str(world_affix.stat)
+		totals[stat] = float(totals.get(stat, 0)) + float(world_affix.get("value", 0.0))
 	return totals
 
 func merge_stats(target: Dictionary, addition: Dictionary) -> void:

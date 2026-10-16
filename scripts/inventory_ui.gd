@@ -346,6 +346,10 @@ func show_item(item: Dictionary) -> void:
 		text += "无\n"
 	for affix in item.get("affixes", []):
 		text += "%s  %s\n" % [stat_name(affix.stat), format_value(affix.stat, affix.value)]
+	var world_affix = item.get("world_affix", {})
+	if typeof(world_affix) == TYPE_DICTIONARY and not world_affix.is_empty():
+		text += "\n[b][color=#FF5964]世界专属词条[/color][/b]\n"
+		text += "%s\n" % str(world_affix.get("name", "%s  %s" % [stat_name(str(world_affix.get("stat", ""))), format_value(str(world_affix.get("stat", "")), float(world_affix.get("value", 0.0)))]))
 	if not item.get("special_effects", []).is_empty():
 		text += "\n[b][color=#FFB65B]特殊机制[/color][/b]\n"
 		for effect_id in item.special_effects:

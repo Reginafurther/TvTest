@@ -514,10 +514,12 @@ func _on_unit_died(unit) -> void:
 		if not active_rift_context.is_empty() and unit.actor_data.has("rift_floor"):
 			var completed_world := str(active_rift_context.world)
 			var rift_reward: Dictionary = adventure.resolve_rift_victory()
+			if rift_reward.is_empty():
+				return
 			log_message.emit("★ 秘境第%d层完成：%d金币、材料×%d及%s。" % [int(rift_reward.get("floor", 0)), int(rift_reward.get("gold", 0)), int(rift_reward.get("material", 0)), str(rift_reward.get("equipment", {}).get("name", "装备"))])
 			active_rift_context.clear()
-			var state: Dictionary = progression.rift_progress[completed_world]
-			if bool(state.auto_climb): call_deferred("continue_rift_auto", completed_world, int(state.selected_floor))
+			var next_mode := str(rift_reward.get("next_mode", ""))
+			if next_mode in ["climb", "repeat"]: call_deferred("continue_rift_auto", completed_world, int(rift_reward.next_floor), next_mode)
 			else: call_deferred("return_from_special_combat", true)
 			return
 		if not active_boss_id.is_empty() and combat_enemy_type(unit) == "boss":
@@ -535,7 +537,8 @@ func _on_unit_died(unit) -> void:
 				var failed_floor := int(active_rift_context.get("floor", 1))
 				var failed_world := str(active_rift_context.get("world", "three_kingdoms"))
 				progression.rift_progress[failed_world].auto_climb = false
-				progression.rift_progress[failed_world].selected_floor = maxi(1, int(progression.rift_progress[failed_world].highest_clear))
+				progression.rift_progress[failed_world].repeat_floor = false
+				progression.rift_progress[failed_world].selected_floor = failed_floor
 				progression.save_to_disk()
 				adventure.active_rift.clear()
 				active_rift_context.clear()
@@ -614,7 +617,7 @@ func roll_equipment_drop(defeated_unit) -> void:
 func auto_process_new_equipment(item: Dictionary, eligible: bool = true) -> Dictionary:
 	# This function is called only for a newly generated ordinary reward and runs
 	# before InventoryManager.add_item(), so eligible drops still convert at 120/120.
-	if not eligible or item.is_empty() or bool(item.get("_auto_processed", false)) or bool(item.get("locked", false)) or bool(item.get("auto_process_protected", false)):
+	if not eligible or item.is_empty() or bool(item.get("_auto_processed", false)) or bool(item.get("locked", false)) or bool(item.get("auto_process_protected", false)) or bool(item.get("world_legendary", false)) or str(item.get("quality", "")) == "red":
 		return {}
 	if str(item.get("instance_id", "")).is_empty() or str(item.get("slot", "")).is_empty():
 		return {}
@@ -753,12 +756,12 @@ func return_from_special_combat(success: bool) -> void:
 	if has_damage_dealer_in_party(): spawn_wave()
 	if success: battle_state_changed.emit("秘境结算完成 · 返回主线挂机")
 
-func continue_rift_auto(world_id: String, floor: int) -> void:
+func continue_rift_auto(world_id: String, floor: int, mode: String = "climb") -> void:
 	clear_combatants()
 	if not adventure.start_rift(world_id, floor):
 		return_from_special_combat(true)
 	else:
-		log_message.emit("自动爬层：继续挑战第%d层。" % floor)
+		log_message.emit(("固定刷层：再次挑战第%d层。" if mode == "repeat" else "自动爬层：继续挑战第%d层。") % floor)
 
 func clear_combatants() -> void:
 	for unit in heroes + enemies:

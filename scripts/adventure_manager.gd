@@ -63,22 +63,53 @@ func rift_affix_ids(floor: int, world_id: String = "") -> Array[String]:
 func rift_profile(world_id: String, floor: int) -> Dictionary:
 	var world: Dictionary = config.rift.worlds.get(world_id, {})
 	if world.is_empty(): return {}
-	var base: Dictionary = battle.actors.get(str(world.boss_actor), {})
 	var growth: Dictionary = config.rift.growth
+	var balance: Dictionary = config.rift.get("balance", {})
+	var base: Dictionary = balance.get("base", {"health":5200,"attack":90,"defense":38})
+	var modifier: Dictionary = balance.get("world_modifiers", {}).get(world_id, {"health":1.0,"attack":1.0,"defense":1.0})
 	var n := float(maxi(0, floor - 1))
 	var health_scale := 1.0 + n * float(growth.health_linear) + n * n * float(growth.health_quadratic)
 	var attack_scale := 1.0 + n * float(growth.attack_linear) + n * n * float(growth.attack_quadratic)
 	var defense_scale := 1.0 + n * float(growth.defense_linear) + n * n * float(growth.defense_quadratic)
-	return {"name":"%s · 第%d层" % [world.boss_name, floor], "health":float(base.get("max_hp", 1000)) * health_scale, "attack":float(base.get("attack", 50)) * attack_scale, "defense":float(base.get("defense", 20)) * defense_scale, "affixes":rift_affix_ids(floor, world_id), "actor":world.boss_actor}
+	return {"name":"%s · 第%d层" % [world.boss_name, floor], "health":float(base.get("health", 5200)) * health_scale * float(modifier.get("health", 1.0)), "attack":float(base.get("attack", 90)) * attack_scale * float(modifier.get("attack", 1.0)), "defense":float(base.get("defense", 38)) * defense_scale * float(modifier.get("defense", 1.0)), "affixes":rift_affix_ids(floor, world_id), "actor":world.boss_actor}
 
 func start_rift(world_id: String, floor: int) -> bool:
+	if not active_rift.is_empty(): return false
 	if not can_challenge_rift(world_id, floor): return false
-	active_rift = {"world":world_id, "floor":floor, "started":Time.get_unix_time_from_system()}
+	var state: Dictionary = battle.progression.rift_progress.get(world_id, {})
+	if bool(state.get("repeat_floor", false)) and floor > int(state.get("highest_clear", 0)): return false
+	if int(state.get("selected_floor", 1)) != floor:
+		state.selected_floor = floor
+		battle.progression.save_to_disk()
+	active_rift = {"world":world_id, "floor":floor, "started":Time.get_unix_time_from_system(), "reward_settled":false}
 	battle.start_rift_combat(active_rift, rift_profile(world_id, floor))
 	return true
 
+func roll_rift_quality() -> String:
+	var weights: Dictionary = config.rift.reward.get("quality_weights", {"purple":0.8,"orange":0.1,"red":0.1})
+	var roll: float = float(battle.equipment_generator.rng.randf())
+	if roll < float(weights.get("purple", 0.8)): return "purple"
+	if roll < float(weights.get("purple", 0.8)) + float(weights.get("orange", 0.1)): return "orange"
+	return "red"
+
+func create_rift_equipment(world_id: String, floor: int) -> Dictionary:
+	var world: Dictionary = config.rift.worlds.get(world_id, {})
+	var quality := roll_rift_quality()
+	var source := "%s第%d层" % [world.get("name", "大秘境"), floor]
+	if quality != "red": return battle.equipment_generator.generate(maxi(1, floor), source, quality)
+	var legendary: Dictionary = config.rift.get("legendary_drops", {}).get(world_id, {})
+	if legendary.is_empty(): return battle.equipment_generator.generate(maxi(1, floor), source, "orange")
+	var item: Dictionary = battle.equipment_generator.generate(maxi(1, floor), source, "red", str(legendary.slot))
+	if item.is_empty(): return item
+	item.name = str(legendary.name)
+	item.world_legendary = true
+	item.auto_process_protected = true
+	item.world_affix = {"stat":str(legendary.stat),"value":float(legendary.value),"name":str(legendary.affix_name),"world":world_id}
+	return item
+
 func resolve_rift_victory() -> Dictionary:
-	if active_rift.is_empty(): return {}
+	if active_rift.is_empty() or bool(active_rift.get("reward_settled", false)): return {}
+	active_rift.reward_settled = true
 	var world_id := str(active_rift.world)
 	var floor := int(active_rift.floor)
 	var state: Dictionary = battle.progression.rift_progress[world_id]
@@ -96,11 +127,10 @@ func resolve_rift_victory() -> Dictionary:
 	if first:
 		battle.progression.materials.rift_crystal = int(battle.progression.materials.get("rift_crystal", 0)) + int(reward_cfg.first_clear_crystal)
 		battle.combat_stats.resources.materials += int(reward_cfg.first_clear_crystal)
-	var quality := "purple" if floor >= 10 else "blue" if floor >= 5 else "green"
-	var item: Dictionary = battle.equipment_generator.generate(maxi(1, floor), "%s第%d层" % [config.rift.worlds[world_id].name, floor], quality)
+	var item: Dictionary = create_rift_equipment(world_id, floor)
 	item["rift_floor"] = floor
 	item["rift_world"] = world_id
-	item["auto_process_protected"] = first
+	item["auto_process_protected"] = first or bool(item.get("world_legendary", false))
 	if floor >= 5 and item.get("special_effects", []).is_empty():
 		var special_ids: Array = battle.special_config.get("effects", {}).keys()
 		if not special_ids.is_empty(): item.special_effects = [special_ids[floor % special_ids.size()]]
@@ -109,10 +139,16 @@ func resolve_rift_victory() -> Dictionary:
 		battle.combat_stats.resources.equipment += 1
 	if first and floor % 5 == 0: grant_furniture("rift_beacon", 1)
 	battle.progression.record_transaction("秘境结算", "%s第%d层%s" % [config.rift.worlds[world_id].name, floor, "首通" if first else "重复"], gold)
-	if bool(state.auto_climb) and floor < main_stage_cap(): state.selected_floor = floor + 1
-	else: state.selected_floor = floor
+	var next_mode := ""
+	var next_floor := floor
+	if bool(state.get("repeat_floor", false)):
+		next_mode = "repeat"
+	elif bool(state.get("auto_climb", false)) and floor < main_stage_cap():
+		next_mode = "climb"
+		next_floor = floor + 1
+	state.selected_floor = next_floor
 	battle.progression.save_to_disk(); changed.emit()
-	var result := {"first":first,"gold":gold,"material":material,"equipment":item,"floor":floor,"world":world_id}
+	var result := {"first":first,"gold":gold,"material":material,"equipment":item,"floor":floor,"world":world_id,"next_mode":next_mode,"next_floor":next_floor}
 	active_rift.clear()
 	return result
 

@@ -5,6 +5,21 @@
       "pokemon": {"name":"宝可梦大秘境","required_stage":20,"boss_actor":"mewtwo_boss","material":"pokemon_token","boss_name":"秘境·超梦"}
     },
     "growth": {"health_linear":0.24,"health_quadratic":0.018,"attack_linear":0.105,"attack_quadratic":0.006,"defense_linear":0.075,"defense_quadratic":0.004},
+    "balance": {
+      "base":{"health":5200,"attack":90,"defense":38},
+      "world_modifiers":{
+        "three_kingdoms":{"health":1.06,"attack":1.03,"defense":1.04},
+        "pokemon":{"health":0.98,"attack":0.98,"defense":1.00},
+        "dragon":{"health":1.00,"attack":1.04,"defense":1.05},
+        "nsh":{"health":1.02,"attack":0.96,"defense":1.03},
+        "wow":{"health":1.04,"attack":1.00,"defense":1.05},
+        "jinyong":{"health":0.98,"attack":1.03,"defense":0.98},
+        "qin":{"health":1.00,"attack":1.02,"defense":1.00},
+        "naruto":{"health":0.97,"attack":1.04,"defense":0.98},
+        "huangyi":{"health":1.02,"attack":1.01,"defense":1.02},
+        "fengyun":{"health":1.03,"attack":1.02,"defense":1.03}
+      }
+    },
     "affixes": {
       "berserk":{"name":"狂暴","mechanic":"berserk","unlock_floor":2,"description":"低生命时攻击提高。"},
       "iron_wall":{"name":"铁壁","mechanic":"stone_skin","unlock_floor":4,"description":"提高防御并降低受到的伤害。"},
@@ -15,7 +30,22 @@
       "elemental":{"name":"元素强化","mechanic":"elemental_power","unlock_floor":15,"description":"技能伤害提高。"},
       "summon":{"name":"召唤","mechanic":"summon","unlock_floor":18,"description":"周期召唤有上限的随从。"}
     },
-    "reward": {"gold_base":22,"gold_per_floor":8,"material_base":2,"quality_bonus_floor":5,"first_clear_crystal":2}
+    "reward": {
+      "gold_base":22,"gold_per_floor":8,"material_base":2,"first_clear_crystal":2,
+      "quality_weights":{"purple":0.80,"orange":0.10,"red":0.10}
+    },
+    "legendary_drops": {
+      "three_kingdoms":{"name":"朱雀扇","slot":"main_hand","stat":"elemental_damage","value":0.15,"affix_name":"元素伤害+15%"},
+      "pokemon":{"name":"电气珠","slot":"off_hand","stat":"attack_speed","value":0.12,"affix_name":"攻击速度+12%"},
+      "dragon":{"name":"七宗罪","slot":"main_hand","stat":"physical_damage","value":0.15,"affix_name":"物理伤害+15%"},
+      "nsh":{"name":"素心铃","slot":"necklace","stat":"healing_effect","value":0.15,"affix_name":"治疗效果+15%"},
+      "wow":{"name":"霜之哀伤","slot":"main_hand","stat":"physical_damage","value":0.15,"affix_name":"物理伤害+15%"},
+      "jinyong":{"name":"软猬甲","slot":"armor","stat":"damage_reduction","value":0.10,"affix_name":"受到伤害降低10%"},
+      "naruto":{"name":"木叶护额","slot":"helmet","stat":"cooldown_reduction","value":0.10,"affix_name":"冷却缩减10%"},
+      "qin":{"name":"非攻","slot":"main_hand","stat":"attack_speed","value":0.12,"affix_name":"攻击速度+12%"},
+      "huangyi":{"name":"邪帝舍利","slot":"off_hand","stat":"elemental_damage","value":0.15,"affix_name":"元素伤害+15%"},
+      "fengyun":{"name":"绝世好剑","slot":"main_hand","stat":"crit_damage","value":0.20,"affix_name":"暴击伤害+20%"}
+    }
   },
   "encounters": {
     "minimum_interval":75.0,"chance_per_second":0.0025,"duration":60.0,

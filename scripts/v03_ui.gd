@@ -14,8 +14,6 @@ var selected_item_id := ""
 var selected_affix := 0
 var confirm_dialog: ConfirmationDialog
 var pending_dismantle := ""
-var boss_dialog: ConfirmationDialog
-var pending_boss := ""
 var toolbar_buttons: Dictionary = {}
 var inventory_ui
 var character_ui
@@ -41,7 +39,6 @@ var recruit_detail: Label
 var recruit_button: Button
 var recruit_list_scroll := 0.0
 var recruit_world_filter := "全部"
-var challenge_tab := "world_boss"
 var bulk_sell_min_rank := 0
 var bulk_sell_dialog: ConfirmationDialog
 var reset_dialog: ConfirmationDialog
@@ -172,10 +169,6 @@ func build_panel() -> void:
 	confirm_dialog.title = "确认分解高品质装备"
 	confirm_dialog.confirmed.connect(confirm_dismantle)
 	add_child(confirm_dialog)
-	boss_dialog = ConfirmationDialog.new()
-	boss_dialog.title = "传奇 Boss 挑战前确认"
-	boss_dialog.confirmed.connect(_confirm_boss)
-	add_child(boss_dialog)
 	bulk_sell_dialog = ConfirmationDialog.new()
 	bulk_sell_dialog.title = "确认一键出售未穿戴装备"
 	bulk_sell_dialog.confirmed.connect(_confirm_bulk_sell)
@@ -200,8 +193,6 @@ func open_view(view: String) -> void:
 		character_ui.close_panel()
 	if inventory_ui != null and inventory_ui.panel.visible:
 		inventory_ui.toggle()
-	if view == "rift": challenge_tab = "rift"
-	elif view == "boss": challenge_tab = "world_boss"
 	current_view = "challenge" if view in ["rift", "boss"] else view
 	panel.visible = true
 	battle.is_paused = view not in ["encounters", "stats"]
@@ -269,31 +260,44 @@ func _restore_scroll_position(view: String) -> void:
 		content_scroll.scroll_vertical = int(scroll_positions.get(view, 0))
 
 func build_rift() -> void:
-	title.text = "十世界动态大秘境"
+	title.text = "挑战 · 十世界大秘境"
 	var cap: int = battle.adventure.main_stage_cap()
-	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n十个世界共享动态开放上限，但进度、首通、词缀池和Boss配置各自独立。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
+	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n十个世界共享统一Boss成长曲线；装备固定为紫色80%%、橙色10%%、本世界红装10%%。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
 	for world_id in battle.adventure.config.rift.worlds:
 		var world: Dictionary = battle.adventure.config.rift.worlds[world_id]
 		var state: Dictionary = battle.progression.rift_progress[world_id]
 		var unlocked: bool = battle.adventure.rift_world_unlocked(str(world_id))
-		var heading := Label.new(); heading.text = "\n%s｜最高通关%d层｜%s" % [world.name, int(state.highest_clear), "已开放" if unlocked else "需通关主线第%d关" % int(world.required_stage)]; heading.add_theme_font_size_override("font_size", 20); content.add_child(heading)
+		var heading := Label.new(); heading.text = "\n%s｜最高通关%d层｜当前选择%d层｜%s" % [world.name, int(state.highest_clear), int(state.selected_floor), "已开放" if unlocked else "需通关主线第%d关" % int(world.required_stage)]; heading.add_theme_font_size_override("font_size", 20); content.add_child(heading)
 		var row := HBoxContainer.new(); content.add_child(row)
-		var floor_select := SpinBox.new(); floor_select.min_value = 1; floor_select.max_value = maxi(1, cap); floor_select.value = clampi(int(state.selected_floor), 1, maxi(1, cap)); floor_select.custom_minimum_size = Vector2(130, 36); row.add_child(floor_select)
-		var auto := CheckBox.new(); auto.text = "自动挑战下一层"; auto.button_pressed = bool(state.auto_climb); auto.toggled.connect(_set_rift_auto.bind(str(world_id))); row.add_child(auto)
+		var selectable_max := mini(cap, int(state.highest_clear) if bool(state.get("repeat_floor", false)) else int(state.highest_clear) + 1)
+		var floor_select := SpinBox.new(); floor_select.min_value = 1; floor_select.max_value = maxi(1, selectable_max); floor_select.value = clampi(int(state.selected_floor), 1, maxi(1, selectable_max)); floor_select.custom_minimum_size = Vector2(130, 36); floor_select.value_changed.connect(_set_rift_floor.bind(str(world_id))); row.add_child(floor_select)
 		var challenge := Button.new(); challenge.text = "开始挑战"; challenge.disabled = not unlocked or cap <= 0; challenge.pressed.connect(_start_rift_from_selector.bind(str(world_id), floor_select)); row.add_child(challenge)
+		var modes := FlowContainer.new(); content.add_child(modes)
+		var auto := CheckBox.new(); auto.text = "自动挑战下一层"; auto.button_pressed = bool(state.auto_climb); auto.toggled.connect(_set_rift_auto.bind(str(world_id))); modes.add_child(auto)
+		var repeat := CheckBox.new(); repeat.text = "固定层数重复刷"; repeat.button_pressed = bool(state.get("repeat_floor", false)); repeat.disabled = int(state.highest_clear) <= 0; repeat.toggled.connect(_set_rift_repeat.bind(str(world_id))); modes.add_child(repeat)
+		var stop := Button.new(); stop.text = "停止自动循环"; stop.disabled = not bool(state.auto_climb) and not bool(state.get("repeat_floor", false)); stop.pressed.connect(_stop_rift_loop.bind(str(world_id))); modes.add_child(stop)
 		var preview_floor := clampi(int(floor_select.value), 1, maxi(1, cap)); var profile: Dictionary = battle.adventure.rift_profile(str(world_id), preview_floor)
 		var affix_names: Array[String] = []
 		for id in profile.get("affixes", []): affix_names.append(str(battle.adventure.config.rift.affixes[id].name))
-		var detail := Label.new(); detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; detail.text = "预览第%d层：生命%d / 攻击%d / 防御%d｜词缀：%s\n首通奖励仅一次；重复刷层仍掉落金币、世界材料和高品质装备。" % [preview_floor, int(profile.get("health", 0)), int(profile.get("attack", 0)), int(profile.get("defense", 0)), "、".join(affix_names) if not affix_names.is_empty() else "无"]; content.add_child(detail)
+		var detail := Label.new(); detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; detail.text = "预览第%d层：生命%d / 攻击%d / 防御%d｜词缀：%s\n首通奖励仅一次；固定刷层只接受已通关层，并保持当前层数。" % [preview_floor, int(profile.get("health", 0)), int(profile.get("attack", 0)), int(profile.get("defense", 0)), "、".join(affix_names) if not affix_names.is_empty() else "无"]; content.add_child(detail)
 
 func _set_rift_auto(enabled: bool, world_id: String) -> void:
-	battle.progression.rift_progress[world_id].auto_climb = enabled; battle.progression.save_to_disk()
+	battle.progression.set_rift_mode(world_id, "climb" if enabled else "manual"); refresh()
+
+func _set_rift_repeat(enabled: bool, world_id: String) -> void:
+	battle.progression.set_rift_mode(world_id, "repeat" if enabled else "manual"); refresh()
+
+func _stop_rift_loop(world_id: String) -> void:
+	battle.progression.set_rift_mode(world_id, "manual"); refresh()
+
+func _set_rift_floor(value: float, world_id: String) -> void:
+	battle.progression.set_rift_selected_floor(world_id, int(value))
 
 func _start_rift_from_selector(world_id: String, selector: SpinBox) -> void:
 	var floor := int(selector.value)
 	if battle.adventure.start_rift(world_id, floor): close_panel()
 	else:
-		rewards_feedback = "该层未开放：只能挑战主线等级范围内且不超过当前秘境进度+1的层数。"; refresh()
+		rewards_feedback = "该层未开放：爬层最多选择当前进度+1；固定刷层只能选择已经通关的层数。"; refresh()
 
 func build_encounters() -> void:
 	title.text = "挂机奇遇 · 自动战斗不会暂停"
@@ -564,49 +568,7 @@ func _enter_stage(map_id: String) -> void:
 		close_panel()
 
 func build_challenge() -> void:
-	title.text = "挑战 · Boss与大秘境"
-	var tabs := HBoxContainer.new(); content.add_child(tabs)
-	for spec in [["世界Boss", "world_boss"], ["主线Boss重战", "story_boss"], ["大秘境", "rift"]]:
-		var button := Button.new(); button.text = spec[0]; button.disabled = challenge_tab == spec[1]; button.pressed.connect(_set_challenge_tab.bind(spec[1])); tabs.add_child(button)
-	if challenge_tab == "rift":
-		build_rift()
-	elif challenge_tab == "story_boss":
-		var hint := Label.new(); hint.text = "选择已通关主线关卡重战；不会重复发放首通奖励。"; content.add_child(hint)
-		for map_id in battle.worlds_config.maps:
-			var data: Dictionary = battle.worlds_config.maps[map_id]
-			var stage := int(data.get("global_stage", 1))
-			if not battle.progression.is_stage_complete(stage): continue
-			var button := Button.new(); button.text = "%s · 第%d关 · %s" % [data.world, stage, data.get("boss_name", "关底Boss")]; button.pressed.connect(_enter_stage.bind(map_id)); content.add_child(button)
-	else:
-		build_boss()
-
-func _set_challenge_tab(value: String) -> void:
-	challenge_tab = value
-	refresh()
-
-func build_boss() -> void:
-	title.text = "传奇 Boss 挑战"
-	var hint := Label.new()
-	hint.text = "挑战前查看能力与推荐等级；首胜永久解锁对应角色，之后可重复挑战。"
-	content.add_child(hint)
-	for boss_id in battle.worlds_config.bosses:
-		var data: Dictionary = battle.worlds_config.bosses[boss_id]
-		var button := Button.new()
-		var available: bool = battle.progression.is_stage_complete(int(data.get("required_stage", 20)))
-		button.text = "%s　%s" % [data.name, ("已首胜，可重复挑战" if battle.progression.boss_first_clear[boss_id] else "主线首胜已解锁角色") if available else "通关全局第%d关后开放" % int(data.get("required_stage", 20))]
-		button.disabled = not available
-		button.pressed.connect(_preview_boss.bind(boss_id))
-		content.add_child(button)
-
-func _preview_boss(boss_id: String) -> void:
-	pending_boss = boss_id
-	var data: Dictionary = battle.worlds_config.bosses[boss_id]
-	var actor: Dictionary = battle.actors[data.actor]
-	boss_dialog.dialog_text = "%s\n世界：%s　推荐等级：Lv.8\n生命：%d　攻击：%d　防御：%d\n机制：专属技能、控制抗性与重复控制衰减。\n首胜：永久解锁%s；重复挑战：获得材料。\n\n现在开始挑战？" % [data.name, data.world, int(actor.get("max_hp", 0)), int(actor.get("attack", 0)), int(actor.get("defense", 0)), battle.actors[data.unlock_actor].name]
-	boss_dialog.popup_centered()
-
-func _confirm_boss() -> void:
-	if battle.start_boss(pending_boss): close_panel()
+	build_rift()
 
 func build_recruit() -> void:
 	title.text = "角色招募与四人编队" if current_view == "recruit" else "伙伴与四人编队"

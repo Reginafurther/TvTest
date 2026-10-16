@@ -200,11 +200,36 @@ func ensure_adventure_layout() -> void:
 			if not rift_progress[world_id].has(key): rift_progress[world_id][key] = defaults[world_id][key]
 		rift_progress[world_id].highest_clear = maxi(0, int(rift_progress[world_id].highest_clear))
 		rift_progress[world_id].selected_floor = maxi(1, int(rift_progress[world_id].selected_floor))
+		if not rift_progress[world_id].has("repeat_floor"): rift_progress[world_id].repeat_floor = false
+		rift_progress[world_id].repeat_floor = bool(rift_progress[world_id].repeat_floor)
+		rift_progress[world_id].auto_climb = bool(rift_progress[world_id].get("auto_climb", true))
+		if bool(rift_progress[world_id].repeat_floor): rift_progress[world_id].auto_climb = false
 		if typeof(rift_progress[world_id].first_clear_claimed) != TYPE_ARRAY: rift_progress[world_id].first_clear_claimed = []
 	if typeof(encounter_log) != TYPE_ARRAY: encounter_log = []
 	if typeof(camp_layout) != TYPE_ARRAY: camp_layout = []
 	for id in special_items: special_items[id] = maxi(0, int(special_items[id]))
 	for id in camp_inventory: camp_inventory[id] = maxi(0, int(camp_inventory[id]))
+
+func set_rift_mode(world_id: String, mode: String) -> bool:
+	ensure_adventure_layout()
+	if not rift_progress.has(world_id) or mode not in ["manual", "climb", "repeat"]: return false
+	var state: Dictionary = rift_progress[world_id]
+	if mode == "repeat" and int(state.highest_clear) <= 0: return false
+	state.auto_climb = mode == "climb"
+	state.repeat_floor = mode == "repeat"
+	if bool(state.repeat_floor): state.selected_floor = clampi(int(state.selected_floor), 1, int(state.highest_clear))
+	save_to_disk()
+	changed.emit()
+	return true
+
+func set_rift_selected_floor(world_id: String, floor: int) -> bool:
+	ensure_adventure_layout()
+	if not rift_progress.has(world_id): return false
+	var state: Dictionary = rift_progress[world_id]
+	var maximum := int(state.highest_clear) if bool(state.get("repeat_floor", false)) else int(state.highest_clear) + 1
+	state.selected_floor = clampi(floor, 1, maxi(1, maximum))
+	save_to_disk()
+	return true
 
 func highest_unlocked_stage() -> int:
 	ensure_world_layout()

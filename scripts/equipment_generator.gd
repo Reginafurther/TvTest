@@ -61,7 +61,9 @@ func roll_specials(quality_id: String) -> Array:
 	var generation: Dictionary = special_config.get("generation", {})
 	if int(quality.get("rank", 0)) < int(generation.get("min_quality_rank", 3)):
 		return []
-	var chance := float(generation.get("orange_chance", 0.4)) if quality_id == "orange" else float(generation.get("purple_chance", 0.18))
+	# Red equipment follows the complete orange special-effect rule; its only
+	# additional power is the separately stored fixed world affix.
+	var chance := float(generation.get("orange_chance", 0.4)) if quality_id in ["orange", "red"] else float(generation.get("purple_chance", 0.18))
 	if rng.randf() > chance:
 		return []
 	var ids: Array = special_config.get("effects", {}).keys()
@@ -116,5 +118,9 @@ func combined_stats(item: Dictionary) -> Dictionary:
 	for affix in item.get("affixes", []):
 		var stat: String = affix.get("stat", "")
 		result[stat] = float(result.get(stat, 0)) + float(affix.get("value", 0))
+	var world_affix = item.get("world_affix", {})
+	if typeof(world_affix) == TYPE_DICTIONARY and not str(world_affix.get("stat", "")).is_empty():
+		var stat := str(world_affix.stat)
+		result[stat] = float(result.get(stat, 0)) + float(world_affix.get("value", 0.0))
 	return result
 
