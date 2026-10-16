@@ -1079,7 +1079,10 @@ func strategy_allows(unit) -> bool:
 	if unit.skill_data.get("type", "") == "heal_aura":
 		var ally = lowest_health_ally(unit)
 		return ally != null and ally.hp / ally.max_hp <= float(preset.get("ally_hp", 0.65))
-	return enemies_near(unit.position, unit.faction, float(unit.skill_data.get("range", 180)), 99).size() >= int(preset.get("enemy_count", 1))
+	# Keep strategy target detection consistent with the actual cast radius for ranged heroes.
+	# Otherwise they can basic-attack from 294-420 units while the strategy rejects casts beyond 210.
+	var cast_range: float = unit.effective_cast_range(float(unit.skill_data.get("range", 180.0)))
+	return enemies_near(unit.position, unit.faction, cast_range, 99).size() >= int(preset.get("enemy_count", 1))
 
 func on_damage(source, target, amount: float, context: Dictionary) -> void:
 	var source_id := stats_actor_id(source) if is_instance_valid(source) else str(context.get("source_actor_id", ""))
