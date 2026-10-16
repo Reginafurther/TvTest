@@ -13,7 +13,8 @@ const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
 const ShopManagerScript = preload("res://scripts/shop_manager.gd")
 const AdventureManagerScript = preload("res://scripts/adventure_manager.gd")
 const ResetManagerScript = preload("res://scripts/reset_manager.gd")
-const WORLD_ENEMY_DEFENSE_MULTIPLIER := 0.90
+const WORLD_ENEMY_HEALTH_MULTIPLIER := 0.80
+const WORLD_ENEMY_DEFENSE_MULTIPLIER := 0.80
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
@@ -101,7 +102,7 @@ func _ready() -> void:
 	log_message.connect(_store_combat_log)
 	loot_test_mode = "--loot-test" in OS.get_cmdline_user_args() or "--equipment-test" in OS.get_cmdline_user_args() or "--v03-test" in OS.get_cmdline_user_args() or "--v031-test" in OS.get_cmdline_user_args()
 	inventory = InventoryManagerScript.new()
-	inventory.setup(equipment_config)
+	inventory.setup(equipment_config, actors)
 	add_child(inventory)
 	var args := OS.get_cmdline_user_args()
 	var v061_write_test := false
@@ -252,14 +253,16 @@ func difficulty_multiplier(curve_id: String, stage: int) -> float:
 	return stage_40_value + float(stage - 40) * stage_40_slope * 0.60
 
 func custom_difficulty_profile(value: float = -1.0) -> Dictionary:
-	var coefficient: float = progression.combat_difficulty if value < 0.0 else snappedf(clampf(value, 0.5, 5.0), 0.1)
-	var equivalent_old_coefficient := 2.5 * coefficient
+	var coefficient: float = clampf(progression.combat_difficulty, 0.2, 3.0) if value < 0.0 else snappedf(clampf(value, 0.2, 3.0), 0.1)
+	var equivalent_old_coefficient := 4.4 * coefficient
 	return {
 		"coefficient": coefficient,
 		"equivalent_old_coefficient": equivalent_old_coefficient,
 		"health": pow(equivalent_old_coefficient, 0.55),
 		"attack": pow(equivalent_old_coefficient, 0.35),
-		"defense": pow(equivalent_old_coefficient, 0.18)
+		"defense": pow(equivalent_old_coefficient, 0.18),
+		"world_health": pow(equivalent_old_coefficient, 0.55) * WORLD_ENEMY_HEALTH_MULTIPLIER,
+		"world_defense": pow(equivalent_old_coefficient, 0.18) * WORLD_ENEMY_DEFENSE_MULTIPLIER
 	}
 
 func apply_custom_difficulty(unit) -> void:
@@ -272,13 +275,15 @@ func apply_custom_difficulty(unit) -> void:
 	unit.set_meta("custom_difficulty_applied", true)
 	unit.set_meta("custom_difficulty_coefficient", float(profile.coefficient))
 
-func apply_world_enemy_defense_adjustment(unit) -> void:
-	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("world_defense_adjusted"): return
-	# The active combat context, rather than the reused actor template, decides
-	# whether the 10% world-map adjustment applies. Rift summons stay exempt.
+func apply_world_enemy_adjustment(unit) -> void:
+	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("world_stats_adjusted"): return
+	# The active combat context, rather than a reused actor template, decides
+	# whether the world-map adjustment applies. Rift bosses and summons stay exempt.
 	if not active_rift_context.is_empty(): return
+	unit.max_hp *= WORLD_ENEMY_HEALTH_MULTIPLIER
+	unit.hp = unit.max_hp
 	unit.defense *= WORLD_ENEMY_DEFENSE_MULTIPLIER
-	unit.set_meta("world_defense_adjusted", true)
+	unit.set_meta("world_stats_adjusted", true)
 
 func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary = {}):
 	var unit = BattleUnitScript.new()
@@ -300,7 +305,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 		unit.monster_level = int(worlds_config.maps.get(current_map_id, {}).get("difficulty_level", 1))
 		unit.enemy_type = str(data.get("enemy_type", "normal"))
 		apply_custom_difficulty(unit)
-		apply_world_enemy_defense_adjustment(unit)
+		apply_world_enemy_adjustment(unit)
 	unit.position = pos
 	unit.died.connect(_on_unit_died)
 	unit.combat_event.connect(_on_combat_event)
@@ -375,6 +380,15 @@ func _tier_role_target_exact(tier: int, role: String) -> Dictionary:
 	for stat in totals: totals[stat] = float(totals[stat]) / count
 	return totals
 
+func _is_remote_breakthrough_actor(data: Dictionary) -> bool:
+	if str(data.get("combat_role", "")) == "tank" or str(data.get("combat_style", "")) == "tank": return false
+	var style := str(data.get("combat_style", ""))
+	var role := str(data.get("combat_role", ""))
+	return style in ["ranged", "healer"] or (style != "melee" and role in ["ranged_dps", "support", "healer"])
+
+func breakthrough_tank_health_reference(tier: int) -> float:
+	return float(_tier_role_target(tier, "tank").get("max_hp", 0.0))
+
 func breakthrough_base_stats(actor_id: String, requested_tier: int = -1) -> Dictionary:
 	var data: Dictionary = actors.get(actor_id, {})
 	if data.is_empty(): return {}
@@ -383,7 +397,12 @@ func breakthrough_base_stats(actor_id: String, requested_tier: int = -1) -> Dict
 	var result := {"max_hp":float(data.get("max_hp", 1.0)),"attack":float(data.get("attack", 1.0)),"defense":float(data.get("defense", 0.0))}
 	for target_tier in range(native_tier + 1, tier + 1):
 		var target: Dictionary = _tier_role_target(target_tier, _breakthrough_role(data))
-		for stat in result: result[stat] = maxf(float(result[stat]), float(target.get(stat, result[stat])))
+		for stat in ["attack", "defense"]: result[stat] = maxf(float(result[stat]), float(target.get(stat, result[stat])))
+		var target_health := float(target.get("max_hp", result.max_hp))
+		if _is_remote_breakthrough_actor(data):
+			var tank_health := breakthrough_tank_health_reference(target_tier)
+			if tank_health > 0.0: target_health = tank_health * 0.75
+		result.max_hp = maxf(float(result.max_hp), target_health)
 	return result
 
 func breakthrough_preview(actor_id: String) -> Dictionary:

@@ -2368,23 +2368,23 @@ func finish_v081_ui_stats_art_test() -> void:
 
 func finish_v081_difficulty_test() -> void:
 	var failures: Array[String] = []
-	var expected_old := {0.5: 1.25, 1.0: 2.5, 1.5: 3.75, 2.0: 5.0, 3.0: 7.5, 5.0: 12.5}
+	var expected_old := {0.2: 0.88, 0.5: 2.2, 1.0: 4.4, 1.5: 6.6, 2.0: 8.8, 2.5: 11.0, 3.0: 13.2}
 	for coefficient in expected_old:
 		var profile: Dictionary = battle.custom_difficulty_profile(float(coefficient))
 		var legacy: float = float(expected_old[coefficient])
 		if not is_equal_approx(float(profile.equivalent_old_coefficient), legacy): failures.append("新版%.1f×的旧版等价系数错误" % coefficient)
 		if not is_equal_approx(float(profile.health), pow(legacy, 0.55)) or not is_equal_approx(float(profile.attack), pow(legacy, 0.35)) or not is_equal_approx(float(profile.defense), pow(legacy, 0.18)): failures.append("新版%.1f×没有沿用旧版数值公式" % coefficient)
 	var standard: Dictionary = battle.custom_difficulty_profile(1.0)
-	if not is_equal_approx(float(standard.health), pow(2.5, 0.55)) or not is_equal_approx(float(standard.attack), pow(2.5, 0.35)) or not is_equal_approx(float(standard.defense), pow(2.5, 0.18)): failures.append("新版1.0×与旧版2.5×不严格等价")
+	if not is_equal_approx(float(standard.health), pow(4.4, 0.55)) or not is_equal_approx(float(standard.attack), pow(4.4, 0.35)) or not is_equal_approx(float(standard.defense), pow(4.4, 0.18)): failures.append("新版1.0×与旧版4.4×不严格等价")
 	var migrated = ProgressionManagerScript.new()
-	if not migrated.apply_payload({"version":"0.8", "combat_difficulty":2.5, "transaction_log":[]}): failures.append("旧难度存档无法迁移")
-	if not is_equal_approx(migrated.combat_difficulty, 1.0) or migrated.difficulty_config_version != ProgressionManagerScript.DIFFICULTY_CONFIG_VERSION: failures.append("旧版2.5×没有迁移为新版1.0×")
+	if not migrated.apply_payload({"version":"1.0", "team_progression_version":1, "combat_difficulty":1.0, "difficulty_config_version":2, "transaction_log":[]}): failures.append("旧难度存档无法迁移")
+	if not is_equal_approx(migrated.combat_difficulty, 2.5 / 4.4) or migrated.difficulty_config_version != ProgressionManagerScript.DIFFICULTY_CONFIG_VERSION: failures.append("配置v2的1.0×没有迁移并保留旧版2.5×强度")
 	var migrated_log_count: int = migrated.transaction_log.size()
 	var reloaded = ProgressionManagerScript.new()
-	reloaded.apply_payload({"version":"0.8", "combat_difficulty":migrated.combat_difficulty, "difficulty_config_version":migrated.difficulty_config_version, "transaction_log":migrated.transaction_log})
+	reloaded.apply_payload({"version":"1.0", "team_progression_version":1, "combat_difficulty":migrated.combat_difficulty, "difficulty_config_version":migrated.difficulty_config_version, "difficulty_migration_record":migrated.difficulty_migration_record, "transaction_log":migrated.transaction_log})
 	if reloaded.transaction_log.size() != migrated_log_count: failures.append("难度迁移被重复执行")
 	migrated.free(); reloaded.free()
-	if failures.is_empty(): print("V081_DIFFICULTY_TEST_PASS presets=0.5,1.0,1.5,2.0,3.0,5.0 baseline_old_2.5=true migration_once=true no_combat_simulation=true")
+	if failures.is_empty(): print("V081_DIFFICULTY_TEST_PASS presets=0.2,0.5,1.0,1.5,2.0,2.5,3.0 baseline_old_4.4=true migration_once=true no_combat_simulation=true")
 	else:
 		for failure in failures: push_error("V081_DIFFICULTY_TEST_FAIL: " + failure)
 	get_tree().quit(0 if failures.is_empty() else 1)

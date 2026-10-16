@@ -23,7 +23,7 @@ func _initialize() -> void:
 	battle.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("V14_COMPREHENSIVE_VALIDATION_PASS descriptions=46 diao_damage=55% diao_cd=8.20/6.36 zhou_burn_bonus=51% equipment_slots=9 world_defense_ratio=0.90 rift_ratio=1.00 nine_yin=20%-200% beiming=4%-40% huang_compensation=116% war_banner_triggers=0s/12s")
+		print("V14_COMPREHENSIVE_VALIDATION_PASS descriptions=46 diao_damage=55% diao_cd=8.20/6.36 zhou_burn_bonus=51% equipment_slots=9 world_defense_ratio=0.80 rift_ratio=1.00 nine_yin=20%-200% beiming=4%-40% huang_compensation=116% war_banner_triggers=0s/12s")
 		quit(0)
 		return
 	for failure in failures: push_error("V14_COMPREHENSIVE_VALIDATION_FAIL: " + failure)
@@ -249,7 +249,7 @@ func _validate_world_defense_context() -> void:
 	for enemy_type in ["normal", "elite", "boss"]:
 		var world_defense := _spawn_defense_sample(enemy_type, false)
 		var rift_defense := _spawn_defense_sample(enemy_type, true)
-		if absf(world_defense / rift_defense - 0.90) > 0.0001: failures.append("%s世界防御/秘境防御不是0.90：%.4f" % [enemy_type, world_defense / rift_defense])
+		if absf(world_defense / rift_defense - 0.80) > 0.0001: failures.append("%s世界防御/秘境防御不是0.80：%.4f" % [enemy_type, world_defense / rift_defense])
 	var rift_summon := _spawn_defense_sample("normal", true)
 	if not is_equal_approx(rift_summon, _spawn_defense_sample("normal", true)): failures.append("秘境召唤怪防御被重复调整")
 

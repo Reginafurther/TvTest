@@ -24,7 +24,7 @@ func _initialize() -> void:
 
 func _validate_difficulty(failures: Array[String]) -> void:
 	var controller = BattleControllerScript.new()
-	var equivalents := {0.5: 1.25, 1.0: 2.5, 1.5: 3.75, 2.0: 5.0, 3.0: 7.5, 5.0: 12.5}
+	var equivalents := {0.2: 0.88, 0.5: 2.2, 1.0: 4.4, 1.5: 6.6, 2.0: 8.8, 2.5: 11.0, 3.0: 13.2}
 	for new_coefficient in equivalents:
 		var legacy: float = equivalents[new_coefficient]
 		var profile: Dictionary = controller.custom_difficulty_profile(float(new_coefficient))
@@ -38,26 +38,28 @@ func _validate_difficulty(failures: Array[String]) -> void:
 
 func _validate_migration(failures: Array[String]) -> void:
 	var migrated = ProgressionManagerScript.new()
-	if not migrated.apply_payload({"version":"0.8", "combat_difficulty":2.5, "transaction_log":[]}):
+	if not migrated.apply_payload({"version":"1.0", "team_progression_version":1, "combat_difficulty":1.0, "difficulty_config_version":2, "transaction_log":[]}):
 		failures.append("legacy payload rejected")
-	if not is_equal_approx(migrated.combat_difficulty, 1.0):
-		failures.append("legacy 2.5 did not migrate to new 1.0")
+	if not is_equal_approx(migrated.combat_difficulty, 2.5 / 4.4):
+		failures.append("v2 difficulty 1.0 did not preserve old 2.5 strength")
 	if migrated.difficulty_config_version != ProgressionManagerScript.DIFFICULTY_CONFIG_VERSION:
 		failures.append("difficulty config version not advanced")
 	var migration_count: int = migrated.transaction_log.size()
 	var reloaded = ProgressionManagerScript.new()
 	reloaded.apply_payload({
 		"version":"0.8",
+		"team_progression_version":1,
 		"combat_difficulty":migrated.combat_difficulty,
 		"difficulty_config_version":migrated.difficulty_config_version,
+		"difficulty_migration_record":migrated.difficulty_migration_record,
 		"transaction_log":migrated.transaction_log
 	})
 	if reloaded.transaction_log.size() != migration_count:
 		failures.append("difficulty migration repeated")
 	var low = ProgressionManagerScript.new()
-	low.apply_payload({"version":"0.8", "combat_difficulty":0.5, "transaction_log":[]})
-	if not is_equal_approx(low.combat_difficulty, 0.5):
-		failures.append("legacy value below new range was not clamped to 0.5")
+	low.apply_payload({"version":"1.0", "team_progression_version":1, "combat_difficulty":0.2, "difficulty_config_version":2, "transaction_log":[]})
+	if not is_equal_approx(low.combat_difficulty, 0.2):
+		failures.append("legacy value below new range was not clamped to 0.2")
 	migrated.free()
 	reloaded.free()
 	low.free()

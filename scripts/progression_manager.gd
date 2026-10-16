@@ -13,8 +13,11 @@ const MIGRATION_BACKUP_PATH := "user://wanjie_v09_progress.pre_v10_backup.json"
 const TEAM_MIGRATION_BACKUP_PATH := "user://wanjie_v10_progress.pre_team_backup.json"
 const TEST_PATH := "user://wanjie_v10_test_progress.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
-const DIFFICULTY_CONFIG_VERSION := 2
-const LEGACY_DIFFICULTY_BASE := 2.5
+const DIFFICULTY_CONFIG_VERSION := 3
+const PREVIOUS_DIFFICULTY_BASE := 2.5
+const CURRENT_DIFFICULTY_BASE := 4.4
+const MIN_COMBAT_DIFFICULTY := 0.2
+const MAX_COMBAT_DIFFICULTY := 3.0
 const MAIN_STAGE_LIMIT := 100
 const TEAM_PROGRESSION_VERSION := 1
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade", "hy_long_ying", "hy_wu_zhao", "hy_kou_zhong", "hy_xu_ziling", "hy_wan_wan", "hy_fa_ming", "hy_yan_fei", "hy_sun_en", "hy_ling_donglai", "hy_lang_fanyun"]
@@ -83,6 +86,7 @@ var achievements: Dictionary = {}
 var auto_push := true
 var combat_difficulty := 1.0
 var difficulty_config_version := DIFFICULTY_CONFIG_VERSION
+var difficulty_migration_record: Dictionary = {}
 var auto_equipment_settings: Dictionary = default_auto_equipment_settings()
 var progression_config: Dictionary = {}
 
@@ -641,7 +645,7 @@ func claim_offline_rewards() -> Dictionary:
 	return reward
 
 func set_combat_difficulty(value: float, autosave: bool = true) -> float:
-	combat_difficulty = snappedf(clampf(value, 0.5, 5.0), 0.1)
+	combat_difficulty = snappedf(clampf(value, MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY), 0.1)
 	difficulty_config_version = DIFFICULTY_CONFIG_VERSION
 	changed.emit()
 	if autosave: save_to_disk()
@@ -702,6 +706,7 @@ func reset_to_new_game() -> bool:
 	auto_push = true
 	combat_difficulty = 1.0
 	difficulty_config_version = DIFFICULTY_CONFIG_VERSION
+	difficulty_migration_record = {}
 	auto_equipment_settings = default_auto_equipment_settings()
 	ensure_growth_layout()
 	ensure_world_layout()
@@ -711,7 +716,7 @@ func reset_to_new_game() -> bool:
 
 func save_to_disk() -> bool:
 	last_seen_unix = maxi(last_seen_unix, int(Time.get_unix_time_from_system()))
-	var payload := {"version": VERSION, "team_progression_version": TEAM_PROGRESSION_VERSION, "team_level": team_level, "team_exp": team_exp, "team_level_history": team_level_history, "actor_breakthrough_tiers":actor_breakthrough_tiers, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "skill_levels": skill_levels, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
+	var payload := {"version": VERSION, "team_progression_version": TEAM_PROGRESSION_VERSION, "team_level": team_level, "team_exp": team_exp, "team_level_history": team_level_history, "actor_breakthrough_tiers":actor_breakthrough_tiers, "materials": materials, "gold": gold, "roster": roster, "party": party, "boss_first_clear": boss_first_clear, "strategy_presets": strategy_presets, "active_strategy": active_strategy, "guide_step": guide_step, "guide_finished": guide_finished, "guide_skipped": guide_skipped, "guide_replay": guide_replay, "skill_levels": skill_levels, "learned_general_skills": learned_general_skills, "equipped_general_skills": equipped_general_skills, "general_skill_levels": general_skill_levels, "skill_priorities": skill_priorities, "skill_books": skill_books, "special_items": special_items, "collectibles": collectibles, "rift_progress": rift_progress, "encounter_state": encounter_state, "encounter_log": encounter_log, "encounter_counts": encounter_counts, "camp_inventory": camp_inventory, "camp_layout": camp_layout, "achievements": achievements, "auto_push": auto_push, "combat_difficulty": combat_difficulty, "difficulty_config_version": difficulty_config_version, "difficulty_migration_record":difficulty_migration_record, "auto_equipment_settings": auto_equipment_settings, "transaction_log": transaction_log, "pending_offline": pending_offline, "last_seen_unix": last_seen_unix, "completed_stages": completed_stages, "pokemon_world_unlocked": pokemon_world_unlocked, "last_stage_id": last_stage_id}
 	var file := FileAccess.open(save_path, FileAccess.WRITE)
 	if file == null:
 		push_error("无法写入进度存档: " + save_path)
@@ -842,13 +847,18 @@ func apply_payload(parsed) -> bool:
 		record_transaction("等级系统迁移", "原角色最高等级已转换为冒险团共享Lv.%d" % team_level, 0)
 	var stored_difficulty_version := int(parsed.get("difficulty_config_version", 1))
 	if stored_difficulty_version < DIFFICULTY_CONFIG_VERSION:
-		var legacy_difficulty := float(parsed.get("combat_difficulty", 1.5))
-		combat_difficulty = snappedf(clampf(legacy_difficulty / LEGACY_DIFFICULTY_BASE, 0.5, 5.0), 0.1)
+		var stored_difficulty := float(parsed.get("combat_difficulty", 1.5))
+		var equivalent_old_difficulty := stored_difficulty if stored_difficulty_version < 2 else stored_difficulty * PREVIOUS_DIFFICULTY_BASE
+		var unbounded_new_difficulty := equivalent_old_difficulty / CURRENT_DIFFICULTY_BASE
+		combat_difficulty = clampf(unbounded_new_difficulty, MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY)
 		difficulty_config_version = DIFFICULTY_CONFIG_VERSION
-		record_transaction("难度配置迁移", "旧版 %.1f× → 新版 %.1f×（新版1.0×=旧版2.5×）" % [legacy_difficulty, combat_difficulty], 0)
+		difficulty_migration_record = {"source_version":stored_difficulty_version,"source_value":stored_difficulty,"equivalent_old_value":equivalent_old_difficulty,"migrated_value":combat_difficulty,"clamped":not is_equal_approx(unbounded_new_difficulty, combat_difficulty),"target_version":DIFFICULTY_CONFIG_VERSION}
+		record_transaction("难度配置迁移", "配置v%d %.4f×（等价旧版%.4f×）→ 配置v%d %.4f×（新版1.0×=旧版4.4×）%s" % [stored_difficulty_version, stored_difficulty, equivalent_old_difficulty, DIFFICULTY_CONFIG_VERSION, combat_difficulty, "，已按范围截断" if bool(difficulty_migration_record.clamped) else ""], 0)
 	else:
-		combat_difficulty = snappedf(clampf(float(parsed.get("combat_difficulty", 1.0)), 0.5, 5.0), 0.1)
+		combat_difficulty = clampf(float(parsed.get("combat_difficulty", 1.0)), MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY)
 		difficulty_config_version = DIFFICULTY_CONFIG_VERSION
+		var stored_migration_record = parsed.get("difficulty_migration_record", {})
+		difficulty_migration_record = stored_migration_record.duplicate(true) if typeof(stored_migration_record) == TYPE_DICTIONARY else {}
 	pending_offline.merge(parsed.get("pending_offline", {}), true)
 	last_seen_unix = int(parsed.get("last_seen_unix", 0))
 	completed_stages = parsed.get("completed_stages", [])

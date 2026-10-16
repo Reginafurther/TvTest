@@ -29,9 +29,11 @@ var save_path := SAVE_PATH
 var last_error := ""
 var affix_config_version := AFFIX_CONFIG_VERSION
 var equipment_balance_version := EQUIPMENT_BALANCE_VERSION
+var actor_profiles: Dictionary = {}
 
-func setup(equipment_config: Dictionary) -> void:
+func setup(equipment_config: Dictionary, actors: Dictionary = {}) -> void:
 	config = equipment_config
+	actor_profiles = actors
 	capacity = int(config.get("rules", {}).get("inventory_capacity", 300))
 	for value in OS.get_cmdline_user_args():
 		if str(value).begins_with("--v061-") or str(value).begins_with("--v07-") or str(value).begins_with("--v08-") or str(value).begins_with("--v081-") or str(value).begins_with("--v09-") or str(value).begins_with("--v10-"):
@@ -234,11 +236,23 @@ func item_score(item: Dictionary, combat_role: String = "", scoring_context: Dic
 		"healer": weights.merge({"attack":4.5,"defense":3.5,"health":0.45,"cooldown_reduction":300.0,"attack_speed":220.0,"healing_effect":520.0}, true)
 		"ranged_dps": weights.merge({"attack":5.8,"defense":1.8,"health":0.2,"crit_chance":360.0,"crit_damage":155.0,"elemental_damage":230.0,"cooldown_reduction":210.0}, true)
 		"melee_dps": weights.merge({"attack":6.2,"defense":2.5,"health":0.28,"crit_chance":350.0,"physical_damage":230.0,"attack_speed":220.0}, true)
+	var basic_damage_type := str(scoring_context.get("basic_damage_type", ""))
+	if combat_role == "healer" or basic_damage_type in ["none", "heal"]:
+		weights.physical_damage = 0.0
+		weights.elemental_damage = 0.0
+	elif basic_damage_type == "physical":
+		weights.elemental_damage = 0.0
+	elif basic_damage_type == "elemental":
+		weights.physical_damage = 0.0
 	var score := 0.0
 	for stat_id in weights: score += float(stats.get(stat_id, 0.0)) * float(weights[stat_id])
 	return score
 
 func optimize_candidates(actor_id: String, min_quality_rank: int = 0, maximum: int = 9, combat_role: String = "", scoring_context: Dictionary = {}) -> Array:
+	scoring_context = scoring_context.duplicate(true)
+	if not scoring_context.has("basic_damage_type") and actor_profiles.has(actor_id):
+		var profile: Dictionary = actor_profiles[actor_id]
+		scoring_context.basic_damage_type = "none" if str(profile.get("basic_action", "damage")) == "heal" else str(profile.get("basic_damage_type", "none"))
 	var choices: Array = []
 	var chosen_ids: Array = []
 	if not equipped.has(actor_id):
