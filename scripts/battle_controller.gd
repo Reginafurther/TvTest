@@ -87,7 +87,7 @@ func _ready() -> void:
 	shop_config = DataLoaderScript.load_json("res://data/shop.json")
 	passives_config = DataLoaderScript.load_json("res://data/passives.json")
 	general_skills_config = DataLoaderScript.load_json("res://data/general_skills.json")
-	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json", "res://data/v10_qin_content.json", "res://data/v10_naruto_content.json", "res://data/v11_huangyi_content.json"]:
+	for content_path in ["res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json", "res://data/v10_qin_content.json", "res://data/v10_naruto_content.json", "res://data/v11_huangyi_content.json", "res://data/v12_fengyun_content.json"]:
 		var content: Dictionary = DataLoaderScript.load_json(content_path)
 		actors.merge(content.get("actors", {}), true)
 		skills.merge(content.get("skills", {}), true)
@@ -828,10 +828,13 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 		var first_material := int(map_data.get("first_clear_material", 0))
 		progression.add_material(str(map_data.get("material", "three_kingdoms_token")), first_material)
 		combat_stats.resources.materials += first_material
-		if map_data.has("boss_id"):
-			var boss_id := str(map_data.boss_id)
-			var boss_data: Dictionary = worlds_config.bosses.get(boss_id, {})
-			progression.unlock_boss_actor(boss_id, str(boss_data.get("unlock_actor", "")))
+		# Mainline maps identify their boss by actor template. Resolve the permanent
+		# recruitment gate from that template instead of the runtime stage_* id.
+		var boss_actor_id := str(map_data.get("main_boss", ""))
+		var clear_boss_id := str(actors.get(boss_actor_id, {}).get("boss_id", map_data.get("boss_id", "")))
+		if worlds_config.bosses.has(clear_boss_id):
+			var boss_data: Dictionary = worlds_config.bosses[clear_boss_id]
+			progression.unlock_boss_actor(clear_boss_id, str(boss_data.get("unlock_actor", "")))
 		if stage == 10:
 			log_message.emit("★ 三国第10关通关！宝可梦世界已永久开放。")
 		elif stage == 20:
@@ -849,7 +852,9 @@ func resolve_stage_wave(defeated_unit = null) -> void:
 		elif stage == 80:
 			log_message.emit("★ 火影忍者第80关通关！黄易世界已永久开放。")
 		elif stage == 90:
-			log_message.emit("★ 全90关主线通关！九世界秘境上限已开放至90层。")
+			log_message.emit("★ 黄易第90关通关！风云世界已永久开放。")
+		elif stage == 100:
+			log_message.emit("★ 全100关主线通关！十世界秘境上限已开放至100层。")
 		else:
 			log_message.emit("★ 第%d关通关，第%d关已解锁。" % [stage, stage + 1])
 		battle_state_changed.emit("主线第%d关已通关" % stage)

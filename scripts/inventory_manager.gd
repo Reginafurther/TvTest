@@ -14,6 +14,8 @@ const AFFIX_MIGRATION_BACKUP_PATH := "user://wanjie_v08_inventory.pre_affix_v2_b
 const TEST_SAVE_PATH := "user://wanjie_v08_test_inventory.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade", "hy_long_ying", "hy_wu_zhao", "hy_kou_zhong", "hy_xu_ziling", "hy_wan_wan", "hy_fa_ming", "hy_yan_fei", "hy_sun_en", "hy_ling_donglai", "hy_lang_fanyun"]
+const FENGYUN_HERO_IDS := ["fy_nie_feng", "fy_bu_jingyun", "fy_wuming", "fy_sword_saint", "fy_wu_wudi", "fy_xiao_wu", "fy_duan_lang", "fy_di_er_meng", "fy_jian_chen", "fy_di_shitian"]
+const ALL_HERO_IDS := HERO_IDS + FENGYUN_HERO_IDS
 const AFFIX_CONFIG_VERSION := 2
 
 var config: Dictionary
@@ -39,7 +41,7 @@ func clear_test_save() -> void:
 
 func ensure_equipment_layout() -> void:
 	var slots: Array = config.get("slots", {}).keys()
-	for actor_id in HERO_IDS:
+	for actor_id in ALL_HERO_IDS:
 		if not equipped.has(actor_id) or typeof(equipped[actor_id]) != TYPE_DICTIONARY:
 			equipped[actor_id] = {}
 		for slot in slots:

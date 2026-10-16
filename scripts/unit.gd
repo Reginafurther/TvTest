@@ -155,6 +155,8 @@ func combat_source_snapshot(source, fallback_damage_type: String = "none", sourc
 	snapshot.damage_type = str(source.actor_data.get("basic_damage_type", fallback_damage_type))
 	snapshot.physical_damage = float(source.physical_damage)
 	snapshot.elemental_damage = float(source.elemental_damage)
+	if source.passive_skill_id == "fy_mad_blood" and source.hp / maxf(1.0, source.max_hp) <= 0.40:
+		snapshot.physical_damage += float(source.passive_data.get("physical_bonus", 0.14)) + source.passive_value()
 	snapshot.final_damage = float(source.final_damage) - (float(source.attack_weaken_power) if float(source.attack_weaken_time) > 0.0 else 0.0)
 	if source.faction == "heroes" and is_instance_valid(source.battle) and source.battle.has_method("party_passive_value"):
 		snapshot.elemental_damage += minf(0.30, source.battle.party_passive_value("team_elemental_control"))
@@ -473,6 +475,8 @@ func healer_follow_point(anchor, danger = null) -> Vector2:
 
 func basic_attack() -> void:
 	attack_timer = attack_interval / (1.0 + haste_power if haste_time > 0.0 else 1.0)
+	if passive_skill_id == "fy_mad_blood" and hp / maxf(1.0, max_hp) <= 0.40:
+		attack_timer /= 1.0 + passive_value()
 	current_action = "basic_attack"
 	if actor_data.get("basic_action", "damage") == "heal" and is_instance_valid(target) and target.faction == faction:
 		var healing_bonus := (passive_value() if passive_data.get("effect", "") == "healing" else 0.0) + passive_effect_total("healing")
@@ -622,6 +626,29 @@ func try_use_general_skill(skill_id: String) -> bool:
 				var area_origin: Vector2 = position if skill_id == "wow_blade_storm" else enemy.position
 				for victim in battle.enemies_near(area_origin, faction, 125.0, 6): victim.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
 				battle.spawn_ring(area_origin, Color("#F2C66D")); used = true
+		"area_slow_damage":
+			if valid_enemy_in_range(enemy, cast_range):
+				for victim in battle.enemies_near(enemy.position, faction, 135.0, 8):
+					victim.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+					victim.apply_slow(float(data.get("slow", 0.32)), float(data.get("duration", 4.0)))
+				used = true
+		"area_knockback":
+			if valid_enemy_in_range(enemy, cast_range):
+				for victim in battle.enemies_near(enemy.position, faction, 130.0, 8):
+					victim.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+					var direction: Vector2 = enemy.position.direction_to(victim.position)
+					if direction.length_squared() < 0.01: direction = position.direction_to(victim.position)
+					var destination: Vector2 = victim.position + direction.normalized() * float(data.get("knockback", 46.0))
+					destination.x = clampf(destination.x, 18.0, BattleMapScript.ARENA_SIZE.x - 18.0)
+					destination.y = clampf(destination.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
+					if not battle.point_blocked(destination): victim.position = destination
+				used = true
+		"vulnerability_strike":
+			if valid_enemy_in_range(enemy, cast_range):
+				enemy.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":skill_id, "allow_triggers":true})
+				enemy.vulnerability_power = maxf(enemy.vulnerability_power, float(data.get("vulnerability", 0.18)))
+				enemy.vulnerability_time = maxf(enemy.vulnerability_time, float(data.get("duration", 5.0)))
+				used = true
 		"chain":
 			if valid_enemy_in_range(enemy, cast_range):
 				var victims: Array = battle.enemies_near(enemy.position, faction, 190.0, int(data.get("targets", 4)))
@@ -843,9 +870,10 @@ func try_use_skill() -> bool:
 		"area_control":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 245.0))):
 				var victims: Array = battle.enemies_near(target.position, faction, 135.0, 8)
+				var control_multiplier := 1.0 + (float(passive_data.get("control_bonus", 0.0)) if passive_skill_id == "fy_holy_sword_intent" else 0.0)
 				for victim in victims:
 					victim.take_damage(attack * power, self, false, {"kind":"skill", "skill_id":actor_data.skill, "allow_triggers":true})
-					victim.apply_hard_control(float(skill_data.get("duration", 1.2)))
+					victim.apply_hard_control(float(skill_data.get("duration", 1.2)) * control_multiplier)
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"taunt":
 			var victims: Array = battle.enemies_near(position, faction, float(skill_data.get("range", 230)), 12)
@@ -878,6 +906,10 @@ func try_use_skill() -> bool:
 						damage *= 1.0 + passive_value(); battle.note_passive(actor_id, passive_skill_id)
 					for _hit in range(int(skill_data.get("hits", 1))): victim.take_damage(damage, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":int(skill_data.get("hits", 1)) > 1})
 					victim.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.18)) * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
+					if skill_data.has("knockback"):
+						var pushed: Vector2 = victim.position + position.direction_to(victim.position) * float(skill_data.knockback)
+						pushed.x = clampf(pushed.x, 18.0, BattleMapScript.ARENA_SIZE.x - 18.0); pushed.y = clampf(pushed.y, 28.0, BattleMapScript.ARENA_SIZE.y - 18.0)
+						if not battle.point_blocked(pushed): victim.position = pushed
 				skill_timer = cooldown; battle.on_skill(self); combat_event.emit("%s 施放【%s】，破甲斩击%d个目标" % [_name(), _skill_name(), victims.size()]); return true
 		"piercing_shot":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 285.0))):
@@ -953,6 +985,7 @@ func try_use_skill() -> bool:
 				var multi_bonus := 1.0 + passive_effect_total("multi_hit_bonus")
 				for _hit in range(int(skill_data.get("hits", 4))): target.take_damage(attack * power * multi_bonus, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
 				target.apply_slow(float(skill_data.get("slow", 0.25)), float(skill_data.get("duration", 4.0)))
+				if skill_data.has("attack_weaken"): target.apply_attack_weaken(float(skill_data.attack_weaken), float(skill_data.get("duration", 4.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"multi_hit":
 			if valid_enemy_in_range(target, float(skill_data.get("range", attack_range))):
@@ -1062,8 +1095,10 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		battle.record_damage_resolution(live_source, self, result, safe_context)
 		return result
 	var evasion := passive_effect_total("evasion") + (passive_value() if passive_data.get("effect", "") == "evasion" else 0.0) + (temporary_evasion if temporary_evasion_time > 0.0 else 0.0)
+	if passive_data.get("effect", "") == "team_guard_evasion": evasion += float(passive_data.get("evasion", 0.12))
 	if live_source != null:
 		evasion = maxf(0.0, evasion - live_source.passive_effect_total("armor_ignore") * 0.5)
+		if live_source.passive_skill_id == "fy_hero_sword_intent": evasion = maxf(0.0, evasion - float(live_source.passive_data.get("accuracy", 0.16)))
 	if live_source != null and live_source.has_general_passive("dz_golden_eye"):
 		evasion = maxf(0.0, evasion - live_source.general_passive_by_id("dz_golden_eye"))
 	if not bool(safe_context.get("bypass_evasion", false)) and randf() < minf(0.75, evasion):
@@ -1122,6 +1157,7 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		battle.note_passive(actor_id, passive_skill_id)
 	reduction_factor *= 1.0 - clampf(passive_effect_total("damage_reduction"), 0.0, 0.85)
 	reduction_factor *= 1.0 - clampf(friend_guard_aura(), 0.0, 0.40)
+	if critical: reduction_factor *= 1.0 - clampf(passive_effect_total("critical_reduction"), 0.0, 0.60)
 	if temporary_reduction_time > 0.0: reduction_factor *= 1.0 - clampf(temporary_reduction, 0.0, 0.85)
 	if vulnerability_time > 0.0: reduction_factor *= 1.0 + clampf(vulnerability_power, 0.0, 0.40)
 	result.reduction = 1.0 - reduction_factor
@@ -1331,6 +1367,7 @@ func friend_guard_aura() -> float:
 	for member in allies:
 		if is_instance_valid(member) and member != self and not member.dead and position.distance_to(member.position) <= 220.0:
 			total += member.passive_effect_total("friend_guard")
+			if member.passive_data.get("effect", "") == "team_guard_evasion": total += member.passive_value()
 	return total
 
 func on_skill_casted() -> void:
@@ -1367,6 +1404,8 @@ func on_boss_skill_cast() -> void:
 		"summon", "poison_summon": summon_boss_minion(str(actor_data.get("boss_mechanic", "")) == "poison_summon")
 		"alchemy_burst": add_shield(max_hp * 0.12, 4.0); apply_damage_reduction(0.12, 4.0)
 		"iron_wall": add_shield(max_hp * 0.16, 5.0); apply_damage_reduction(0.18, 5.0)
+		"armor_break_aura":
+			for victim in battle.enemies_near(position, faction, 255.0, 8): victim.apply_armor_break(0.24, 6.0)
 		"gravity_field":
 			for victim in battle.enemies_near(position, faction, 260.0, 8): victim.apply_slow(0.45, 4.0); victim.apply_hard_control(0.6)
 		"phase_control":
@@ -1380,6 +1419,7 @@ func on_boss_skill_cast() -> void:
 		"illusion_decoy": add_shield(max_hp * 0.1, 4.0); temporary_evasion = 0.2; temporary_evasion_time = 4.0
 		"dual_phase": temporary_counter = 0.3; temporary_counter_time = 5.0; add_shield(max_hp * 0.06, 4.0)
 		"evasion_counter": temporary_evasion = 0.24; temporary_evasion_time = 5.0; temporary_counter = 0.28; temporary_counter_time = 5.0; haste_power = 0.18; haste_time = 5.0
+		"critical_fury": temporary_attack_bonus = 0.22; temporary_attack_bonus_time = 5.0; haste_power = 0.22; haste_time = 5.0
 		"final_burst_phases":
 			haste_power = 0.18 if hp / maxf(1.0, max_hp) > 0.25 else 0.32
 			haste_time = 5.0
@@ -1415,6 +1455,7 @@ func boss_minion_actor_id() -> String:
 		"秦时明月": return "qin_mechanism_beast"
 		"火影忍者": return "naruto_rogue_ninja"
 		"黄易": return "hy_demon_disciple"
+		"风云": return "fy_tianxia_guard"
 	return "zubat"
 
 func apply_hard_control(duration: float) -> float:
@@ -1453,6 +1494,8 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	healing_effect = clampf(float(stats.get("healing_effect", 0)), 0.0, float(rules.get("max_healing_effect", 1.0)))
 	life_regen = 0.0
 	emergency_regen = 0.0
+	control_resistance = 0.35 if actor_data.has("boss_id") else 0.0
+	attack_range = float(actor_data.get("attack_range", 60.0))
 	for row in general_passive_datas:
 		var general_id: String = row.id
 		var general_data: Dictionary = row.data
@@ -1474,6 +1517,13 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 			"physical_health": physical_damage += value; max_hp *= 1.0 + float(general_data.get("health", 0.08))
 			"elemental_cooldown": elemental_damage += value; cooldown_reduction += float(general_data.get("cooldown", 0.06))
 			"hybrid_damage": physical_damage += value; elemental_damage += value
+			"control_resistance": control_resistance += value
+			"defense_guard": defense *= 1.0 + float(general_data.get("defense", 0.10))
+			"health_counter": max_hp *= 1.0 + float(general_data.get("health", 0.12))
+			"guard_survival": max_hp *= 1.0 + float(general_data.get("health", 0.08))
+			"physical_defense": physical_damage += value; defense *= 1.0 + float(general_data.get("defense", 0.08))
+			"regeneration_cooldown": life_regen += max_hp * value; cooldown_reduction += float(general_data.get("cooldown", 0.07))
+			"critical_power": crit_chance += value; crit_damage += float(general_data.get("crit_damage", 0.18))
 	match passive_data.get("effect", ""):
 		"health_regen":
 			max_hp *= 1.0 + passive_value()
@@ -1487,8 +1537,15 @@ func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 			if passive_skill_id != "hunting_instinct": crit_chance += passive_value()
 		"cooldown_reduction": cooldown_reduction += passive_value()
 		"second_wind": emergency_regen += max_hp * passive_value()
+		"armor_ignore": physical_damage += float(passive_data.get("physical_bonus", 0.0)) + passive_value()
+		"sword_mastery":
+			physical_damage += passive_value(); attack_range += float(passive_data.get("range_bonus", 0.0)); control_resistance += float(passive_data.get("control_resistance", 0.0))
+		"critical_control_power": crit_damage += float(passive_data.get("crit_damage", 0.25)) + passive_value()
+		"physical_guard": physical_damage += passive_value(); damage_reduction += float(passive_data.get("reduction", 0.10))
+		"burn_master": max_hp *= 1.0 + float(passive_data.get("health", 0.0))
+		"regen_cooldown": life_regen += max_hp * float(passive_data.get("regen", 0.007)) * (1.0 + (passive_skill_level - 1) * 0.08); cooldown_reduction += passive_value()
 	if passive_skill_id == "hy_longevity_exclusive": life_regen += max_hp * float(passive_data.get("regen", 0.006))
-	if passive_skill_id in ["hy_golden_core", "hy_love_sword_heart"]: crit_damage += float(passive_data.get("crit_damage", 0.0))
+	if passive_skill_id in ["hy_golden_core", "hy_love_sword_heart", "fy_hero_sword_intent"]: crit_damage += float(passive_data.get("crit_damage", 0.0))
 	attack_interval = maxf(float(rules.get("min_attack_interval", 0.25)), base_attack_interval / (1.0 + attack_speed))
 	hp = clampf(max_hp * hp_ratio, 1.0 if not dead else 0.0, max_hp)
 	health_changed.emit(self)
@@ -1524,7 +1581,7 @@ func passive_effect_total(effect: String) -> float:
 	var total := 0.0
 	for row in general_passive_datas:
 		var actual_effect := str(row.data.get("effect", ""))
-		var combined_match := (actual_effect == "guard_shield" and effect in ["damage_reduction", "shield_power"]) or (actual_effect == "damage_recovery" and effect == "damage_recovery")
+		var combined_match := (actual_effect == "guard_shield" and effect in ["damage_reduction", "shield_power"]) or (actual_effect == "damage_recovery" and effect == "damage_recovery") or (actual_effect == "defense_guard" and effect == "damage_reduction") or (actual_effect == "health_counter" and effect == "counter") or (actual_effect == "guard_survival" and effect == "damage_reduction") or (actual_effect == "evasion_burst_guard" and effect in ["evasion", "critical_reduction"])
 		if actual_effect == effect or combined_match:
 			if str(row.id) == "dz_unyielding_soul" and hp / maxf(1.0, max_hp) > 0.45: continue
 			total += general_passive_value(str(row.id), row.data)
@@ -1548,7 +1605,9 @@ func general_passive_by_id(skill_id: String) -> float:
 	return 0.0
 
 func armor_break_multiplier() -> float:
-	return 1.0 + (general_passive_by_id("dz_alchemy_affinity") if has_general_passive("dz_alchemy_affinity") else 0.0)
+	var value := general_passive_by_id("dz_alchemy_affinity") if has_general_passive("dz_alchemy_affinity") else 0.0
+	if passive_skill_id == "fy_qilin_arm": value += float(passive_data.get("break_bonus", 0.20))
+	return 1.0 + value
 
 func shield_power_multiplier() -> float:
 	var value := passive_effect_total("shield_power")

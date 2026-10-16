@@ -269,9 +269,9 @@ func _restore_scroll_position(view: String) -> void:
 		content_scroll.scroll_vertical = int(scroll_positions.get(view, 0))
 
 func build_rift() -> void:
-	title.text = "九世界动态大秘境"
+	title.text = "十世界动态大秘境"
 	var cap: int = battle.adventure.main_stage_cap()
-	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n八个世界共享动态开放上限，但进度、首通、词缀池和Boss配置各自独立。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
+	var intro := Label.new(); intro.text = "当前主线最高已通关地图等级：Lv.%d｜秘境全局开放上限：%d层\n十个世界共享动态开放上限，但进度、首通、词缀池和Boss配置各自独立。" % [cap, cap]; intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(intro)
 	for world_id in battle.adventure.config.rift.worlds:
 		var world: Dictionary = battle.adventure.config.rift.worlds[world_id]
 		var state: Dictionary = battle.progression.rift_progress[world_id]
@@ -328,7 +328,7 @@ func build_rewards() -> void:
 	var snap: Dictionary = battle.stats_snapshot()
 	var info := Label.new()
 	var pending: Dictionary = battle.progression.pending_offline
-	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募/重铸材料：%d 个　累计金币：%d\n自动出售：%d件 / 金币%d　自动分解：%d件 / 材料%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d、徽记%d、侠义令%d、苍龙令%d、忍界卷轴%d、战神令%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, int(snap.resources.get("auto_sold_count", 0)), int(snap.resources.get("auto_sold_gold", 0)), int(snap.resources.get("auto_dismantled_count", 0)), int(snap.resources.get("auto_dismantled_material", 0)), snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0)), int(pending.get("dragon_blood_crystal", 0)), int(pending.get("jianghu_token", 0)), int(pending.get("azeroth_token", 0)), int(pending.get("wuxia_token", 0)), int(pending.get("qin_moon_token", 0)), int(pending.get("ninja_scroll", 0)), int(pending.get("huangyi_token", 0))]
+	info.text = "本场自动战斗 %.0f 秒\n获得装备：%d 件　招募/重铸材料：%d 个　累计金币：%d\n自动出售：%d件 / 金币%d　自动分解：%d件 / 材料%d\n资源收益估算：%.1f / 分钟\n\n离线挂机（最多8小时）：%d分钟\n待领取：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d、徽记%d、侠义令%d、苍龙令%d、忍界卷轴%d、战神令%d、风云令%d" % [snap.duration, snap.resources.equipment, snap.resources.materials, battle.progression.gold, int(snap.resources.get("auto_sold_count", 0)), int(snap.resources.get("auto_sold_gold", 0)), int(snap.resources.get("auto_dismantled_count", 0)), int(snap.resources.get("auto_dismantled_material", 0)), snap.resources_per_minute, int(pending.get("seconds", 0)) / 60, int(pending.get("gold", 0)), int(pending.get("three_kingdoms_token", 0)), int(pending.get("pokemon_token", 0)), int(pending.get("dragon_blood_crystal", 0)), int(pending.get("jianghu_token", 0)), int(pending.get("azeroth_token", 0)), int(pending.get("wuxia_token", 0)), int(pending.get("qin_moon_token", 0)), int(pending.get("ninja_scroll", 0)), int(pending.get("huangyi_token", 0)), int(pending.get("fengyun_token", 0))]
 	info.add_theme_font_size_override("font_size", 20)
 	content.add_child(info)
 	var claim := Button.new()
@@ -346,7 +346,7 @@ func _claim_offline_rewards() -> void:
 	if result.is_empty():
 		rewards_feedback = "当前没有可领取的离线收益。"
 	else:
-		rewards_feedback = "领取成功：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d、徽记%d、侠义令%d、苍龙令%d、忍界卷轴%d、战神令%d。" % [int(result.gold), int(result.three_kingdoms_token), int(result.pokemon_token), int(result.get("dragon_blood_crystal", 0)), int(result.get("jianghu_token", 0)), int(result.get("azeroth_token", 0)), int(result.get("wuxia_token", 0)), int(result.get("qin_moon_token", 0)), int(result.get("ninja_scroll", 0)), int(result.get("huangyi_token", 0))]
+		rewards_feedback = "领取成功：金币%d、虎符%d、精灵结晶%d、龙血结晶%d、江湖令%d、徽记%d、侠义令%d、苍龙令%d、忍界卷轴%d、战神令%d、风云令%d。" % [int(result.gold), int(result.three_kingdoms_token), int(result.pokemon_token), int(result.get("dragon_blood_crystal", 0)), int(result.get("jianghu_token", 0)), int(result.get("azeroth_token", 0)), int(result.get("wuxia_token", 0)), int(result.get("qin_moon_token", 0)), int(result.get("ninja_scroll", 0)), int(result.get("huangyi_token", 0)), int(result.get("fengyun_token", 0))]
 		battle.log_message.emit(rewards_feedback)
 	refresh()
 
@@ -354,14 +354,14 @@ func build_objectives() -> void:
 	title.text = "关卡目标"
 	var info := Label.new()
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—90关推进；每10关依次开放下一世界。" % battle.worlds_config.maps[battle.current_map_id].name
+	info.text = "当前地图：%s\n\n挂机击败怪物并自动拾取装备、金币、经验与世界材料。\n在统一角色页换装、查看成长并配置主动/被动技能。\n按全局1—100关推进；每10关依次开放下一世界。" % battle.worlds_config.maps[battle.current_map_id].name
 	if not battle.progression.guide_finished:
 		var step: int = clampi(battle.progression.guide_step, 0, 5)
 		info.text = "当前引导：%d/6\n\n%s" % [step + 1, ["用虎符定向招募", "将输出角色上阵", "观察职业自动战斗", "等待装备掉落", "穿戴一件装备", "补齐四人编队"][step]]
 	info.add_theme_font_size_override("font_size", 19)
 	content.add_child(info)
 	var auto_push := CheckButton.new()
-	auto_push.text = "通关后自动进入下一关（第90关后持续重复）"
+	auto_push.text = "通关后自动进入下一关（第100关后持续重复）"
 	auto_push.button_pressed = battle.progression.auto_push
 	auto_push.toggled.connect(func(enabled: bool): battle.set_auto_push(enabled))
 	content.add_child(auto_push)
@@ -388,7 +388,7 @@ func build_shop() -> void:
 	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(summary)
 	var world_filters := FlowContainer.new(); content.add_child(world_filters)
-	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者", "黄易"]:
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者", "黄易", "风云"]:
 		var filter := Button.new(); filter.text = world; filter.disabled = shop_world_filter == world; filter.pressed.connect(_set_shop_world.bind(world)); world_filters.add_child(filter)
 	var products := ItemList.new()
 	products.custom_minimum_size = Vector2(0, 145)
@@ -541,9 +541,9 @@ func _confirm_bulk_sell() -> void:
 	refresh()
 
 func build_world() -> void:
-	title.text = "90关主线 · 九世界冒险"
+	title.text = "100关主线 · 十世界冒险"
 	var info := Label.new()
-	info.text = "当前：%s　｜三国✓ 宝可梦%s 龙族%s 逆水寒%s 魔兽%s 金庸%s 秦时%s 火影%s 黄易%s" % [battle.worlds_config.maps[battle.current_map_id].name, "✓" if battle.progression.world_unlocked("宝可梦") else "🔒", "✓" if battle.progression.world_unlocked("龙族") else "🔒", "✓" if battle.progression.world_unlocked("逆水寒") else "🔒", "✓" if battle.progression.world_unlocked("魔兽世界") else "🔒", "✓" if battle.progression.world_unlocked("金庸") else "🔒", "✓" if battle.progression.world_unlocked("秦时明月") else "🔒", "✓" if battle.progression.world_unlocked("火影忍者") else "🔒", "✓" if battle.progression.world_unlocked("黄易") else "🔒"]
+	info.text = "当前：%s　｜三国✓ 宝可梦%s 龙族%s 逆水寒%s 魔兽%s 金庸%s 秦时%s 火影%s 黄易%s 风云%s" % [battle.worlds_config.maps[battle.current_map_id].name, "✓" if battle.progression.world_unlocked("宝可梦") else "🔒", "✓" if battle.progression.world_unlocked("龙族") else "🔒", "✓" if battle.progression.world_unlocked("逆水寒") else "🔒", "✓" if battle.progression.world_unlocked("魔兽世界") else "🔒", "✓" if battle.progression.world_unlocked("金庸") else "🔒", "✓" if battle.progression.world_unlocked("秦时明月") else "🔒", "✓" if battle.progression.world_unlocked("火影忍者") else "🔒", "✓" if battle.progression.world_unlocked("黄易") else "🔒", "✓" if battle.progression.world_unlocked("风云") else "🔒"]
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(info)
 	for map_id in battle.worlds_config.maps:
@@ -555,7 +555,7 @@ func build_world() -> void:
 		var state := "已通关" if complete else "可挑战" if available else "世界锁定" if not battle.progression.world_unlocked(str(data.world)) else "前置未通关"
 		button.text = "%s · 全局第%d关 · %s（难度Lv.%d） · %s" % [data.world, stage, data.name, int(data.get("difficulty_level", stage)), state]
 		button.disabled = (map_id == battle.current_map_id and battle.active_boss_id.is_empty() and not battle.stage_cleared) or not available
-		button.tooltip_text = "按全局1—90关顺序推进；角色等级上限随最高已通关主线开放。"
+		button.tooltip_text = "按全局1—100关顺序推进；角色等级上限随最高已通关主线开放。"
 		button.pressed.connect(_enter_stage.bind(map_id))
 		content.add_child(button)
 
@@ -612,11 +612,11 @@ func build_recruit() -> void:
 	title.text = "角色招募与四人编队" if current_view == "recruit" else "伙伴与四人编队"
 	var p = battle.progression
 	var info := Label.new()
-	info.text = "虎符%d　精灵结晶%d　龙血结晶%d　江湖令%d　徽记%d　侠义令%d　苍龙令%d　忍界卷轴%d　战神令%d　已招募%d/82" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.materials.dragon_blood_crystal, p.materials.jianghu_token, p.materials.azeroth_token, p.materials.wuxia_token, p.materials.qin_moon_token, p.materials.ninja_scroll, p.materials.huangyi_token, p.roster.size()]
+	info.text = "虎符%d　精灵结晶%d　龙血结晶%d　江湖令%d　徽记%d　侠义令%d　苍龙令%d　忍界卷轴%d　战神令%d　风云令%d　已招募%d/92" % [p.materials.three_kingdoms_token, p.materials.pokemon_token, p.materials.dragon_blood_crystal, p.materials.jianghu_token, p.materials.azeroth_token, p.materials.wuxia_token, p.materials.qin_moon_token, p.materials.ninja_scroll, p.materials.huangyi_token, p.materials.fengyun_token, p.roster.size()]
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(info)
 	var filters := FlowContainer.new(); content.add_child(filters)
-	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者", "黄易"]:
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者", "黄易", "风云"]:
 		var filter := Button.new(); filter.text = world; filter.disabled = recruit_world_filter == world; filter.pressed.connect(_set_recruit_world.bind(world)); filters.add_child(filter)
 	recruit_detail = Label.new()
 	recruit_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -629,7 +629,7 @@ func build_recruit() -> void:
 		if recruit_world_filter != "全部" and str(battle.actors.get(actor_id, {}).get("world", "")) != recruit_world_filter: continue
 		var cost: Array = battle.worlds_config.recruitment.costs[actor_id]
 		var owned: bool = actor_id in p.roster
-		var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban"}
+		var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban", "fy_di_shitian":"di_shitian"}
 		var legendary_locked: bool = legendary_gate.has(actor_id) and not bool(p.boss_first_clear.get(legendary_gate[actor_id], false))
 		var state: String = "已招募" if owned else "需先击败对应Boss" if legendary_locked else "%s ×%d" % [material_name(cost[0]), cost[1]]
 		var idx := recruit_list.add_item("%s · %s" % [battle.actors[actor_id].name, state])
@@ -686,7 +686,7 @@ func _update_recruit_selection_ui() -> void:
 	var actor: Dictionary = battle.actors[selected_party_actor]
 	var cost: Array = battle.worlds_config.recruitment.costs[selected_party_actor]
 	var owned: bool = selected_party_actor in p.roster
-	var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban"}
+	var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban", "fy_di_shitian":"di_shitian"}
 	var legendary_locked: bool = legendary_gate.has(selected_party_actor) and not bool(p.boss_first_clear.get(legendary_gate[selected_party_actor], false))
 	var current_amount: int = int(p.materials.get(str(cost[0]), 0))
 	recruit_detail.text = "%s｜%s｜%s\n消耗：%s ×%d　当前持有：%d\n%s" % [actor.name, actor.get("role", "冒险者"), actor.get("world", ""), material_name(str(cost[0])), int(cost[1]), current_amount, recruit_feedback]
@@ -1135,4 +1135,4 @@ func add_separator(text_value: String) -> void:
 	var label := Label.new(); label.text = text_value; label.add_theme_font_size_override("font_size", 18); content.add_child(label)
 
 func material_name(id: String) -> String:
-	return {"three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "qin_moon_token":"苍龙令", "ninja_scroll":"忍界卷轴", "huangyi_token":"战神令", "salvage_dust":"重铸材料"}.get(id, id)
+	return {"three_kingdoms_token":"虎符", "pokemon_token":"精灵结晶", "dragon_blood_crystal":"龙血结晶", "jianghu_token":"江湖令", "azeroth_token":"艾泽拉斯徽记", "wuxia_token":"侠义令", "qin_moon_token":"苍龙令", "ninja_scroll":"忍界卷轴", "huangyi_token":"战神令", "fengyun_token":"风云令", "salvage_dust":"重铸材料"}.get(id, id)

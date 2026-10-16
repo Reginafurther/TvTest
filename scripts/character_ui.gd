@@ -363,7 +363,7 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 	var p = battle.progression
 	var actor: Dictionary = battle.actors[selected_actor]
 	var filter_row := FlowContainer.new(); skills_box.add_child(filter_row)
-	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者", "黄易"]:
+	for world in ["全部", "三国", "宝可梦", "龙族", "逆水寒", "魔兽世界", "金庸", "秦时明月", "火影忍者", "黄易", "风云"]:
 		var button := Button.new(); button.text = world; button.disabled = skill_world_filter == world; button.pressed.connect(_set_skill_world_filter.bind(world)); filter_row.add_child(button)
 	var category_row := HBoxContainer.new(); skills_box.add_child(category_row)
 	for category_name in ["全部", "主动", "被动"]:

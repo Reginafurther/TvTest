@@ -15,12 +15,14 @@ const TEST_PATH := "user://wanjie_v10_test_progress.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const DIFFICULTY_CONFIG_VERSION := 2
 const LEGACY_DIFFICULTY_BASE := 2.5
-const MAIN_STAGE_LIMIT := 90
+const MAIN_STAGE_LIMIT := 100
 const TEAM_PROGRESSION_VERSION := 1
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade", "hy_long_ying", "hy_wu_zhao", "hy_kou_zhong", "hy_xu_ziling", "hy_wan_wan", "hy_fa_ming", "hy_yan_fei", "hy_sun_en", "hy_ling_donglai", "hy_lang_fanyun"]
+const FENGYUN_HERO_IDS := ["fy_nie_feng", "fy_bu_jingyun", "fy_wuming", "fy_sword_saint", "fy_wu_wudi", "fy_xiao_wu", "fy_duan_lang", "fy_di_er_meng", "fy_jian_chen", "fy_di_shitian"]
+const ALL_HERO_IDS := HERO_IDS + FENGYUN_HERO_IDS
 
 var save_path := NORMAL_PATH
-var materials := {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0}
+var materials := {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0, "fengyun_token": 0}
 var gold := 0
 var guide_step := 0
 var guide_finished := false
@@ -28,7 +30,7 @@ var guide_skipped := false
 var guide_replay := false
 var roster: Array = ["liu_bei"]
 var party: Array = ["liu_bei", "", "", ""]
-var boss_first_clear := {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false, "donghuang_taiyi": false, "madara": false, "pang_ban": false}
+var boss_first_clear := {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false, "donghuang_taiyi": false, "madara": false, "pang_ban": false, "di_shitian": false}
 var strategy_presets := {
 	"稳健": {"self_hp": 0.45, "ally_hp": 0.65, "enemy_count": 1},
 	"猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}
@@ -44,7 +46,7 @@ var actor_levels: Dictionary = {}
 var actor_experience: Dictionary = {}
 var skill_levels: Dictionary = {}
 var transaction_log: Array = []
-var pending_offline := {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal":0, "jianghu_token":0, "azeroth_token":0, "wuxia_token":0, "qin_moon_token":0, "ninja_scroll":0, "huangyi_token":0}
+var pending_offline := {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal":0, "jianghu_token":0, "azeroth_token":0, "wuxia_token":0, "qin_moon_token":0, "ninja_scroll":0, "huangyi_token":0, "fengyun_token":0}
 var last_seen_unix := 0
 var completed_stages: Array = []
 var pokemon_world_unlocked := false
@@ -67,6 +69,7 @@ var rift_progress: Dictionary = {
 	,"qin": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 	,"naruto": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 	,"huangyi": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+	,"fengyun": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 }
 var encounter_state: Dictionary = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
 var encounter_log: Array = []
@@ -132,7 +135,7 @@ func clear_test_save() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PATH))
 
 func ensure_growth_layout() -> void:
-	for actor_id in HERO_IDS:
+	for actor_id in ALL_HERO_IDS:
 		actor_levels[actor_id] = team_level
 		actor_experience[actor_id] = team_exp
 		if not skill_levels.has(actor_id) or typeof(skill_levels.get(actor_id, {})) != TYPE_DICTIONARY:
@@ -189,6 +192,7 @@ func ensure_adventure_layout() -> void:
 		,"qin":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
 		,"naruto":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
 		,"huangyi":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
+		,"fengyun":{"highest_clear":0,"selected_floor":1,"auto_climb":true,"first_clear_claimed":[]}
 	}
 	for world_id in defaults:
 		if typeof(rift_progress.get(world_id, {})) != TYPE_DICTIONARY: rift_progress[world_id] = {}
@@ -219,7 +223,7 @@ func can_enter_stage(stage: int) -> bool:
 	return stage <= highest_unlocked_stage()
 
 func world_unlocked(world_name: String) -> bool:
-	var required: int = int({"三国":0, "宝可梦":10, "龙族":20, "逆水寒":30, "魔兽世界":40, "金庸":50, "秦时明月":60, "火影忍者":70, "黄易":80}.get(world_name, 9999))
+	var required: int = int({"三国":0, "宝可梦":10, "龙族":20, "逆水寒":30, "魔兽世界":40, "金庸":50, "秦时明月":60, "火影忍者":70, "黄易":80, "风云":90}.get(world_name, 9999))
 	return required == 0 or is_stage_complete(int(required))
 
 func complete_stage(stage: int) -> bool:
@@ -292,7 +296,7 @@ func restart_guide() -> void:
 	save_to_disk()
 
 func exchange_actor(actor_id: String, material_id: String, cost: int) -> bool:
-	var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban"}
+	var legendary_gate := {"lu_bu":"lu_bu", "mewtwo":"mewtwo", "zero":"nidhogg", "nine_spirits":"liuxingwen", "hy_ling_donglai":"pang_ban", "fy_di_shitian":"di_shitian"}
 	if legendary_gate.has(actor_id) and not bool(boss_first_clear.get(legendary_gate[actor_id], false)):
 		return false
 	if actor_id in roster or not spend_material(material_id, cost):
@@ -372,7 +376,7 @@ func add_team_experience(amount: int, autosave: bool = true, source: String = "c
 func add_actor_experience(actor_id: String, amount: int, autosave: bool = true, source: String = "combat") -> bool:
 	# Compatibility entry point: actor_id is validated but never selects a
 	# separate experience pool.
-	if actor_id not in HERO_IDS:
+	if actor_id not in ALL_HERO_IDS:
 		return false
 	return add_team_experience(amount, autosave, source)
 
@@ -408,7 +412,7 @@ func party_average_level() -> float:
 	return float(team_level)
 
 func _sync_team_progression_mirrors() -> void:
-	for actor_id in HERO_IDS:
+	for actor_id in ALL_HERO_IDS:
 		actor_levels[actor_id] = team_level
 		actor_experience[actor_id] = team_exp
 		level_history[actor_id] = team_level_history.duplicate(true)
@@ -564,6 +568,7 @@ func calculate_offline_rewards(now_unix: int) -> Dictionary:
 	if is_stage_complete(60): pending_offline.qin_moon_token = maxi(int(pending_offline.get("qin_moon_token", 0)), seconds / 600)
 	if is_stage_complete(70): pending_offline.ninja_scroll = maxi(int(pending_offline.get("ninja_scroll", 0)), seconds / 660)
 	if is_stage_complete(80): pending_offline.huangyi_token = maxi(int(pending_offline.get("huangyi_token", 0)), seconds / 720)
+	if is_stage_complete(90): pending_offline.fengyun_token = maxi(int(pending_offline.get("fengyun_token", 0)), seconds / 780)
 	return pending_offline
 
 func claim_offline_rewards() -> Dictionary:
@@ -580,7 +585,8 @@ func claim_offline_rewards() -> Dictionary:
 	materials["qin_moon_token"] = int(materials.get("qin_moon_token", 0)) + int(reward.get("qin_moon_token", 0))
 	materials["ninja_scroll"] = int(materials.get("ninja_scroll", 0)) + int(reward.get("ninja_scroll", 0))
 	materials["huangyi_token"] = int(materials.get("huangyi_token", 0)) + int(reward.get("huangyi_token", 0))
-	pending_offline = {"seconds":0,"gold":0,"three_kingdoms_token":0,"pokemon_token":0,"dragon_blood_crystal":0,"jianghu_token":0,"azeroth_token":0,"wuxia_token":0,"qin_moon_token":0,"ninja_scroll":0,"huangyi_token":0}
+	materials["fengyun_token"] = int(materials.get("fengyun_token", 0)) + int(reward.get("fengyun_token", 0))
+	pending_offline = {"seconds":0,"gold":0,"three_kingdoms_token":0,"pokemon_token":0,"dragon_blood_crystal":0,"jianghu_token":0,"azeroth_token":0,"wuxia_token":0,"qin_moon_token":0,"ninja_scroll":0,"huangyi_token":0,"fengyun_token":0}
 	last_seen_unix = int(Time.get_unix_time_from_system())
 	record_transaction("离线收益", "%d秒" % int(reward.seconds), int(reward.gold))
 	changed.emit()
@@ -595,7 +601,7 @@ func set_combat_difficulty(value: float, autosave: bool = true) -> float:
 	return combat_difficulty
 
 func reset_to_new_game() -> bool:
-	materials = {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0}
+	materials = {"salvage_dust": 0, "three_kingdoms_token": 150, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token": 0, "wuxia_token": 0, "qin_moon_token": 0, "ninja_scroll": 0, "huangyi_token": 0, "fengyun_token": 0}
 	gold = 0
 	guide_step = 0
 	guide_finished = false
@@ -603,7 +609,7 @@ func reset_to_new_game() -> bool:
 	guide_replay = false
 	roster = ["liu_bei"]
 	party = ["liu_bei", "", "", ""]
-	boss_first_clear = {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false, "donghuang_taiyi": false, "madara": false, "pang_ban": false}
+	boss_first_clear = {"lu_bu": false, "mewtwo": false, "nidhogg": false, "liuxingwen": false, "lich_king": false, "dongfang_bubai": false, "donghuang_taiyi": false, "madara": false, "pang_ban": false, "di_shitian": false}
 	strategy_presets = {"稳健": {"self_hp": 0.45, "ally_hp": 0.65, "enemy_count": 1}, "猛攻": {"self_hp": 0.25, "ally_hp": 0.40, "enemy_count": 2}}
 	active_strategy = "稳健"
 	team_level = 1
@@ -614,7 +620,7 @@ func reset_to_new_game() -> bool:
 	actor_experience = {}
 	skill_levels = {}
 	transaction_log = []
-	pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token":0, "wuxia_token":0, "qin_moon_token":0, "ninja_scroll":0, "huangyi_token":0}
+	pending_offline = {"seconds": 0, "gold": 0, "three_kingdoms_token": 0, "pokemon_token": 0, "dragon_blood_crystal": 0, "jianghu_token": 0, "azeroth_token":0, "wuxia_token":0, "qin_moon_token":0, "ninja_scroll":0, "huangyi_token":0, "fengyun_token":0}
 	last_seen_unix = int(Time.get_unix_time_from_system())
 	completed_stages = []
 	pokemon_world_unlocked = false
@@ -637,6 +643,7 @@ func reset_to_new_game() -> bool:
 		,"qin": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 		,"naruto": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 		,"huangyi": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
+		,"fengyun": {"highest_clear": 0, "selected_floor": 1, "auto_climb": true, "first_clear_claimed": []}
 	}
 	encounter_state = {"last_trigger_unix": 0, "active": {}, "merchant_stock": [], "merchant_expiry": 0, "serial": 0}
 	encounter_log = []
