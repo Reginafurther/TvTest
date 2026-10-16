@@ -10,7 +10,7 @@
     "defense": 16,
     "move_speed": 112,
     "attack_range": 70,
-    "attack_interval": 0.72,
+    "attack_interval": 0.95,
     "color": "73C8FF",
     "accent": "EAF8FF",
     "skill": "spear_flurry",
@@ -29,7 +29,7 @@
     "defense": 20,
     "move_speed": 92,
     "attack_range": 165,
-    "attack_interval": 1.15,
+    "attack_interval": 1.05,
     "color": "79D58B",
     "accent": "F6E59A",
     "skill": "benevolent_aid",
@@ -47,7 +47,7 @@
     "defense": 12,
     "move_speed": 124,
     "attack_range": 190,
-    "attack_interval": 0.82,
+    "attack_interval": 0.95,
     "color": "F5D547",
     "accent": "7B4A22",
     "skill": "thunder_chain",
@@ -64,7 +64,7 @@
     "defense": 28,
     "move_speed": 68,
     "attack_range": 62,
-    "attack_interval": 1.3,
+    "attack_interval": 1.05,
     "color": "4F8F91",
     "accent": "F5E7BB",
     "skill": "rest",
@@ -103,7 +103,7 @@
   "zhang_fei": {
     "basic_damage_type": "physical",
     "name": "张飞", "world": "三国", "role": "嘲讽坦克", "combat_style": "tank", "combat_role": "tank", "target_priority": "intercept_backline", "preferred_range": 52, "minimum_safe_distance": 0, "formation_position": "front_center", "max_hp": 760, "attack": 37, "defense": 31,
-    "move_speed": 78, "attack_range": 62, "attack_interval": 1.2, "color": "5C4538", "accent": "E2C36A", "skill": "roaring_taunt", "passive_skill": "damage_reduction", "talent": "damage_reduction"
+    "move_speed": 78, "attack_range": 62, "attack_interval": 1.05, "color": "5C4538", "accent": "E2C36A", "skill": "roaring_taunt", "passive_skill": "damage_reduction", "talent": "damage_reduction"
   },
   "dian_wei": {
     "basic_damage_type": "physical",
@@ -113,7 +113,7 @@
   "zhuge_liang": {
     "basic_damage_type": "elemental",
     "name": "诸葛亮", "world": "三国", "role": "阵法辅助", "combat_style": "ranged", "combat_role": "ranged_dps", "target_priority": "cluster", "preferred_range": 180, "minimum_safe_distance": 120, "formation_position": "back_flank", "max_hp": 440, "attack": 42, "defense": 15,
-    "move_speed": 88, "attack_range": 205, "attack_interval": 1.25, "color": "6C8DB8", "accent": "E9F1F5", "skill": "eight_trigrams", "passive_skill": "team_haste", "talent": "team_haste"
+    "move_speed": 88, "attack_range": 205, "attack_interval": 1.05, "color": "6C8DB8", "accent": "E9F1F5", "skill": "eight_trigrams", "passive_skill": "team_haste", "talent": "team_haste"
   },
   "lu_bu": {
     "basic_damage_type": "physical",
@@ -128,17 +128,17 @@
   "mewtwo": {
     "basic_damage_type": "elemental",
     "name": "超梦", "world": "宝可梦", "role": "超能爆发", "combat_style": "ranged", "combat_role": "ranged_dps", "target_priority": "high_threat", "preferred_range": 205, "minimum_safe_distance": 130, "formation_position": "back_center", "max_hp": 540, "attack": 68, "defense": 18,
-    "move_speed": 102, "attack_range": 230, "attack_interval": 1.1, "color": "D6D0E8", "accent": "9C62C8", "skill": "psycho_burst", "passive_skill": "psychic_focus", "talent": "psychic_focus"
+    "move_speed": 102, "attack_range": 230, "attack_interval": 1.05, "color": "D6D0E8", "accent": "9C62C8", "skill": "psycho_burst", "passive_skill": "psychic_focus", "talent": "psychic_focus"
   },
   "guan_yu": {"basic_damage_type":"physical","name":"关羽","world":"三国","role":"破甲斩杀","combat_style":"melee","combat_role":"melee_dps","target_priority":"low_health_enemy","preferred_range":68,"minimum_safe_distance":0,"formation_position":"front_flank","max_hp":610,"attack":57,"defense":23,"move_speed":94,"attack_range":82,"attack_interval":1.02,"color":"4F8B62","accent":"D9B866","skill":"green_dragon_slash","passive_skill":"executioner"},
-  "huang_zhong": {"basic_damage_type":"physical","name":"黄忠","world":"三国","role":"远程输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"low_health_enemy","preferred_range":220,"minimum_safe_distance":145,"formation_position":"back_flank","max_hp":430,"attack":55,"defense":14,"move_speed":86,"attack_range":245,"attack_interval":1.18,"color":"B78B49","accent":"F2D28C","skill":"hundred_step_shot","passive_skill":"eagle_eye"},
-  "diao_chan": {"basic_damage_type":"elemental","name":"貂蝉","world":"三国","role":"控制辅助","combat_style":"ranged","combat_role":"support","target_priority":"high_threat","preferred_range":185,"minimum_safe_distance":120,"formation_position":"back_center","max_hp":455,"attack":39,"defense":17,"move_speed":98,"attack_range":205,"attack_interval":1.22,"color":"D887B5","accent":"F8D7E9","skill":"closed_moon_scheme","passive_skill":"moon_dance"},
-  "zhou_yu": {"basic_damage_type":"elemental","name":"周瑜","world":"三国","role":"火焰输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"cluster","preferred_range":185,"minimum_safe_distance":120,"formation_position":"back_flank","max_hp":445,"attack":50,"defense":15,"move_speed":91,"attack_range":210,"attack_interval":1.12,"color":"B84343","accent":"F4B45C","skill":"red_cliff_flames","passive_skill":"burn_master"},
-  "bulbasaur": {"basic_damage_type":"elemental","name":"妙蛙种子","world":"宝可梦","role":"自然续航","combat_style":"ranged","combat_role":"support","target_priority":"status_target","preferred_range":155,"minimum_safe_distance":100,"formation_position":"back_flank","max_hp":560,"attack":38,"defense":21,"move_speed":82,"attack_range":180,"attack_interval":1.18,"color":"65B98A","accent":"D06591","skill":"leech_vine","passive_skill":"leech_growth"},
+  "huang_zhong": {"basic_damage_type":"physical","name":"黄忠","world":"三国","role":"远程输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"low_health_enemy","preferred_range":220,"minimum_safe_distance":145,"formation_position":"back_flank","max_hp":430,"attack":55,"defense":14,"move_speed":86,"attack_range":245,"attack_interval":1.05,"color":"B78B49","accent":"F2D28C","skill":"hundred_step_shot","passive_skill":"eagle_eye"},
+  "diao_chan": {"basic_damage_type":"elemental","name":"貂蝉","world":"三国","role":"控制辅助","combat_style":"ranged","combat_role":"support","target_priority":"high_threat","preferred_range":185,"minimum_safe_distance":120,"formation_position":"back_center","max_hp":455,"attack":39,"defense":17,"move_speed":98,"attack_range":205,"attack_interval":1.05,"color":"D887B5","accent":"F8D7E9","skill":"closed_moon_scheme","passive_skill":"moon_dance"},
+  "zhou_yu": {"basic_damage_type":"elemental","name":"周瑜","world":"三国","role":"火焰输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"cluster","preferred_range":185,"minimum_safe_distance":120,"formation_position":"back_flank","max_hp":445,"attack":50,"defense":15,"move_speed":91,"attack_range":210,"attack_interval":1.05,"color":"B84343","accent":"F4B45C","skill":"red_cliff_flames","passive_skill":"burn_master"},
+  "bulbasaur": {"basic_damage_type":"elemental","name":"妙蛙种子","world":"宝可梦","role":"自然续航","combat_style":"ranged","combat_role":"support","target_priority":"status_target","preferred_range":155,"minimum_safe_distance":100,"formation_position":"back_flank","max_hp":560,"attack":38,"defense":21,"move_speed":82,"attack_range":180,"attack_interval":1.05,"color":"65B98A","accent":"D06591","skill":"leech_vine","passive_skill":"leech_growth"},
   "charmander": {"basic_damage_type":"elemental","name":"小火龙","world":"宝可梦","role":"火焰输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"cluster","preferred_range":165,"minimum_safe_distance":105,"formation_position":"back_flank","max_hp":420,"attack":49,"defense":13,"move_speed":106,"attack_range":190,"attack_interval":0.98,"color":"E9854E","accent":"FFE06B","skill":"fire_spin","passive_skill":"flame_synergy"},
-  "squirtle": {"basic_damage_type":"physical","name":"杰尼龟","world":"宝可梦","role":"护盾坦克","combat_style":"tank","combat_role":"tank","target_priority":"intercept_backline","preferred_range":52,"minimum_safe_distance":0,"formation_position":"front_center","max_hp":735,"attack":34,"defense":34,"move_speed":76,"attack_range":65,"attack_interval":1.25,"color":"65AED1","accent":"E8D3A5","skill":"shell_guard","passive_skill":"shell_armor"},
-  "lucario": {"basic_damage_type":"elemental","name":"路卡利欧","world":"宝可梦","role":"破防输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"high_threat","preferred_range":145,"minimum_safe_distance":82,"formation_position":"front_flank","max_hp":500,"attack":56,"defense":19,"move_speed":116,"attack_range":175,"attack_interval":0.92,"color":"477DB2","accent":"E4D38A","skill":"aura_sphere","passive_skill":"aura_focus"},
-  "gardevoir": {"basic_damage_type":"elemental","name":"沙奈朵","world":"宝可梦","role":"护盾辅助","combat_style":"ranged","combat_role":"support","target_priority":"lowest_health_ally","preferred_range":185,"minimum_safe_distance":125,"formation_position":"back_center","max_hp":470,"attack":42,"defense":17,"move_speed":91,"attack_range":210,"attack_interval":1.2,"color":"EDEFF0","accent":"83D2B6","skill":"psychic_guard","passive_skill":"protective_heart"},
+  "squirtle": {"basic_damage_type":"physical","name":"杰尼龟","world":"宝可梦","role":"护盾坦克","combat_style":"tank","combat_role":"tank","target_priority":"intercept_backline","preferred_range":52,"minimum_safe_distance":0,"formation_position":"front_center","max_hp":735,"attack":34,"defense":34,"move_speed":76,"attack_range":65,"attack_interval":1.05,"color":"65AED1","accent":"E8D3A5","skill":"shell_guard","passive_skill":"shell_armor"},
+  "lucario": {"basic_damage_type":"elemental","name":"路卡利欧","world":"宝可梦","role":"破防输出","combat_style":"ranged","combat_role":"ranged_dps","target_priority":"high_threat","preferred_range":145,"minimum_safe_distance":82,"formation_position":"front_flank","max_hp":500,"attack":56,"defense":19,"move_speed":116,"attack_range":175,"attack_interval":0.95,"color":"477DB2","accent":"E4D38A","skill":"aura_sphere","passive_skill":"aura_focus"},
+  "gardevoir": {"basic_damage_type":"elemental","name":"沙奈朵","world":"宝可梦","role":"护盾辅助","combat_style":"ranged","combat_role":"support","target_priority":"lowest_health_ally","preferred_range":185,"minimum_safe_distance":125,"formation_position":"back_center","max_hp":470,"attack":42,"defense":17,"move_speed":91,"attack_range":210,"attack_interval":1.05,"color":"EDEFF0","accent":"83D2B6","skill":"psychic_guard","passive_skill":"protective_heart"},
   "dragonite": {"basic_damage_type":"physical","name":"快龙","world":"宝可梦","role":"全能战士","combat_style":"melee","combat_role":"melee_dps","target_priority":"high_threat","preferred_range":72,"minimum_safe_distance":0,"formation_position":"front_flank","max_hp":650,"attack":54,"defense":25,"move_speed":108,"attack_range":84,"attack_interval":1.04,"color":"E3A457","accent":"CDE9DF","skill":"dragon_dive","passive_skill":"dragon_resolve"},
   "forest_bug": {
     "name": "大针蜂", "world": "宝可梦", "role": "森林怪物", "enemy_type": "normal", "max_hp": 175, "attack": 24, "defense": 6,

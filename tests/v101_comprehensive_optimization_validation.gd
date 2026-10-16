@@ -3,6 +3,7 @@ extends SceneTree
 const BattleControllerScript = preload("res://scripts/battle_controller.gd")
 const BattleUnitScript = preload("res://scripts/unit.gd")
 const InventoryManagerScript = preload("res://scripts/inventory_manager.gd")
+const ProgressionManagerScript = preload("res://scripts/progression_manager.gd")
 
 class ShieldBattle extends Node:
 	var absorbed: Array = []
@@ -20,9 +21,10 @@ func _initialize() -> void:
 	_validate_migration(equipment, failures)
 	_validate_shields(failures)
 	_validate_actor_baselines(failures)
+	_validate_all_hero_intervals(failures)
 	_validate_content(content, failures)
 	if failures.is_empty():
-		print("V101_COMPREHENSIVE_OPTIMIZATION_VALIDATION_PASS equipment=true tank_score=true shields=true intervals=true ui_content=true")
+		print("V101_COMPREHENSIVE_OPTIMIZATION_VALIDATION_PASS equipment=true tank_score=true shields=true hero_intervals=92/92 enemy_samples_unchanged=3/3 ui_content=true")
 		quit(0)
 		return
 	for failure in failures: push_error("V101_COMPREHENSIVE_OPTIMIZATION_VALIDATION_FAIL: " + failure)
@@ -91,6 +93,25 @@ func _validate_actor_baselines(failures: Array[String]) -> void:
 	if not is_equal_approx(float(controller.actors.zhao_yun.attack_interval), 1.05): failures.append("英雄基础攻速上限未校准到1.05")
 	if not is_equal_approx(float(controller.actors.enemy.attack_interval), 0.50): failures.append("敌人攻速被错误修改")
 	controller.free()
+
+func _validate_all_hero_intervals(failures: Array[String]) -> void:
+	var actors: Dictionary = {}
+	for path in ["res://data/actors.json", "res://data/v08_content.json", "res://data/v09_wow_content.json", "res://data/v09_jinyong_content.json", "res://data/v10_qin_content.json", "res://data/v10_naruto_content.json", "res://data/v11_huangyi_content.json", "res://data/v12_fengyun_content.json"]:
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if typeof(parsed) == TYPE_DICTIONARY: actors.merge(parsed.get("actors", parsed), true)
+	var hero_ids: Array = []
+	# InventoryManager and ProgressionManager intentionally share this canonical
+	# list. Reading it here guarantees every currently recruitable hero is audited.
+	hero_ids.assign(ProgressionManagerScript.ALL_HERO_IDS)
+	if hero_ids.size() != 92: failures.append("可招募英雄清单不是92名：%d" % hero_ids.size())
+	for actor_id in hero_ids:
+		if not actors.has(actor_id): failures.append("缺少英雄配置：" + str(actor_id)); continue
+		var interval := float(actors[actor_id].get("attack_interval", -1.0))
+		if interval < 0.95 or interval > 1.05: failures.append("英雄基础攻击间隔越界：%s=%.2f" % [actor_id, interval])
+	# Representative enemies remain deliberately outside the hero-only band.
+	if not is_equal_approx(float(actors.stage_guardian_tk.attack_interval), 1.15): failures.append("普通怪基础攻击间隔被误改")
+	if not is_equal_approx(float(actors.wow_boss_hogger.attack_interval), 0.86): failures.append("Boss基础攻击间隔被误改")
+	if not is_equal_approx(float(actors.fy_boss_di_shitian.attack_interval), 0.62): failures.append("后期Boss基础攻击间隔被误改")
 
 func _validate_content(content: Dictionary, failures: Array[String]) -> void:
 	var passive: Dictionary = content.passives.immovable_mountain
