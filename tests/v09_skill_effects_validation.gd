@@ -25,6 +25,7 @@ func _initialize() -> void:
 	battle.is_paused = true
 	_validate_212_catalog()
 	_validate_all_exclusive_actives()
+	_validate_zhou_yu_auto_cast_range()
 	_validate_all_general_actives()
 	_validate_targeted_mechanics()
 	battle.clear_combatants()
@@ -80,6 +81,27 @@ func _validate_all_exclusive_actives() -> void:
 		var fixture := _combat_fixture(actor_id)
 		var hero = fixture.hero
 		if not hero.try_use_skill(): failures.append("专属主动无法在合法条件释放：%s/%s" % [actor_id, hero.actor_data.skill])
+
+func _validate_zhou_yu_auto_cast_range() -> void:
+	# Regression: ranged heroes keep their distance, but must still be permitted
+	# to use an exclusive active inside its effective (scaled) casting range.
+	var fixture := _combat_fixture("zhou_yu")
+	var hero = fixture.hero
+	var enemy = fixture.enemy
+	battle.progression.active_strategy = "稳健"
+	battle.progression.skill_priorities["zhou_yu"] = ["exclusive", "general"]
+	enemy.position = hero.position + Vector2(320.0, 0.0)
+	enemy.hp = enemy.max_hp
+	hero.target = enemy
+	hero.skill_timer = 0.0
+	if not battle.strategy_allows(hero):
+		failures.append("周瑜稳健策略误拒绝实际施法距离内的单个敌人")
+	elif not hero.try_auto_skills():
+		failures.append("周瑜在远程有效距离内未自动施放赤壁烈焰")
+	elif enemy.burn_time <= 0.0:
+		failures.append("周瑜赤壁烈焰自动施放后未造成燃烧")
+	elif hero.skill_timer <= 0.0:
+		failures.append("周瑜赤壁烈焰自动施放后未进入冷却")
 
 func _validate_all_general_actives() -> void:
 	for skill_id in battle.general_skills_config:
