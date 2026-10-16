@@ -1077,9 +1077,11 @@ func strategy_allows(unit) -> bool:
 	if unit.skill_data.get("type", "") == "self_heal":
 		return self_ratio <= float(preset.get("self_hp", 0.45))
 	if unit.skill_data.get("type", "") == "heal_aura":
-		var ally = lowest_health_ally(unit)
+		var ally = lowest_health_ally(unit, unit.effective_cast_range(float(unit.skill_data.get("range", 240.0))))
 		return ally != null and ally.hp / ally.max_hp <= float(preset.get("ally_hp", 0.65))
-	return enemies_near(unit.position, unit.faction, float(unit.skill_data.get("range", 180)), 99).size() >= int(preset.get("enemy_count", 1))
+	if not unit.exclusive_skill_requires_enemy_target():
+		return true
+	return enemies_near(unit.position, unit.faction, unit.effective_cast_range(float(unit.skill_data.get("range", 180.0))), 99).size() >= int(preset.get("enemy_count", 1))
 
 func on_damage(source, target, amount: float, context: Dictionary) -> void:
 	var source_id := stats_actor_id(source) if is_instance_valid(source) else str(context.get("source_actor_id", ""))

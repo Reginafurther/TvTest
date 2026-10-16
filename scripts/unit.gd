@@ -9,6 +9,8 @@ const ACTIVE_HEAL_MULTIPLIER := 1.50
 const HEALER_FOLLOW_RANGE_RATIO := 0.75
 const HEALER_FOLLOW_TOLERANCE := 24.0
 const PLAYER_RANGED_RANGE_MULTIPLIER := 2.0
+const ACTIVE_SKILL_CAST_RANGE := 420.0
+const REMOTE_GENERAL_MIN_CONFIGURED_RANGE := 180.0
 const RANGED_INNER_RANGE_RATIO := 0.70
 const RANGED_OUTER_RANGE_RATIO := 0.85
 
@@ -317,7 +319,7 @@ func _physics_process(delta: float) -> void:
 	var distance := position.distance_to(target.position)
 	if is_player_ranged():
 		var configured_safe := float(actor_data.get("minimum_safe_distance", float(actor_data.get("attack_range", 60.0)) * RANGED_INNER_RANGE_RATIO))
-		var minimum_safe := maxf(effective_cast_range(configured_safe), attack_range * RANGED_INNER_RANGE_RATIO)
+		var minimum_safe := maxf(resolved_ranged_spacing(configured_safe), attack_range * RANGED_INNER_RANGE_RATIO)
 		minimum_safe = maxf(minimum_safe, boss_aoe_safe_distance(target))
 		if distance <= attack_range:
 			if try_auto_skills(): return
@@ -402,7 +404,7 @@ func move_away_from_point(point: Vector2) -> void:
 func process_healer(delta: float) -> void:
 	var danger = battle.find_closest_enemy(self)
 	var configured_safe := float(actor_data.get("minimum_safe_distance", float(actor_data.get("attack_range", 60.0)) * RANGED_INNER_RANGE_RATIO))
-	var minimum_safe := maxf(effective_cast_range(configured_safe), attack_range * RANGED_INNER_RANGE_RATIO)
+	var minimum_safe := maxf(resolved_ranged_spacing(configured_safe), attack_range * RANGED_INNER_RANGE_RATIO)
 	minimum_safe = maxf(minimum_safe, boss_aoe_safe_distance(danger))
 	if is_instance_valid(danger) and position.distance_to(danger.position) < minimum_safe:
 		current_action = "retreat"
@@ -487,7 +489,51 @@ func resolved_attack_range() -> float:
 	return configured * PLAYER_RANGED_RANGE_MULTIPLIER if is_player_ranged() else configured
 
 func effective_cast_range(configured_range: float) -> float:
-	return configured_range * PLAYER_RANGED_RANGE_MULTIPLIER if is_player_ranged() else configured_range
+	# Active-skill targeting has one authoritative player range. It must not use
+	# the normal-attack multiplier, otherwise a configured 420 becomes 840.
+	return ACTIVE_SKILL_CAST_RANGE if faction == "heroes" and not bool(actor_data.get("summoned", false)) else configured_range
+
+func resolved_ranged_spacing(configured_distance: float) -> float:
+	# Keep the existing ranged positioning rule independent from skill casting.
+	return configured_distance * PLAYER_RANGED_RANGE_MULTIPLIER if is_player_ranged() else configured_distance
+
+func exclusive_skill_requires_ally_target() -> bool:
+	return str(skill_data.get("type", "")) in ["heal_aura", "ally_guard", "emergency_heal"]
+
+func exclusive_skill_requires_enemy_target() -> bool:
+	return str(skill_data.get("type", "")) not in [
+		"self_heal", "heal_aura", "ally_guard", "emergency_heal", "team_haste",
+		"blood_bargain", "team_hot", "hero_summon"
+	]
+
+func exclusive_skill_uses_remote_delivery() -> bool:
+	var kind := str(skill_data.get("type", ""))
+	return is_player_ranged() or kind in [
+		"chain", "poison", "area_control", "piercing_shot", "charm_control",
+		"leech_vine", "armor_break_shot", "nightmare", "mirror_safe"
+	]
+
+func exclusive_execution_range(configured_range: float) -> float:
+	return effective_cast_range(configured_range) if exclusive_skill_uses_remote_delivery() else configured_range
+
+func general_skill_requires_target(data: Dictionary) -> bool:
+	return str(data.get("effect", "")) in [
+		"damage", "stun", "low_hp_damage", "leech_damage", "self_cost_damage",
+		"multi_hit", "evasion_strike", "multi_hit_knockback", "multi_hit_armor_break",
+		"area_damage", "area_slow_damage", "area_knockback", "vulnerability_strike",
+		"chain", "armor_break", "burn", "poison", "shock", "area_shock", "freeze",
+		"heal", "hot", "cleanse", "damage_share"
+	]
+
+func general_skill_is_remote(data: Dictionary) -> bool:
+	if not general_skill_requires_target(data): return false
+	var effect := str(data.get("effect", ""))
+	if effect in ["heal", "hot", "cleanse", "damage_share"]: return true
+	return float(data.get("range", 0.0)) >= REMOTE_GENERAL_MIN_CONFIGURED_RANGE
+
+func general_active_cast_range(data: Dictionary) -> float:
+	var configured := float(data.get("range", maxf(float(actor_data.get("attack_range", 60.0)), 180.0)))
+	return effective_cast_range(configured) if general_skill_is_remote(data) else configured
 
 func boss_aoe_safe_distance(enemy) -> float:
 	if not is_instance_valid(enemy) or not enemy.actor_data.has("boss_id"):
@@ -591,7 +637,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 	if data.is_empty(): return false
 	var level: int = battle.progression.general_skill_level(actor_id, skill_id)
 	var power: float = float(data.get("power", 1.0)) * (1.0 + float(data.get("power_per_level", 0.0)) * (level - 1))
-	var cast_range := effective_cast_range(float(data.get("range", maxf(float(actor_data.get("attack_range", 60.0)), 180.0))))
+	var cast_range := general_active_cast_range(data)
 	var enemy = battle.find_closest_enemy(self)
 	var ally = battle.lowest_health_ally(self, cast_range)
 	var used := false
@@ -815,7 +861,7 @@ func try_use_skill() -> bool:
 	var power := active_skill_power()
 	match kind:
 		"heal_aura":
-			var ally = battle.lowest_health_ally(self)
+			var ally = battle.lowest_health_ally(self, effective_cast_range(float(skill_data.get("range", 240.0))))
 			if ally != null and ally.hp < ally.max_hp * 0.88:
 				var healing_bonus := (passive_value() if passive_data.get("effect", "") == "healing" else 0.0) + passive_effect_total("healing")
 				ally.heal(active_heal_amount(attack * power * (1.0 + healing_bonus)), self, true, {"source_snapshot":combat_source_snapshot(self, "none", str(actor_data.get("skill", "")))})
@@ -835,7 +881,7 @@ func try_use_skill() -> bool:
 				battle.on_skill(self)
 				return true
 		"chain":
-			if is_instance_valid(target) and position.distance_to(target.position) <= effective_cast_range(float(skill_data.get("range", 220))):
+			if is_instance_valid(target) and position.distance_to(target.position) <= exclusive_execution_range(float(skill_data.get("range", 220))):
 				var victims: Array = battle.enemies_near(target.position, faction, 145.0, 3)
 				for i in range(victims.size()):
 					var victim = victims[i]
@@ -846,7 +892,7 @@ func try_use_skill() -> bool:
 				battle.on_skill(self)
 				return true
 		"damage":
-			if is_instance_valid(target) and position.distance_to(target.position) <= effective_cast_range(float(skill_data.get("range", float(actor_data.get("attack_range", 60.0))))):
+			if is_instance_valid(target) and position.distance_to(target.position) <= exclusive_execution_range(float(skill_data.get("range", float(actor_data.get("attack_range", 60.0))))):
 				var damage := attack * power
 				if str(actor_data.get("skill", "")) == "spear_flurry":
 					var advance := maxf(0.0, minf(68.0, position.distance_to(target.position) - 28.0))
@@ -861,7 +907,7 @@ func try_use_skill() -> bool:
 				battle.on_skill(self)
 				return true
 		"poison":
-			if is_instance_valid(target) and position.distance_to(target.position) <= effective_cast_range(float(skill_data.get("range", 210))):
+			if is_instance_valid(target) and position.distance_to(target.position) <= exclusive_execution_range(float(skill_data.get("range", 210))):
 				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				var poison_bonus := passive_value() if passive_data.get("effect", "") == "poison_master" else 0.0
 				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
@@ -872,7 +918,7 @@ func try_use_skill() -> bool:
 				return true
 		"area_damage", "boss_area":
 			var area_center: Vector2 = target.position if str(actor_data.get("skill", "")) == "psycho_burst" and is_instance_valid(target) else position
-			if str(actor_data.get("skill", "")) == "psycho_burst" and (not is_instance_valid(target) or position.distance_to(target.position) > effective_cast_range(float(skill_data.get("range", 170)))): return false
+			if str(actor_data.get("skill", "")) == "psycho_burst" and (not is_instance_valid(target) or position.distance_to(target.position) > exclusive_execution_range(float(skill_data.get("range", 170)))): return false
 			var victims: Array = battle.enemies_near(area_center, faction, 125.0 if str(actor_data.get("skill", "")) == "psycho_burst" else float(skill_data.get("range", 170)), 12)
 			if not victims.is_empty():
 				for victim in victims:
@@ -897,7 +943,7 @@ func try_use_skill() -> bool:
 				combat_event.emit("%s 施放【%s】" % [_name(), _skill_name()])
 				return true
 		"area_control":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 245.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 245.0)))):
 				var victims: Array = battle.enemies_near(target.position, faction, 135.0, 8)
 				var control_multiplier := 1.0 + (float(passive_data.get("control_bonus", 0.0)) if passive_skill_id == "fy_holy_sword_intent" else 0.0)
 				for victim in victims:
@@ -926,7 +972,7 @@ func try_use_skill() -> bool:
 			battle.on_skill(self)
 			return true
 		"execute_cone":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 125.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 125.0)))):
 				var victims: Array = battle.enemies_near(target.position, faction, 95.0, 5)
 				for victim in victims:
 					var damage := attack * power
@@ -941,13 +987,13 @@ func try_use_skill() -> bool:
 						if not battle.point_blocked(pushed): victim.position = pushed
 				skill_timer = cooldown; battle.on_skill(self); combat_event.emit("%s 施放【%s】，破甲斩击%d个目标" % [_name(), _skill_name(), victims.size()]); return true
 		"piercing_shot":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 285.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 285.0)))):
 				var ignore := float(skill_data.get("armor_ignore", 0.4)) + (passive_value() if passive_data.get("effect", "") == "armor_ignore" else 0.0)
 				if passive_data.get("effect", "") == "armor_ignore": battle.note_passive(actor_id, passive_skill_id)
 				target.take_damage(attack * power + target.defense * 0.55 * ignore, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"bypass_evasion":true})
 				battle.spawn_tracer(position, target.position, _skill_color()); skill_timer = cooldown; battle.on_skill(self); return true
 		"charm_control":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 230.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 230.0)))):
 				target.take_damage(attack * 0.55, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				target.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.16)) * armor_break_multiplier()), 5.0)
 				target.apply_hard_control(float(skill_data.get("duration", 2.2)))
@@ -956,7 +1002,7 @@ func try_use_skill() -> bool:
 				if passive_data.get("effect", "") == "control_haste": battle.note_passive(actor_id, passive_skill_id)
 				skill_timer = cooldown; battle.on_skill(self); combat_event.emit("%s 施放【%s】，魅惑并暴露破绽" % [_name(), _skill_name()]); return true
 		"burn_area":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 210.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 210.0)))):
 				var victims: Array = battle.enemies_near(target.position, faction, 125.0, 8)
 				var mastery := 1.0
 				if passive_data.get("effect", "") == "burn_master": battle.note_passive(actor_id, passive_skill_id)
@@ -974,7 +1020,7 @@ func try_use_skill() -> bool:
 						victim.apply_burn(attack * float(skill_data.get("dot_power", 0.24)) * mastery, burn_duration, self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				skill_timer = cooldown; battle.on_skill(self); combat_event.emit("%s 施放【%s】，点燃%d个目标" % [_name(), _skill_name(), victims.size()]); return true
 		"leech_vine":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 195.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 195.0)))):
 				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				target.apply_poison(attack * power * 0.34, float(skill_data.get("duration", 6.0)), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				var wounded = battle.lowest_health_ally(self, 9999.0)
@@ -988,14 +1034,14 @@ func try_use_skill() -> bool:
 			if protected != null and protected != self: protected.add_shield(protected.max_hp * shield_power * 0.55, float(skill_data.get("duration", 4.5)), self, str(actor_data.get("skill", "")))
 			skill_timer = cooldown; battle.on_skill(self); return true
 		"armor_break_shot":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 220.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 220.0)))):
 				var ignore := passive_value() if passive_data.get("effect", "") == "armor_ignore" else 0.0
 				if passive_data.get("effect", "") == "armor_ignore": battle.note_passive(actor_id, passive_skill_id)
 				target.take_damage(attack * power + target.defense * 0.55 * ignore, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"bypass_evasion":str(actor_data.get("skill", "")) == "aura_sphere"})
 				target.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.25)) * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"ally_guard":
-			var ally = battle.lowest_health_ally(self, 9999.0)
+			var ally = battle.lowest_health_ally(self, effective_cast_range(float(skill_data.get("range", 260.0))))
 			if ally != null:
 				var bonus := shield_power_multiplier()
 				if passive_data.get("effect", "") == "shield_healing": battle.note_passive(actor_id, passive_skill_id)
@@ -1004,20 +1050,20 @@ func try_use_skill() -> bool:
 				if ally != self: add_shield(max_hp * power * 0.45 * bonus, float(skill_data.get("duration", 6.0)), self, str(actor_data.get("skill", "")))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"dive_guard":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 150.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 150.0)))):
 				position = position.move_toward(target.position, minf(80.0, position.distance_to(target.position) - 28.0))
 				for victim in battle.enemies_near(position, faction, 105.0, 6): victim.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				apply_damage_reduction(0.22, float(skill_data.get("duration", 4.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"multi_hit_slow":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 190.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 190.0)))):
 				var multi_bonus := 1.0 + passive_effect_total("multi_hit_bonus")
 				for _hit in range(int(skill_data.get("hits", 4))): target.take_damage(attack * power * multi_bonus, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
 				target.apply_slow(float(skill_data.get("slow", 0.25)), float(skill_data.get("duration", 4.0)))
 				if skill_data.has("attack_weaken"): target.apply_attack_weaken(float(skill_data.attack_weaken), float(skill_data.get("duration", 4.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"multi_hit":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", float(actor_data.get("attack_range", 60.0)))))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", float(actor_data.get("attack_range", 60.0)))))):
 				var hit_count := int(skill_data.get("hits", 3))
 				var multi_bonus := 1.0 + passive_effect_total("multi_hit_bonus")
 				if str(actor_data.get("skill", "")) == "iron_hook":
@@ -1037,7 +1083,7 @@ func try_use_skill() -> bool:
 						target.take_damage(attack * hit_power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":true})
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"emergency_heal":
-			var wounded = battle.lowest_health_ally(self, 9999.0)
+			var wounded = battle.lowest_health_ally(self, effective_cast_range(float(skill_data.get("range", 260.0))))
 			var target_key := str(wounded.actor_id) if is_instance_valid(wounded) else ""
 			var now := float(battle.elapsed)
 			if wounded != null and wounded.hp / maxf(1.0, wounded.max_hp) <= float(skill_data.get("threshold", 0.42)) and not rescue_used_targets.has(target_key) and now >= rescue_ready_at:
@@ -1052,7 +1098,7 @@ func try_use_skill() -> bool:
 				for member in allied_units(4): member.reduce_current_cooldowns(power); member.haste_power = power; member.haste_time = float(skill_data.get("duration", 6.0))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"capped_execute_area":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 245.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 245.0)))):
 				for victim in battle.enemies_near(target.position, faction, 145.0, 8):
 					var damage := attack * power
 					if victim.hp / maxf(1.0, victim.max_hp) <= 0.35: damage *= 1.0 + float(skill_data.get("execute_bonus", 0.45))
@@ -1067,13 +1113,13 @@ func try_use_skill() -> bool:
 					if actor_id == "qiao_feng": victim.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
 				add_shield(max_hp * power * shield_power_multiplier()); skill_timer = cooldown; battle.on_skill(self); return true
 		"nightmare":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 245.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 245.0)))):
 				var status_bonus := 1.0 + (passive_value() if passive_data.get("effect", "") == "status_amplifier" else 0.0)
 				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true}); target.apply_hard_control(float(skill_data.get("duration", 5.0)) * 0.35 * status_bonus); target.apply_slow(minf(0.65, 0.3 * status_bonus), minf(8.0, float(skill_data.get("duration", 5.0)) * status_bonus))
 				if skill_data.has("attack_weaken"): target.apply_attack_weaken(float(skill_data.attack_weaken), float(skill_data.get("duration", 5.0)))
 				skill_timer = cooldown; battle.on_skill(self); return true
 		"mirror_safe":
-			if valid_enemy_in_range(target, effective_cast_range(float(skill_data.get("range", 250.0)))):
+			if valid_enemy_in_range(target, exclusive_execution_range(float(skill_data.get("range", 250.0)))):
 				var mirror_power := power
 				var mirror_type := "physical"
 				var whitelist := ["damage", "area_damage", "piercing_shot", "armor_break_shot", "multi_hit", "multi_hit_slow", "execute_cone", "capped_execute_area"]
