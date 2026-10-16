@@ -350,10 +350,6 @@ func show_item(item: Dictionary) -> void:
 	if typeof(world_affix) == TYPE_DICTIONARY and not world_affix.is_empty():
 		text += "\n[b][color=#FF5964]世界专属词条[/color][/b]\n"
 		text += "%s\n" % str(world_affix.get("name", "%s  %s" % [stat_name(str(world_affix.get("stat", ""))), format_value(str(world_affix.get("stat", "")), float(world_affix.get("value", 0.0)))]))
-	if not item.get("special_effects", []).is_empty():
-		text += "\n[b][color=#FFB65B]特殊机制[/color][/b]\n"
-		for effect_id in item.special_effects:
-			text += "%s\n" % battle.special_config.effects.get(effect_id, {"name": effect_id}).name
 	text += "\n[color=#718895]实例ID：%s[/color]" % item.instance_id
 	detail.text = text
 	show_comparison(item)

@@ -55,13 +55,11 @@ var facing := 1.0
 var rally_target := Vector2.ZERO
 var has_rally := false
 var rally_timeout := 0.0
-var special_effects: Array = []
 var shield := 0.0
 var shield_time := 0.0
 var poison_damage := 0.0
 var poison_time := 0.0
 var poison_tick := 0.0
-var poison_depth := 0
 var poison_stack_count := 0
 var poison_source
 var poison_source_snapshot: Dictionary = {}
@@ -143,7 +141,7 @@ func valid_combat_source(source):
 func combat_source_snapshot(source, fallback_damage_type: String = "none", source_skill_id: String = "") -> Dictionary:
 	var snapshot := {
 		"actor_id":"", "name":"环境效果", "faction":"", "damage_type":fallback_damage_type,
-		"physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0, "special_effects":[],
+		"physical_damage":0.0, "elemental_damage":0.0, "final_damage":0.0,
 		"source_unit_id":"", "skill_id":source_skill_id
 	}
 	if not is_instance_valid(source):
@@ -160,7 +158,6 @@ func combat_source_snapshot(source, fallback_damage_type: String = "none", sourc
 	snapshot.final_damage = float(source.final_damage) - (float(source.attack_weaken_power) if float(source.attack_weaken_time) > 0.0 else 0.0)
 	if source.faction == "heroes" and is_instance_valid(source.battle) and source.battle.has_method("party_passive_value"):
 		snapshot.elemental_damage += minf(0.30, source.battle.party_passive_value("team_elemental_control"))
-	snapshot.special_effects = source.special_effects.duplicate()
 	if snapshot.skill_id.is_empty() and bool(source.is_summon): snapshot.skill_id = "summon:" + str(source.actor_id)
 	return snapshot
 
@@ -529,10 +526,10 @@ func basic_attack() -> void:
 		amount *= 1.0 + general_passive_by_id("jy_jade_maiden")
 	target.take_damage(amount, self, critical, {"kind": "basic", "damage_type": str(actor_data.get("basic_damage_type", "physical")), "critical": critical, "allow_triggers": true})
 	match str(actor_data.get("boss_mechanic", "")):
-		"venom_strike": target.apply_poison(attack * 0.12, 4.0, self, 0)
+		"venom_strike": target.apply_poison(attack * 0.12, 4.0, self)
 		"shock_strike": target.apply_shock(2.2)
 		"regeneration": heal(amount * 0.16, self, false)
-	if "venom" in rift_affixes: target.apply_poison(attack * 0.10, 4.0, self, 0)
+	if "venom" in rift_affixes: target.apply_poison(attack * 0.10, 4.0, self)
 	trigger_general_on_hit(target)
 	basic_attack_count = next_basic_count
 	if passive_data.get("effect", "") == "combo" and basic_attack_count % 3 == 0 and is_instance_valid(target) and not target.dead:
@@ -675,7 +672,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 					else:
 						if skill_id == "pk_toxic": status_target.poison_stack_count = mini(3, status_target.poison_stack_count + 1)
 						var stack_power: float = 1.0 + 0.25 * maxf(0.0, status_target.poison_stack_count - 1) if skill_id == "pk_toxic" else 1.0
-						status_target.apply_poison(attack * float(data.get("dot_power", 0.18)) * mastery * stack_power, float(data.get("duration", 6.0)) * mastery, self, 0, combat_source_snapshot(self, "elemental", skill_id))
+						status_target.apply_poison(attack * float(data.get("dot_power", 0.18)) * mastery * stack_power, float(data.get("duration", 6.0)) * mastery, self, combat_source_snapshot(self, "elemental", skill_id))
 				used = true
 		"shock":
 			if valid_enemy_in_range(enemy, cast_range):
@@ -835,7 +832,7 @@ func try_use_skill() -> bool:
 			if is_instance_valid(target) and position.distance_to(target.position) <= float(skill_data.get("range", 210)):
 				target.take_damage(attack * 0.65, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
 				var poison_bonus := passive_value() if passive_data.get("effect", "") == "poison_master" else 0.0
-				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, 0, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
+				target.apply_poison(attack * power * (1.0 + poison_bonus), float(skill_data.get("duration", 6.0)) * (1.0 + poison_bonus * 0.5), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				if poison_bonus > 0.0: battle.note_passive(actor_id, passive_skill_id)
 				skill_timer = cooldown
 				battle.on_skill(self)
@@ -947,7 +944,7 @@ func try_use_skill() -> bool:
 		"leech_vine":
 			if valid_enemy_in_range(target, float(skill_data.get("range", 195.0))):
 				target.take_damage(attack * power, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true})
-				target.apply_poison(attack * power * 0.34, float(skill_data.get("duration", 6.0)), self, 0, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
+				target.apply_poison(attack * power * 0.34, float(skill_data.get("duration", 6.0)), self, combat_source_snapshot(self, "elemental", str(actor_data.get("skill", ""))))
 				var wounded = battle.lowest_health_ally(self, 9999.0)
 				if wounded != null: wounded.apply_hot(active_heal_amount(attack * power * 1.4), float(skill_data.get("duration", 6.0)), self)
 				skill_timer = cooldown; battle.on_skill(self); return true
@@ -1168,8 +1165,6 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		amount -= absorbed
 		result.shield_absorbed = absorbed
 		show_number("护盾吸收 %d" % roundi(absorbed), Color("#80C8FF"))
-		if shield <= 0.0 and absorbed > 0.0 and has_special("shield_burst"):
-			trigger_shield_burst()
 	if amount <= 0:
 		result.reason = "shield_absorbed"
 		battle.record_damage_resolution(live_source, self, result, safe_context)
@@ -1204,8 +1199,6 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		dead = true
 		velocity = Vector2.ZERO
 		combat_event.emit("%s 被 %s 击败" % [_name(), str(source_snapshot.get("name", "环境效果"))])
-		if poison_time > 0.0 and ("poison_spread" in source_snapshot.get("special_effects", [])):
-			battle.propagate_poison(self)
 		died.emit(self)
 		var tween := create_tween()
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
@@ -1275,12 +1268,6 @@ func set_rally(point: Vector2) -> void:
 	rally_timeout = 3.0
 	nav_path.clear()
 
-func set_special_effects(effects: Array) -> void:
-	special_effects = effects.duplicate()
-
-func has_special(id: String) -> bool:
-	return id in special_effects
-
 func add_shield(amount: float, duration: float = 6.0) -> void:
 	if not is_finite(amount) or amount <= 0.0:
 		return
@@ -1289,13 +1276,12 @@ func add_shield(amount: float, duration: float = 6.0) -> void:
 	show_number("◆ 护盾", Color("#80C8FF"))
 	queue_redraw()
 
-func apply_poison(damage_per_second: float, duration: float, source, depth: int, source_snapshot: Dictionary = {}) -> void:
+func apply_poison(damage_per_second: float, duration: float, source, source_snapshot: Dictionary = {}) -> void:
 	poison_damage = maxf(poison_damage, damage_per_second)
 	poison_time = maxf(poison_time, duration)
 	poison_source = valid_combat_source(source)
 	var inferred_skill := str(source.actor_data.get("skill", "")) if is_instance_valid(source) else ""
 	poison_source_snapshot = source_snapshot.duplicate(true) if not source_snapshot.is_empty() else combat_source_snapshot(source, "elemental", inferred_skill)
-	poison_depth = depth
 	show_number("☠ 中毒", Color("#C58DFF"))
 	queue_redraw()
 
@@ -1471,12 +1457,6 @@ func apply_hard_control(duration: float) -> float:
 	skill_timer += applied
 	return applied
 
-func trigger_shield_burst() -> void:
-	var effect: Dictionary = battle.special_config.effects.shield_burst
-	battle.note_effect("shield_burst")
-	for victim in battle.enemies_near(position, faction, float(effect.range), int(effect.max_targets)):
-		victim.take_damage(attack * float(effect.power), self, false, {"kind": "effect", "allow_triggers": false})
-
 func apply_equipment_stats(stats: Dictionary, rules: Dictionary) -> void:
 	var hp_ratio := hp / maxf(1.0, max_hp)
 	equipment_rules = rules
@@ -1629,7 +1609,7 @@ func trigger_general_on_hit(victim) -> void:
 		if randf() > chance: continue
 		match str(row.data.get("status", "")):
 			"shock": victim.apply_shock(2.5)
-			"poison": victim.apply_poison(attack * 0.12, 4.0, self, 0)
+			"poison": victim.apply_poison(attack * 0.12, 4.0, self)
 			"burn": victim.apply_burn(attack * 0.12, 4.0, self)
 
 func on_kill_trigger() -> void:

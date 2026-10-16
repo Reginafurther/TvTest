@@ -74,7 +74,12 @@ func rift_profile(world_id: String, floor: int) -> Dictionary:
 	return {"name":"%s · 第%d层" % [world.boss_name, floor], "health":float(base.get("health", 5200)) * health_scale * float(modifier.get("health", 1.0)), "attack":float(base.get("attack", 90)) * attack_scale * float(modifier.get("attack", 1.0)), "defense":float(base.get("defense", 38)) * defense_scale * float(modifier.get("defense", 1.0)), "affixes":rift_affix_ids(floor, world_id), "actor":world.boss_actor}
 
 func start_rift(world_id: String, floor: int) -> bool:
-	if not active_rift.is_empty(): return false
+	if not active_rift.is_empty():
+		# A map/party transition in an older session could remove the rift boss
+		# while leaving this manager context behind. Reject a genuinely active
+		# fight, but recover an orphaned context without requiring a restart.
+		if battle.rift_combat_running(): return false
+		battle.clear_rift_session(true)
 	if not can_challenge_rift(world_id, floor): return false
 	var state: Dictionary = battle.progression.rift_progress.get(world_id, {})
 	if bool(state.get("repeat_floor", false)) and floor > int(state.get("highest_clear", 0)): return false
@@ -131,9 +136,6 @@ func resolve_rift_victory() -> Dictionary:
 	item["rift_floor"] = floor
 	item["rift_world"] = world_id
 	item["auto_process_protected"] = first or bool(item.get("world_legendary", false))
-	if floor >= 5 and item.get("special_effects", []).is_empty():
-		var special_ids: Array = battle.special_config.get("effects", {}).keys()
-		if not special_ids.is_empty(): item.special_effects = [special_ids[floor % special_ids.size()]]
 	var auto_result: Dictionary = battle.auto_process_new_equipment(item, not first)
 	if not auto_result.is_empty() or battle.inventory.add_item(item):
 		battle.combat_stats.resources.equipment += 1

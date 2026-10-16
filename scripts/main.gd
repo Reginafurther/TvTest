@@ -663,29 +663,8 @@ func finish_v03_test() -> void:
 	var pending: Dictionary = battle.crafting.begin_reroll(same_id, 0)
 	if pending.is_empty() or not battle.crafting.resolve_reroll(true) or reroll_item.instance_id != same_id or p.materials.salvage_dust >= dust_before:
 		failures.append("重铸材料或实例安全失败")
-	# Equip four special mechanisms and fire controlled real combat events.
-	var hero = battle.heroes[0]
-	var slots := ["main_hand", "off_hand", "helmet", "armor"]
-	var effects := ["crit_lightning", "thorn_reflect", "poison_spread", "shield_burst"]
-	for i in range(4):
-		var item: Dictionary = battle.equipment_generator.generate(10, "特效测试", "orange", slots[i])
-		item.special_effects = [effects[i]]
-		battle.inventory.add_item(item, false)
-		battle.inventory.equip_item(hero.actor_id, item.instance_id, slots[i])
-	hero = battle.get_hero(hero.actor_id)
-	var enemy = battle.enemies[0]
-	battle.special_config.effects.crit_lightning.chance = 1.0
-	battle.on_damage(hero, enemy, 10.0, {"kind": "basic", "critical": true, "allow_triggers": true})
-	hero.add_shield(1.0)
-	hero.take_damage(300.0, enemy, false, {"kind": "basic", "allow_triggers": true})
-	var poisoned = battle.enemies[1] if battle.enemies.size() > 1 else enemy
-	poisoned.apply_poison(5.0, 5.0, hero, 0)
-	poisoned.take_damage(99999.0, hero, false, {"kind": "skill", "allow_triggers": true})
-	for effect in effects:
-		if int(battle.trigger_counts[effect]) <= 0: failures.append("特殊词条未触发：" + effect)
-	if int(battle.trigger_counts.thorn_reflect) > 2 or int(battle.trigger_counts.poison_spread) > 1:
-		failures.append("特殊词条出现递归连锁")
 	# Strategy conditions alter the actual skill gate.
+	var hero = battle.heroes[0]
 	var preset: Dictionary = p.strategy_presets[p.active_strategy]
 	preset.enemy_count = 99
 	if battle.strategy_allows(hero): failures.append("技能敌人数阈值未生效")
@@ -706,7 +685,7 @@ func finish_v03_test() -> void:
 	if not battle.inventory.all_ids_unique() or not p.save_to_disk() or not battle.inventory.save_to_disk():
 		failures.append("保存或实例唯一性失败")
 	if failures.is_empty():
-		print("V03_TEST_PASS worlds=2 roster=%d party=4 specials=4 bosses=2 stats=true crafting=true save=true" % p.roster.size())
+		print("V03_TEST_PASS worlds=2 roster=%d party=4 equipment_effects_removed=true bosses=2 stats=true crafting=true save=true" % p.roster.size())
 	else:
 		for failure in failures: push_error("V03_TEST_FAIL: " + failure)
 	Engine.time_scale = 1.0
@@ -1645,7 +1624,7 @@ func finish_v061_skill_test() -> void:
 		var enemy = battle.spawn_unit("yellow_turban", "enemies", Vector2(270, 220))
 		enemy.max_hp = 100000.0; enemy.hp = enemy.max_hp
 		ally.hp = ally.max_hp * 0.42
-		ally.apply_poison(2.0, 8.0, enemy, 0)
+		ally.apply_poison(2.0, 8.0, enemy)
 		caster.skill_timer = 10.0; ally.skill_timer = 10.0
 		if caster.try_use_general_skill(skill_id): executed_actives += 1
 		else: failures.append("主动技能未在满足条件时生效：" + skill_id)
@@ -2067,7 +2046,7 @@ func finish_v061_long_combat_test() -> void:
 		if step % 8 == 0:
 			battle.heroes[1].try_use_general_skill("tk_triple_slash")
 		if step % 10 == 0:
-			durable.apply_poison(3.0, 4.0, battle.heroes[1], 0)
+			durable.apply_poison(3.0, 4.0, battle.heroes[1])
 			durable.apply_burn(3.0, 4.0, battle.heroes[2])
 			durable.take_damage(durable.poison_damage, durable.poison_source, false, {"kind":"effect", "skill_id":"stress_poison", "allow_triggers":false})
 			durable.take_damage(durable.burn_damage, durable.burn_source, false, {"kind":"effect", "skill_id":"stress_burn", "allow_triggers":false})

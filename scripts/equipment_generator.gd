@@ -3,14 +3,12 @@ extends RefCounted
 
 var config: Dictionary
 var loot_config: Dictionary
-var special_config: Dictionary
 var rng := RandomNumberGenerator.new()
 var sequence := 0
 
-func _init(equipment_config: Dictionary, loot_tables: Dictionary, seed_value: int = 0, specials: Dictionary = {}) -> void:
+func _init(equipment_config: Dictionary, loot_tables: Dictionary, seed_value: int = 0) -> void:
 	config = equipment_config
 	loot_config = loot_tables
-	special_config = specials
 	if seed_value == 0:
 		rng.randomize()
 	else:
@@ -49,27 +47,9 @@ func generate(level: int, source: String, forced_quality: String = "", forced_sl
 		"quality_rank": int(quality.get("rank", 0)),
 		"base_stats": {base_stat: snappedf(base_value, 0.01)},
 		"affixes": affixes,
-		"source": source,
-		"special_effects": roll_specials(quality_id)
+		"source": source
 	}
 	return item
-
-func roll_specials(quality_id: String) -> Array:
-	if special_config.is_empty():
-		return []
-	var quality: Dictionary = config.get("qualities", {}).get(quality_id, {})
-	var generation: Dictionary = special_config.get("generation", {})
-	if int(quality.get("rank", 0)) < int(generation.get("min_quality_rank", 3)):
-		return []
-	# Red equipment follows the complete orange special-effect rule; its only
-	# additional power is the separately stored fixed world affix.
-	var chance := float(generation.get("orange_chance", 0.4)) if quality_id in ["orange", "red"] else float(generation.get("purple_chance", 0.18))
-	if rng.randf() > chance:
-		return []
-	var ids: Array = special_config.get("effects", {}).keys()
-	if ids.is_empty():
-		return []
-	return [ids[rng.randi_range(0, ids.size() - 1)]]
 
 func roll_quality(test_mode: bool) -> String:
 	var table: Dictionary = loot_config.get("grassland_crossing", {})

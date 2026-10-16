@@ -89,8 +89,7 @@ static func default_auto_equipment_settings() -> Dictionary:
 		"sell_max_quality": "white",
 		"dismantle_enabled": false,
 		"dismantle_max_quality": "white",
-		"priority": "dismantle",
-		"keep_special_effects": true
+		"priority": "dismantle"
 	}
 
 func set_auto_equipment_setting(key: String, value, autosave: bool = true) -> bool:
@@ -805,7 +804,7 @@ func apply_payload(parsed) -> bool:
 		for key in auto_equipment_settings:
 			if stored_auto_settings.has(key):
 				auto_equipment_settings[key] = stored_auto_settings[key]
-	for bool_key in ["sell_enabled", "dismantle_enabled", "keep_special_effects"]:
+	for bool_key in ["sell_enabled", "dismantle_enabled"]:
 		auto_equipment_settings[bool_key] = bool(auto_equipment_settings[bool_key])
 	for quality_key in ["sell_max_quality", "dismantle_max_quality"]:
 		if str(auto_equipment_settings[quality_key]) not in ["white", "green", "blue", "purple", "orange"]:

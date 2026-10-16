@@ -27,7 +27,6 @@ var skills: Dictionary
 var equipment_config: Dictionary
 var loot_config: Dictionary
 var worlds_config: Dictionary
-var special_config: Dictionary
 var shop_config: Dictionary
 var passives_config: Dictionary
 var general_skills_config: Dictionary
@@ -52,8 +51,6 @@ var obstacle_cells: Dictionary = {}
 var loot_test_mode := false
 var current_map_id := "hulao_pass"
 var active_boss_id := ""
-var effect_cooldowns: Dictionary = {}
-var trigger_counts := {"crit_lightning": 0, "thorn_reflect": 0, "poison_spread": 0, "shield_burst": 0}
 var passive_trigger_counts: Dictionary = {}
 var stage_cleared := false
 var stage_boss_active := false
@@ -83,7 +80,6 @@ func _ready() -> void:
 	equipment_config = DataLoaderScript.load_json("res://data/equipment.json")
 	loot_config = DataLoaderScript.load_json("res://data/loot_tables.json")
 	worlds_config = DataLoaderScript.load_json("res://data/worlds.json")
-	special_config = DataLoaderScript.load_json("res://data/special_effects.json")
 	shop_config = DataLoaderScript.load_json("res://data/shop.json")
 	passives_config = DataLoaderScript.load_json("res://data/passives.json")
 	general_skills_config = DataLoaderScript.load_json("res://data/general_skills.json")
@@ -123,7 +119,7 @@ func _ready() -> void:
 		var saved_stage := int(worlds_config.maps[progression.last_stage_id].get("global_stage", 1))
 		if progression.can_enter_stage(saved_stage):
 			current_map_id = progression.last_stage_id
-	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0, special_config)
+	equipment_generator = EquipmentGeneratorScript.new(equipment_config, loot_config, 20261012 if loot_test_mode else 0)
 	crafting = CraftingManagerScript.new()
 	crafting.setup(inventory, progression, equipment_config, equipment_generator)
 	shop = ShopManagerScript.new()
@@ -294,7 +290,6 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 		combat_stats.ensure_actor(id)
 		unit.home_position = pos
 		unit.apply_equipment_stats(inventory.get_actor_stats(id), equipment_config.get("rules", {}))
-		unit.set_special_effects(inventory.get_actor_specials(id))
 	else:
 		enemies.append(unit)
 	return unit
@@ -324,8 +319,6 @@ func _process(delta: float) -> void:
 	if ai_trace_timer >= 0.25:
 		ai_trace_timer = 0.0
 		record_ai_snapshot()
-	for key in effect_cooldowns.keys():
-		effect_cooldowns[key] = maxf(0.0, float(effect_cooldowns[key]) - delta)
 	if enemies.is_empty() and has_damage_dealer_in_party():
 		spawn_timer += delta
 		if spawn_timer >= 2.2:
@@ -535,13 +528,7 @@ func _on_unit_died(unit) -> void:
 		if heroes.is_empty():
 			if not active_rift_context.is_empty():
 				var failed_floor := int(active_rift_context.get("floor", 1))
-				var failed_world := str(active_rift_context.get("world", "three_kingdoms"))
-				progression.rift_progress[failed_world].auto_climb = false
-				progression.rift_progress[failed_world].repeat_floor = false
-				progression.rift_progress[failed_world].selected_floor = failed_floor
-				progression.save_to_disk()
-				adventure.active_rift.clear()
-				active_rift_context.clear()
+				clear_rift_session(true)
 				battle_state_changed.emit("秘境第%d层挑战失败，已暂停爬层并返回主线" % failed_floor)
 				call_deferred("return_from_special_combat", false)
 			else:
@@ -585,7 +572,6 @@ func _on_equipment_changed(actor_id: String) -> void:
 	for hero in heroes:
 		if is_instance_valid(hero) and hero.actor_id == actor_id:
 			hero.apply_equipment_stats(inventory.get_actor_stats(actor_id), equipment_config.get("rules", {}))
-			hero.set_special_effects(inventory.get_actor_specials(actor_id))
 			party_changed.emit(heroes)
 			return
 
@@ -624,8 +610,6 @@ func auto_process_new_equipment(item: Dictionary, eligible: bool = true) -> Dict
 	if shop.is_equipped(str(item.get("instance_id", ""))):
 		return {}
 	var settings: Dictionary = progression.auto_equipment_settings
-	if bool(settings.get("keep_special_effects", true)) and not item.get("special_effects", []).is_empty():
-		return {}
 	var rank := int(item.get("quality_rank", equipment_config.get("qualities", {}).get(item.get("quality", "white"), {}).get("rank", 0)))
 	var quality_ranks := {"white":0, "green":1, "blue":2, "purple":3, "orange":4}
 	var sell_match := bool(settings.get("sell_enabled", false)) and rank <= int(quality_ranks.get(str(settings.get("sell_max_quality", "white")), 0))
@@ -703,6 +687,7 @@ func switch_map(map_id: String) -> bool:
 		var world_name := str(worlds_config.maps[map_id].get("world", "未知世界"))
 		log_message.emit("%s尚未开放或关卡未解锁：请按主线顺序通关前一关。" % world_name)
 		return false
+	clear_rift_session(true)
 	clear_combatants()
 	current_map_id = map_id
 	progression.set_last_stage(map_id, stage)
@@ -725,6 +710,7 @@ func start_boss(boss_id: String) -> bool:
 	if not progression.is_stage_complete(int(boss_data.get("required_stage", 20))):
 		log_message.emit("传奇挑战尚未开放：请先完成对应世界主线。")
 		return false
+	clear_rift_session(true)
 	clear_combatants()
 	active_boss_id = boss_id
 	spawn_party()
@@ -747,8 +733,7 @@ func start_rift_combat(context: Dictionary, profile: Dictionary) -> void:
 	log_message.emit("进入%s；词缀：%s" % [profile.name, "、".join(affixes)])
 
 func return_from_special_combat(success: bool) -> void:
-	adventure.active_rift.clear()
-	active_rift_context.clear()
+	clear_rift_session(false)
 	clear_combatants()
 	wave = 1
 	stage_cleared = false
@@ -762,6 +747,26 @@ func continue_rift_auto(world_id: String, floor: int, mode: String = "climb") ->
 		return_from_special_combat(true)
 	else:
 		log_message.emit(("固定刷层：再次挑战第%d层。" if mode == "repeat" else "自动爬层：继续挑战第%d层。") % floor)
+
+func rift_combat_running() -> bool:
+	if active_rift_context.is_empty(): return false
+	for enemy in enemies:
+		if is_instance_valid(enemy) and not enemy.dead and enemy.actor_data.has("rift_floor"):
+			return true
+	return false
+
+func clear_rift_session(stop_automatic: bool = true) -> void:
+	var context: Dictionary = active_rift_context if not active_rift_context.is_empty() else adventure.active_rift if adventure != null else {}
+	if stop_automatic and not context.is_empty():
+		var world_id := str(context.get("world", ""))
+		if progression.rift_progress.has(world_id):
+			var state: Dictionary = progression.rift_progress[world_id]
+			state.auto_climb = false
+			state.repeat_floor = false
+			state.selected_floor = maxi(1, int(context.get("floor", state.get("selected_floor", 1))))
+			progression.save_to_disk()
+	if adventure != null: adventure.active_rift.clear()
+	active_rift_context.clear()
 
 func clear_combatants() -> void:
 	for unit in heroes + enemies:
@@ -778,6 +783,7 @@ func clear_combatants() -> void:
 	stage_transition_timer = -1.0
 
 func rebuild_party() -> void:
+	clear_rift_session(true)
 	clear_combatants()
 	active_boss_id = ""
 	wave = 1
@@ -922,13 +928,10 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		return
 	if is_instance_valid(source) and is_instance_valid(target) and str(context.get("kind", "")) == "skill":
 		source.trigger_general_on_hit(target)
-	if context.get("critical", false) and is_instance_valid(source) and source.has_special("crit_lightning"):
-		trigger_lightning(source, target)
-	if is_instance_valid(source) and (target.has_special("thorn_reflect") or (target.passive_skill_id == "low_hp_rage" and target.hp / target.max_hp < 0.5)):
-		trigger_counts.thorn_reflect += 1
-		var reflect_power: float = target.passive_value() if target.passive_data.get("effect", "") == "low_hp_rage" else float(special_config.effects.thorn_reflect.power)
-		if target.passive_data.get("effect", "") == "low_hp_rage": target.battle.note_passive(target.actor_id, target.passive_skill_id)
-		source.take_damage(amount * reflect_power, target, false, {"kind": "effect", "skill_id":"passive:" + str(target.passive_skill_id), "allow_triggers": false})
+	# Character passives remain intact; only equipment-triggered reflection was removed.
+	if is_instance_valid(source) and target.passive_skill_id == "low_hp_rage" and target.hp / target.max_hp < 0.5:
+		target.battle.note_passive(target.actor_id, target.passive_skill_id)
+		source.take_damage(amount * target.passive_value(), target, false, {"kind": "effect", "skill_id":"passive:" + str(target.passive_skill_id), "allow_triggers": false})
 
 func stats_damage_source_id(source, context: Dictionary) -> String:
 	var kind := str(context.get("kind", "skill"))
@@ -990,27 +993,6 @@ func stats_actor_id(unit) -> String:
 		return str(unit.get("summon_owner_id"))
 	return str(unit.actor_id)
 
-func trigger_lightning(source, primary) -> void:
-	var effect: Dictionary = special_config.effects.crit_lightning
-	var key: String = source.actor_id + ":crit_lightning"
-	if float(effect_cooldowns.get(key, 0)) > 0 or randf() > float(effect.chance):
-		return
-	effect_cooldowns[key] = float(effect.cooldown)
-	trigger_counts.crit_lightning += 1
-	primary.take_damage(source.attack * float(effect.power), source, false, {"kind": "effect", "skill_id":"crit_lightning", "allow_triggers": false})
-	spawn_tracer(source.position, primary.position, Color("#FFE65A"))
-
-func propagate_poison(dead_unit) -> void:
-	if dead_unit.poison_depth >= int(special_config.effects.poison_spread.max_chain_depth):
-		return
-	var source_faction: String = str(dead_unit.poison_source_snapshot.get("faction", ""))
-	if source_faction.is_empty():
-		source_faction = "enemies" if dead_unit.faction == "heroes" else "heroes"
-	var victims := enemies_near(dead_unit.position, source_faction, float(special_config.effects.poison_spread.range), int(special_config.effects.poison_spread.max_targets))
-	trigger_counts.poison_spread += 1
-	for victim in victims:
-		victim.apply_poison(dead_unit.poison_damage, 4.0, dead_unit.valid_combat_source(dead_unit.poison_source), dead_unit.poison_depth + 1, dead_unit.poison_source_snapshot)
-
 func stats_snapshot() -> Dictionary:
 	return combat_stats.snapshot(elapsed, progression.roster)
 
@@ -1032,9 +1014,6 @@ func safe_restart_game() -> Dictionary:
 		auto_retry_enabled = true
 		battle_state_changed.emit("重新开始已取消：" + str(result.get("error", "备份或校验失败")))
 	return result
-
-func note_effect(id: String) -> void:
-	trigger_counts[id] = int(trigger_counts.get(id, 0)) + 1
 
 func note_passive(actor_id: String, passive_id: String) -> void:
 	var key := actor_id + ":" + passive_id

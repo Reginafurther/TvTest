@@ -11,6 +11,7 @@ const LEGACY_SAVE_PATH := "user://wanjie_v07_inventory.json"
 const LEGACY_V061_SAVE_PATH := "user://wanjie_v061_inventory.json"
 const MIGRATION_BACKUP_PATH := "user://wanjie_v07_inventory.pre_v08_backup.json"
 const AFFIX_MIGRATION_BACKUP_PATH := "user://wanjie_v08_inventory.pre_affix_v2_backup.json"
+const EFFECT_REMOVAL_BACKUP_PATH := "user://wanjie_v08_inventory.pre_effect_removal_backup.json"
 const TEST_SAVE_PATH := "user://wanjie_v08_test_inventory.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade", "hy_long_ying", "hy_wu_zhao", "hy_kou_zhong", "hy_xu_ziling", "hy_wan_wan", "hy_fa_ming", "hy_yan_fei", "hy_sun_en", "hy_ling_donglai", "hy_lang_fanyun"]
@@ -54,6 +55,7 @@ func add_item(item: Dictionary, autosave: bool = true) -> bool:
 	if find_item(item.get("instance_id", "")) != null:
 		return false
 	var stored := item.duplicate(true)
+	stored.erase("special_effects")
 	stored["locked"] = bool(stored.get("locked", false))
 	items.append(stored)
 	inventory_changed.emit()
@@ -385,18 +387,6 @@ func get_actor_stats(actor_id: String, excluding_slot: String = "") -> Dictionar
 			merge_stats(totals, item_stats(item))
 	return totals
 
-func get_actor_specials(actor_id: String) -> Array:
-	var result: Array = []
-	if not equipped.has(actor_id):
-		return result
-	for slot in equipped[actor_id]:
-		var item = get_equipped_item(actor_id, slot)
-		if item != null:
-			for effect in item.get("special_effects", []):
-				if effect not in result:
-					result.append(effect)
-	return result
-
 func preview_stats(actor_id: String, item: Dictionary, target_slot: String = "") -> Dictionary:
 	var slot := target_slot if not target_slot.is_empty() else String(item.get("slot", ""))
 	var totals := get_actor_stats(actor_id, slot)
@@ -461,6 +451,13 @@ func load_from_disk() -> bool:
 		push_warning("存档格式无效，已忽略")
 		return false
 	items = parsed.get("items", [])
+	var removed_legacy_effects := false
+	for item in items:
+		if item.has("special_effects"):
+			removed_legacy_effects = true
+			item.erase("special_effects")
+	if removed_legacy_effects and save_path == SAVE_PATH and not FileAccess.file_exists(EFFECT_REMOVAL_BACKUP_PATH):
+		DirAccess.copy_absolute(ProjectSettings.globalize_path(source_path), ProjectSettings.globalize_path(EFFECT_REMOVAL_BACKUP_PATH))
 	affix_config_version = int(parsed.get("affix_config_version", 1))
 	var upgraded_affix_config := affix_config_version < AFFIX_CONFIG_VERSION
 	if upgraded_affix_config:
@@ -474,7 +471,7 @@ func load_from_disk() -> bool:
 	remove_broken_references()
 	ensure_equipment_layout()
 	inventory_changed.emit()
-	if upgraded_affix_config:
+	if upgraded_affix_config or removed_legacy_effects:
 		save_to_disk()
 	return true
 

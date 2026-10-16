@@ -688,8 +688,7 @@ func build_craft() -> void:
 	var list := ItemList.new()
 	list.custom_minimum_size = Vector2(0, 235)
 	for item in battle.inventory.items:
-		var special := " ★专属" if not item.get("special_effects", []).is_empty() else ""
-		var idx := list.add_item("Lv.%d %s%s" % [item.level, item.name, special])
+		var idx := list.add_item("Lv.%d %s" % [item.level, item.name])
 		list.set_item_metadata(idx, item.instance_id)
 	list.item_selected.connect(func(index): selected_item_id = list.get_item_metadata(index); refresh_craft_actions())
 	content.add_child(list)
@@ -931,7 +930,6 @@ func _damage_source_detail(sources: Dictionary) -> String:
 func _damage_source_name(source_id: String) -> String:
 	if source_id == "basic": return "普通攻击"
 	if source_id == "effect": return "其他战斗效果"
-	if source_id == "crit_lightning": return "暴击雷击"
 	if source_id.begins_with("summon:"):
 		var summon_id := source_id.trim_prefix("summon:")
 		return str(battle.actors.get(summon_id, {"name":summon_id}).get("name", summon_id)) + "·召唤攻击"
@@ -978,7 +976,6 @@ func build_settings() -> void:
 	var priority_row := HBoxContainer.new(); content.add_child(priority_row)
 	var priority_label := Label.new(); priority_label.text = "同时符合时："; priority_row.add_child(priority_label)
 	var priority := OptionButton.new(); priority.add_item("优先分解"); priority.set_item_metadata(0, "dismantle"); priority.add_item("优先出售"); priority.set_item_metadata(1, "sell"); priority.selected = 0 if str(auto_settings.get("priority", "dismantle")) == "dismantle" else 1; priority.item_selected.connect(_auto_priority_selected.bind(priority)); priority_row.add_child(priority)
-	var protect_special := CheckButton.new(); protect_special.text = "保留带特殊效果装备（推荐）"; protect_special.button_pressed = bool(auto_settings.get("keep_special_effects", true)); protect_special.toggled.connect(_set_auto_equipment_setting.bind("keep_special_effects")); content.add_child(protect_special)
 	var auto_preview := Label.new(); auto_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; auto_preview.text = _auto_equipment_preview(); auto_preview.add_theme_color_override("font_color", Color("#FFD27A")); content.add_child(auto_preview)
 	var auto_hint := Label.new(); auto_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; auto_hint.text = "已穿戴、已锁定、旧背包装备、商店购买、首通/特殊奖励均不自动处理。符合规则的新掉落会在背包容量检查前直接换成金币或重铸材料，且每件只结算一次。"; content.add_child(auto_hint)
 	content.add_child(HSeparator.new())
@@ -999,7 +996,7 @@ func _auto_quality_selected(index: int, select: OptionButton, key: String) -> vo
 	var quality := str(select.get_item_metadata(index))
 	if quality in ["purple", "orange"]:
 		pending_auto_equipment_setting = {"key":key, "value":quality}
-		auto_equipment_warning_dialog.dialog_text = "选择%s可能让今后新掉落的稀有装备被不可撤销地自动处理。\n\n已穿戴、锁定、旧装备、特殊效果及特殊奖励仍会受到保护。" % ("紫色及以下" if quality == "purple" else "橙色及以下")
+		auto_equipment_warning_dialog.dialog_text = "选择%s可能让今后新掉落的稀有装备被不可撤销地自动处理。\n\n已穿戴、锁定、旧装备及特殊奖励仍会受到保护。" % ("紫色及以下" if quality == "purple" else "橙色及以下")
 		auto_equipment_warning_dialog.popup_centered()
 		return
 	_set_auto_equipment_setting(quality, key)
