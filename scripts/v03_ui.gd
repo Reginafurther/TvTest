@@ -597,35 +597,69 @@ func build_world() -> void:
 	var world_names: Array = maps_by_world.keys()
 	world_names.sort_custom(func(a, b): return int(world_first_stage[a]) < int(world_first_stage[b]))
 	var current_world := str(battle.worlds_config.maps.get(battle.current_map_id, {}).get("world", ""))
-	if selected_world_tab.is_empty() or not maps_by_world.has(selected_world_tab): selected_world_tab = current_world
+	if selected_world_tab.is_empty() or (selected_world_tab != "全部" and not maps_by_world.has(selected_world_tab)): selected_world_tab = current_world
 	if selected_world_tab.is_empty() and not world_names.is_empty(): selected_world_tab = str(world_names[0])
 	title.text = "%d关主线 · %d世界冒险" % [maximum_stage, world_names.size()]
 	# The outer panel stays fixed; only the stage list below the horizontal world
 	# tabs scrolls vertically.
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var info := Label.new()
-	info.text = "当前战斗：%s　｜正在查看：%s%s" % [str(battle.worlds_config.maps.get(battle.current_map_id, {}).get("name", "未知关卡")), selected_world_tab, "" if battle.progression.world_unlocked(selected_world_tab) else "（未解锁，可预览）"]
+	var selected_locked: bool = selected_world_tab != "全部" and not battle.progression.world_unlocked(selected_world_tab)
+	info.text = "当前战斗：%s　｜正在查看：%s%s" % [str(battle.worlds_config.maps.get(battle.current_map_id, {}).get("name", "未知关卡")), selected_world_tab, "（未解锁，可预览）" if selected_locked else ""]
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(info)
+	var navigation_row := HBoxContainer.new()
+	navigation_row.name = "WorldNavigationRow"
+	navigation_row.add_theme_constant_override("separation", 5)
+	content.add_child(navigation_row)
+	var previous_world := Button.new()
+	previous_world.name = "WorldNavigationPrevious"
+	previous_world.text = "‹"
+	previous_world.tooltip_text = "向左浏览世界"
+	previous_world.custom_minimum_size = Vector2(34, 38)
+	previous_world.focus_mode = Control.FOCUS_NONE
+	V035ThemeScript.button(previous_world, "cream")
+	navigation_row.add_child(previous_world)
 	var world_scroll := ScrollContainer.new()
 	world_scroll.name = "WorldNavigation"
 	world_scroll.custom_minimum_size = Vector2(0, 44)
+	world_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	world_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	world_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	world_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	content.add_child(world_scroll)
+	world_scroll.follow_focus = false
+	navigation_row.add_child(world_scroll)
 	var world_tabs := HBoxContainer.new()
 	world_tabs.name = "WorldTabs"
 	world_tabs.add_theme_constant_override("separation", 6)
 	world_scroll.add_child(world_tabs)
-	for world_name in world_names:
+	var navigation_names: Array = ["全部"]
+	navigation_names.append_array(world_names)
+	var selected_world_button: Button = null
+	for world_name in navigation_names:
 		var tab := Button.new()
-		tab.text = str(world_name) + ("" if battle.progression.world_unlocked(str(world_name)) else " 🔒")
-		tab.custom_minimum_size = Vector2(88, 36)
+		var unlocked: bool = str(world_name) == "全部" or battle.progression.world_unlocked(str(world_name))
+		tab.text = str(world_name) + ("" if unlocked else " 🔒")
+		tab.custom_minimum_size = Vector2(104, 36)
+		tab.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		tab.focus_mode = Control.FOCUS_NONE
 		V035ThemeScript.button(tab, "gold" if str(world_name) == selected_world_tab else "blue")
 		tab.pressed.connect(_select_world_tab.bind(str(world_name)))
 		world_tabs.add_child(tab)
+		if str(world_name) == selected_world_tab: selected_world_button = tab
+	var next_world := Button.new()
+	next_world.name = "WorldNavigationNext"
+	next_world.text = "›"
+	next_world.tooltip_text = "向右浏览世界"
+	next_world.custom_minimum_size = Vector2(34, 38)
+	next_world.focus_mode = Control.FOCUS_NONE
+	V035ThemeScript.button(next_world, "cream")
+	navigation_row.add_child(next_world)
+	previous_world.pressed.connect(_scroll_world_navigation.bind(world_scroll, -1))
+	next_world.pressed.connect(_scroll_world_navigation.bind(world_scroll, 1))
+	world_scroll.gui_input.connect(_world_navigation_input.bind(world_scroll))
+	if selected_world_button != null:
+		call_deferred("_ensure_world_button_visible", world_scroll, selected_world_button)
 	var stage_scroll := ScrollContainer.new()
 	stage_scroll.name = "WorldStageScroll"
 	stage_scroll.custom_minimum_size = Vector2(0, 365)
@@ -640,7 +674,12 @@ func build_world() -> void:
 	stage_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stage_list.add_theme_constant_override("separation", 6)
 	stage_scroll.add_child(stage_list)
-	var selected_maps: Array = maps_by_world.get(selected_world_tab, [])
+	var selected_maps: Array = []
+	if selected_world_tab == "全部":
+		for world_name in world_names:
+			selected_maps.append_array(maps_by_world.get(world_name, []))
+	else:
+		selected_maps = maps_by_world.get(selected_world_tab, [])
 	selected_maps.sort_custom(func(a, b): return int(a.data.get("global_stage", 1)) < int(b.data.get("global_stage", 1)))
 	for row in selected_maps:
 		var map_id := str(row.id)
@@ -655,6 +694,25 @@ func build_world() -> void:
 		button.tooltip_text = "按全局主线顺序推进；切换分类仅预览，不会切换当前战斗。"
 		button.pressed.connect(_enter_stage.bind(map_id))
 		stage_list.add_child(button)
+
+func _scroll_world_navigation(scroll: ScrollContainer, direction: int) -> void:
+	if not is_instance_valid(scroll): return
+	scroll.scroll_horizontal = maxi(0, scroll.scroll_horizontal + direction * 180)
+
+func _world_navigation_input(event: InputEvent, scroll: ScrollContainer) -> void:
+	if not is_instance_valid(scroll) or not (event is InputEventMouseButton) or not event.pressed:
+		return
+	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		_scroll_world_navigation(scroll, -1)
+		scroll.accept_event()
+	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		_scroll_world_navigation(scroll, 1)
+		scroll.accept_event()
+
+func _ensure_world_button_visible(scroll: ScrollContainer, button: Button) -> void:
+	await get_tree().process_frame
+	if is_instance_valid(scroll) and is_instance_valid(button):
+		scroll.ensure_control_visible(button)
 
 func _select_world_tab(world_name: String) -> void:
 	if selected_world_tab == world_name: return

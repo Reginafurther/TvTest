@@ -129,11 +129,11 @@ func build_roster_column(parent: HBoxContainer) -> void:
 	box.custom_minimum_size = Vector2(235, 0)
 	parent.add_child(box)
 	var label := Label.new()
-	label.text = "已获得角色"
+	label.text = "角色列表"
 	V035ThemeScript.label(label, 19, Color("#493520"))
 	box.add_child(label)
 	sort_select = OptionButton.new()
-	for value in ["按出战", "按战力", "按定位"]: sort_select.add_item(value)
+	for value in ["按出战", "按战力", "按定位", "按世界"]: sort_select.add_item(value)
 	sort_select.item_selected.connect(func(_index): refresh_roster())
 	box.add_child(sort_select)
 	actor_list = ItemList.new()
@@ -299,12 +299,72 @@ func refresh_roster() -> void:
 			)
 		1: ids.sort_custom(func(a, b): return actor_power(a) > actor_power(b))
 		2: ids.sort_custom(func(a, b): return str(battle.actors[a].role) < str(battle.actors[b].role))
+		3:
+			_refresh_roster_by_world()
+			return
 	for actor_id in ids:
-		var data: Dictionary = battle.actors.get(actor_id, {})
-		var deployed: bool = actor_id in battle.progression.party
-		actor_list.add_item("%s  Lv.%d\n%s  %s" % [battle.actor_display_name(str(actor_id)), battle.progression.actor_level(actor_id), data.get("role", ""), "●上阵" if deployed else "○待命"])
-		actor_list.set_item_metadata(actor_list.item_count - 1, actor_id)
-		if actor_id == selected_actor: actor_list.select(actor_list.item_count - 1)
+		_add_roster_actor(str(actor_id), true)
+
+func _playable_actor_ids() -> Array:
+	var ids: Array = []
+	for actor_id in battle.progression.actor_levels:
+		if battle.actors.has(actor_id):
+			ids.append(str(actor_id))
+	return ids
+
+func _ordered_actor_worlds(actor_ids: Array) -> Array:
+	var first_stage: Dictionary = {}
+	for map_id in battle.worlds_config.get("maps", {}):
+		var map_data: Dictionary = battle.worlds_config.maps[map_id]
+		var world_name := str(map_data.get("world", ""))
+		if world_name.is_empty(): continue
+		var stage := int(map_data.get("global_stage", 999999))
+		first_stage[world_name] = mini(int(first_stage.get(world_name, stage)), stage)
+	for actor_id in actor_ids:
+		var world_name := str(battle.actors.get(actor_id, {}).get("world", "未知世界"))
+		if not first_stage.has(world_name): first_stage[world_name] = 999999
+	var worlds: Array = first_stage.keys()
+	worlds.sort_custom(func(a, b):
+		var a_stage := int(first_stage[a])
+		var b_stage := int(first_stage[b])
+		return a_stage < b_stage if a_stage != b_stage else str(a) < str(b)
+	)
+	return worlds
+
+func _refresh_roster_by_world() -> void:
+	var all_ids := _playable_actor_ids()
+	var acquired: Dictionary = {}
+	for actor_id in battle.progression.roster: acquired[str(actor_id)] = true
+	for world_name in _ordered_actor_worlds(all_ids):
+		var world_ids: Array = all_ids.filter(func(actor_id): return str(battle.actors.get(actor_id, {}).get("world", "未知世界")) == str(world_name))
+		if world_ids.is_empty(): continue
+		world_ids.sort_custom(func(a, b):
+			var a_deployed: bool = a in battle.progression.party
+			var b_deployed: bool = b in battle.progression.party
+			if a_deployed != b_deployed: return a_deployed
+			var a_power := actor_power(str(a))
+			var b_power := actor_power(str(b))
+			return a_power > b_power if not is_equal_approx(a_power, b_power) else str(a) < str(b)
+		)
+		var owned_count: int = int(world_ids.reduce(func(total, actor_id): return int(total) + (1 if acquired.has(str(actor_id)) else 0), 0))
+		var header_index := actor_list.add_item("━━ %s（%d/%d） ━━" % [world_name, owned_count, world_ids.size()])
+		actor_list.set_item_metadata(header_index, "")
+		actor_list.set_item_selectable(header_index, false)
+		actor_list.set_item_custom_fg_color(header_index, Color("#8B5A2B"))
+		actor_list.set_item_custom_bg_color(header_index, Color("#E9D4A8"))
+		for actor_id in world_ids:
+			_add_roster_actor(str(actor_id), acquired.has(str(actor_id)))
+
+func _add_roster_actor(actor_id: String, acquired: bool) -> void:
+	var data: Dictionary = battle.actors.get(actor_id, {})
+	var deployed: bool = acquired and actor_id in battle.progression.party
+	var state := "●上阵" if deployed else "○待命" if acquired else "◇未获得"
+	var index := actor_list.add_item("%s  Lv.%d\n%s  %s" % [battle.actor_display_name(actor_id), battle.progression.actor_level(actor_id), data.get("role", ""), state])
+	actor_list.set_item_metadata(index, actor_id)
+	actor_list.set_item_disabled(index, not acquired)
+	actor_list.set_item_selectable(index, acquired)
+	if not acquired: actor_list.set_item_custom_fg_color(index, Color("#8A8175"))
+	if actor_id == selected_actor and acquired: actor_list.select(index)
 
 func refresh_party_controls() -> void:
 	for child in party_box.get_children(): child.queue_free()
@@ -645,7 +705,9 @@ func refresh_growth() -> void:
 	growth_text.text = "[font_size=22][b]%s · 成长与定位[/b][/font_size]\n\n职业定位：%s\n战斗AI：%s\n站位说明：%s\n原生阶位：凡%d　当前属性阶位：凡%d　当前可达：凡%d\n\n当前培养：冒险团共享Lv.%d / 当前上限Lv.%d；专属主动Lv.%d；专属被动Lv.%d\n\n[b]冒险团最近升级历程[/b]\n%s" % [battle.actor_display_name(selected_actor), data.role, ai_description(data), position_description(data), int(preview.native_tier), int(preview.current_tier), int(preview.maximum_tier), battle.progression.team_level, battle.progression.actor_level_cap(), battle.progression.skill_level(selected_actor, "active"), battle.progression.skill_level(selected_actor, "passive"), "\n".join(lines) if not lines.is_empty() else "尚无升级记录"]
 
 func _select_actor(index: int) -> void:
-	selected_actor = str(actor_list.get_item_metadata(index))
+	var actor_id := str(actor_list.get_item_metadata(index))
+	if actor_id.is_empty() or actor_id not in battle.progression.roster: return
+	selected_actor = actor_id
 	selected_item_id = ""
 	preferred_equipment_slot = ""
 	feedback.text = "正在查看%s；编队未改变。" % battle.actor_display_name(selected_actor)
