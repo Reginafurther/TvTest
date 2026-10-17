@@ -1,0 +1,68 @@
+{
+  "world_name": "风云世界",
+  "style": "Q版透明PNG（优化压缩版）",
+  "count": 10,
+  "characters": [
+    {
+      "actor_id": "fy_niefeng",
+      "character_name": "聂风",
+      "portrait": "翡翠风刃侠客_chibi.png",
+      "battle": "翡翠风刃少年剑士.png"
+    },
+    {
+      "actor_id": "fy_bujingyun",
+      "character_name": "步惊云",
+      "portrait": "赤麟魔臂持巨剑的云中剑客.png",
+      "battle": "烈焰斩击的赤焰武士.png"
+    },
+    {
+      "actor_id": "fy_wuming",
+      "character_name": "无名",
+      "portrait": "御剑流云的少年侠客.png",
+      "battle": "冰蓝剑影华服少侠.png"
+    },
+    {
+      "actor_id": "fy_jiansheng",
+      "character_name": "剑圣",
+      "portrait": "白发剑仙大师与金色剑气.png",
+      "battle": "金光剑气白发仙尊.png"
+    },
+    {
+      "actor_id": "fy_wuwudi",
+      "character_name": "武无敌",
+      "portrait": "金甲龙纹武圣_chibi肖像.png",
+      "battle": "金龙环绕的战甲剑士.png"
+    },
+    {
+      "actor_id": "fy_xiaowu",
+      "character_name": "小武",
+      "portrait": "凌空出剑的q版少年侠客.png",
+      "battle": "蓝焰剑舞少年.png"
+    },
+    {
+      "actor_id": "fy_duanlang",
+      "character_name": "断浪",
+      "portrait": "赤焰华冠剑影战将.png",
+      "battle": "赤焰龙刃风暴.png"
+    },
+    {
+      "actor_id": "fy_diermeng",
+      "character_name": "第二梦",
+      "portrait": "樱花流云仙剑少女.png",
+      "battle": "樱花流刃的空中剑舞.png"
+    },
+    {
+      "actor_id": "fy_jianchen",
+      "character_name": "剑晨",
+      "portrait": "冰霜剑气中的银发剑客.png",
+      "battle": "冰霜剑舞少年.png"
+    },
+    {
+      "actor_id": "fy_dishitian",
+      "character_name": "帝释天",
+      "portrait": "冰霜曜金仙君_晶环幻舞.png",
+      "battle": "冰霜华冠_灵晶法阵.png"
+    }
+  ],
+  "note": "角色映射为建议版本；如项目内角色ID或角色对应关系与建议映射不一致，请由Codex根据项目实际角色配置和视觉内容微调。"
+}

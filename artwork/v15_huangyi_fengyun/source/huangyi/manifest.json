@@ -1,0 +1,68 @@
+{
+  "world_name": "黄易世界",
+  "style": "Q版透明PNG（优化压缩版）",
+  "count": 10,
+  "characters": [
+    {
+      "actor_id": "hy_longying",
+      "character_name": "龙鹰",
+      "portrait": "羽翼环绕的玄羽剑客.png",
+      "battle": "凌空破阵_羽鹰剑客.png"
+    },
+    {
+      "actor_id": "hy_wuzhao",
+      "character_name": "武曌",
+      "portrait": "金羽凤冠_赤焰帝姬.png",
+      "battle": "赤金凤凰焰舞少女.png"
+    },
+    {
+      "actor_id": "hy_kouzhong",
+      "character_name": "寇仲",
+      "portrait": "透明背景双刀少年侠客.png",
+      "battle": "凌空双刀风刃侠客.png"
+    },
+    {
+      "actor_id": "hy_xuziling",
+      "character_name": "徐子陵",
+      "portrait": "冰霜流云剑客.png",
+      "battle": "冰蓝流光中的御剑少年.png"
+    },
+    {
+      "actor_id": "hy_wanwan",
+      "character_name": "婠婠",
+      "portrait": "紫晶幻舞_魅影仙姬.png",
+      "battle": "紫晶幻刃魅影跃击.png"
+    },
+    {
+      "actor_id": "hy_faming",
+      "character_name": "法明",
+      "portrait": "白眉战僧动态立姿.png",
+      "battle": "武僧金刚掌风云动态插画.png"
+    },
+    {
+      "actor_id": "hy_yanfei",
+      "character_name": "燕飞",
+      "portrait": "玄水流云剑客.png",
+      "battle": "水墨惊鸿_蓝焰剑舞少年.png"
+    },
+    {
+      "actor_id": "hy_sunen",
+      "character_name": "孙恩",
+      "portrait": "太极云纹御灵少年.png",
+      "battle": "青冥御风符法少年.png"
+    },
+    {
+      "actor_id": "hy_lingdonglai",
+      "character_name": "令东来",
+      "portrait": "白金流云仙君_玉扇御风.png",
+      "battle": "金色灵韵白发仙君.png"
+    },
+    {
+      "actor_id": "hy_langfanyun",
+      "character_name": "浪翻云",
+      "portrait": "银发流云剑客.png",
+      "battle": "冰霜剑舞_玄衣游侠.png"
+    }
+  ],
+  "note": "如项目内角色ID或角色对应关系与建议映射不一致，请由Codex根据项目实际角色配置和视觉内容微调。"
+}
