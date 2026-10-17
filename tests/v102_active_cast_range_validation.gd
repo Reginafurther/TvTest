@@ -64,7 +64,7 @@ func _validate_catalog_ranges() -> void:
 		remote_general += 1
 		if not is_equal_approx(probe.general_active_cast_range(data), 420.0):
 			failures.append("远程通用主动未统一420：%s" % skill_id)
-	if remote_general != 62: failures.append("远程/嘲讽通用主动覆盖数量变化：%d" % remote_general)
+	if remote_general != 63: failures.append("远程/嘲讽通用主动覆盖数量变化：%d" % remote_general)
 	probe.free()
 
 func _fixture(actor_id: String, distance: float, enemy_id: String = "jy_bladesman") -> Dictionary:

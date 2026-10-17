@@ -235,7 +235,7 @@
     "cooldown": 10.0,
     "power": 1.18,
     "power_per_level": 0.06,
-    "range": 175,
+    "range": 420,
     "description": "对目标周围敌人造成精神范围伤害。"
   },
   "pk_rock_break": {
@@ -564,9 +564,9 @@
     "world": "宝可梦",
     "category": "passive",
     "effect": "status_amplifier",
-    "power": 0.16,
-    "power_per_level": 0.015,
-    "description": "对异常状态目标造成更多伤害。"
+    "power": 0.15,
+    "power_per_level": 0.0,
+    "description": "对处于中毒、燃烧、减速、破甲等负面状态的敌人造成伤害时，额外提高15%的伤害，与其他同类异常增伤共同受60%上限限制。"
   },
   "pk_critical_eye": {
     "name": "精神回响",

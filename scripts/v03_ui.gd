@@ -1144,7 +1144,7 @@ func _auto_equipment_preview() -> String:
 
 func _update_difficulty_preview(label: Label) -> void:
 	var profile: Dictionary = battle.custom_difficulty_profile(difficulty_preview)
-	label.text = "新版难度 %.1f×（当前已应用 %.1f×）｜对应修改前 %.1f×\n难度曲线：生命 %.2f×、攻击 %.2f×、防御 %.2f×\n大世界实际：生命 %.2f×、攻击 %.2f×、防御 %.2f×；世界Boss攻击另×1.15；大秘境不应用75%%世界系数" % [difficulty_preview, battle.progression.combat_difficulty, profile.previous_ui_coefficient, profile.health, profile.attack, profile.defense, profile.world_health, profile.attack, profile.world_defense]
+	label.text = "新版难度 %.1f×（当前已应用 %.1f×）｜对应修改前 %.1f×\n难度曲线：生命 %.2f×、攻击 %.2f×、防御 %.2f×\n大世界实际：生命 %.2f×、攻击 %.2f×、防御 %.2f×；世界Boss攻击另×1.30；大秘境不应用75%%世界系数" % [difficulty_preview, battle.progression.combat_difficulty, profile.previous_ui_coefficient, profile.health, profile.attack, profile.defense, profile.world_health, profile.attack, profile.world_defense]
 
 func _set_difficulty_preview(value: float, slider: HSlider, label: Label) -> void:
 	difficulty_preview = value

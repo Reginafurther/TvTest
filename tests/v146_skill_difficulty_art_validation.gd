@@ -24,7 +24,7 @@ func _initialize() -> void:
 	battle.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("V146_SKILL_DIFFICULTY_ART_PASS combo=%s guan_armor_break=40%% guan_threshold=70%% mapping=1:3 stage1_fixed=true world_hp_def=75%% boss_attack=115%% rift_exempt=true" % str(combo_levels))
+		print("V146_SKILL_DIFFICULTY_ART_PASS combo=%s guan_armor_break=40%% guan_threshold=70%% mapping=1:3 stage1_fixed=true world_hp_def=75%% boss_attack=130%% rift_exempt=true" % str(combo_levels))
 		quit(0)
 		return
 	for failure in failures:
@@ -166,8 +166,8 @@ func _validate_enemy_panels() -> void:
 	close(float(world_normal.health) / float(rift_normal.health), 0.75, "世界生命75%")
 	close(float(world_normal.defense) / float(rift_normal.defense), 0.75, "世界防御75%")
 	close(float(world_normal.attack) / float(rift_normal.attack), 1.0, "世界普通怪攻击不变")
-	close(float(world_boss.attack) / float(world_normal.attack), 1.15, "世界Boss攻击15%")
-	close(float(rift_boss.attack) / float(rift_normal.attack), 1.0, "秘境Boss不应用15%")
+	close(float(world_boss.attack) / float(world_normal.attack), 1.30, "世界Boss攻击30%")
+	close(float(rift_boss.attack) / float(rift_normal.attack), 1.0, "秘境Boss不应用30%")
 	close(float(rift_boss.health), float(rift_normal.health), "秘境不应用世界生命系数")
 	close(float(rift_boss.defense), float(rift_normal.defense), "秘境不应用世界防御系数")
 

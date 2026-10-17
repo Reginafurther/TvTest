@@ -42,9 +42,9 @@ func general_value(data: Dictionary, level: int) -> float:
 func _validate_skill_values() -> void:
 	close(active_value(battle.skills.rest, 1), 0.33, "睡觉1级")
 	close(active_value(battle.skills.rest, 10), 0.627, "睡觉10级")
-	close(active_value(battle.skills.shell_guard, 10), 0.40, "缩壳守护10级")
+	close(active_value(battle.skills.shell_guard, 10), 0.80, "缩壳守护10级")
 	close(float(battle.skills.aura_sphere.armor_break) + float(battle.skills.aura_sphere.armor_break_per_level) * 9.0, 0.35, "波导弹10级破甲")
-	close(passive_value(battle.passives_config.thick_fat, 10), 0.36, "厚脂生命")
+	close(passive_value(battle.passives_config.thick_fat, 10), 0.81, "厚脂生命")
 	close(float(battle.passives_config.thick_fat.regen_ratio) + float(battle.passives_config.thick_fat.regen_ratio_per_level) * 9.0, 0.04, "厚脂恢复")
 	close(passive_value(battle.passives_config.poison_master, 10), 2.0, "剧毒蔓延伤害")
 	close(float(battle.passives_config.poison_master.duration_bonus) + float(battle.passives_config.poison_master.duration_bonus_per_level) * 9.0, 0.2825, "剧毒蔓延持续")
@@ -91,8 +91,8 @@ func _validate_skill_behaviors() -> void:
 	var ally = battle.spawn_unit("pikachu", "heroes", Vector2(240, 230)); ally.hp = ally.max_hp * 0.5
 	enemy = battle.spawn_unit("jy_bladesman", "enemies", Vector2(520, 220)); squirtle.target = enemy
 	if not squirtle.try_use_skill(): failures.append("缩壳守护未释放")
-	close(squirtle.shield / squirtle.max_hp, 0.40, "缩壳自身护盾", 0.002)
-	close(ally.shield / ally.max_hp, 0.22, "缩壳队友护盾", 0.002)
+	close(squirtle.shield / squirtle.max_hp, 0.80, "缩壳自身护盾", 0.002)
+	close(ally.shield / ally.max_hp, 0.44, "缩壳队友护盾", 0.002)
 
 	_reset_combat(); _set_exclusive_levels("lucario", 10, 10)
 	var lucario = battle.spawn_unit("lucario", "heroes", Vector2(220, 220))
