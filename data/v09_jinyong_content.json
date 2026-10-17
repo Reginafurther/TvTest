@@ -29,13 +29,13 @@
     "jy_boss_dongfang":{"name":"东方不败","world":"金庸","role":"葵花终极首领","enemy_type":"boss","max_hp":5200,"attack":148,"defense":66,"move_speed":138,"attack_range":210,"attack_interval":0.55,"color":"B23F62","accent":"FFD0DD","skill":"jy_boss_combo","boss_id":"dongfang_bubai","boss_mechanic":"final_burst_phases"}
   },
   "skills": {
-    "jy_dragon_palms":{"damage_type":"physical","name":"降龙十八掌","type":"area_damage","power":1.38,"power_per_level":0.075,"cooldown":8.0,"range":175,"function_type":"damage","description":"刚猛掌力攻击范围内敌人。"},
-    "jy_dog_beating_staff":{"damage_type":"physical","name":"打狗棒法","type":"armor_break_shot","power":1.14,"power_per_level":0.065,"cooldown":7.0,"range":105,"armor_break":0.27,"duration":5.0,"function_type":"damage","description":"灵巧棒法造成伤害并破甲。"},
+    "jy_dragon_palms":{"damage_type":"physical","name":"降龙十八掌","type":"area_damage","power":1.58,"power_per_level":0.08,"cooldown":7.6,"range":175,"function_type":"damage","description":"刚猛掌力攻击范围内敌人。"},
+    "jy_dog_beating_staff":{"damage_type":"physical","name":"打狗棒法","type":"armor_break_shot","power":1.3,"power_per_level":0.07,"cooldown":6.7,"range":105,"armor_break":0.27,"duration":5.0,"function_type":"damage","description":"灵巧棒法造成伤害并破甲。"},
     "jy_melancholic_palms":{"damage_type":"physical","name":"黯然销魂掌","type":"capped_execute_area","power":1.42,"power_per_level":0.075,"cooldown":8.5,"range":155,"execute_bonus":0.42,"boss_cap":0.12,"function_type":"damage","description":"对低生命目标造成更高伤害。"},
     "jy_jade_maiden_sword":{"damage_type":"physical","name":"玉女素心剑","type":"multi_hit","power":0.42,"power_per_level":0.045,"hits":5,"cooldown":6.5,"range":95,"function_type":"damage","description":"轻灵迅捷的五段剑击。"},
     "jy_taiji_fist":{"damage_type":"physical","name":"太极拳","type":"dive_guard","power":1.08,"power_per_level":0.06,"cooldown":8.0,"range":150,"duration":4.0,"function_type":"defense","description":"近身攻击并短时减伤。"},
     "jy_white_bone_claw":{"damage_type":"physical","name":"九阴白骨爪","type":"multi_hit_slow","power":0.50,"power_per_level":0.05,"hits":4,"cooldown":7.0,"range":105,"slow":0.20,"duration":4.0,"function_type":"damage","description":"连续爪击并限制目标行动。"},
-    "jy_dragon_capturing":{"damage_type":"physical","name":"擒龙功","type":"gravity_taunt","power":0.18,"power_per_level":0.012,"cooldown":8.0,"range":190,"slow":0.40,"duration":2.5,"function_type":"control","description":"以内力伤害并牵引周围敌人，施加减速与控制。"},
+    "jy_dragon_capturing":{"damage_type":"physical","name":"擒龙功","type":"gravity_taunt","power":0.25,"power_per_level":0.018,"cooldown":7.6,"range":190,"slow":0.40,"duration":2.5,"function_type":"control","description":"以内力伤害并牵引周围敌人，施加减速与控制。"},
     "jy_six_meridian_sword":{"damage_type":"elemental","name":"六脉神剑","type":"multi_hit","power":0.47,"power_per_level":0.05,"hits":5,"cooldown":7.2,"range":285,"function_type":"damage","description":"远程释放多段无形剑气。"},
     "jy_dugu_swords":{"damage_type":"physical","name":"独孤九剑","type":"piercing_shot","power":1.48,"power_per_level":0.075,"cooldown":7.2,"range":150,"armor_ignore":0.48,"function_type":"damage","description":"识破招式并无视部分防御。"},
     "jy_pure_music_blade":{"damage_type":"elemental","name":"清心普善咒·琴刃","type":"burn_area","power":1.18,"power_per_level":0.065,"dot_power":0.14,"cooldown":8.5,"range":245,"duration":5.0,"function_type":"control","description":"琴音化刃攻击目标区域，并施加减速与短暂扰乱；不会附加燃烧。"},

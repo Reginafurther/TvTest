@@ -35,12 +35,12 @@
     "royal_gravity":{"damage_type":"none","name":"言灵·王权","type":"gravity_taunt","power":0.18,"power_per_level":0.02,"cooldown":9.0,"range":210,"duration":3.0,"slow":0.55,"function_type":"control","description":"以重力压制近敌、减速并吸引火力。"},
     "dream_tapir":{"damage_type":"elemental","name":"言灵·梦貘","type":"nightmare","power":0.78,"power_per_level":0.07,"cooldown":8.0,"range":245,"duration":5.0,"function_type":"control","description":"施加受Boss抗性限制的噩梦与精神伤害。"},
     "mirror_pupil":{"damage_type":"elemental","name":"言灵·镜瞳","type":"mirror_safe","power":0.72,"power_per_level":0.03,"cooldown":10.0,"range":250,"function_type":"support","description":"以受限倍率复制队友可复制的直接伤害技能，不复制复活、交易、召唤或镜瞳。"},
-    "iron_hook":{"damage_type":"physical","name":"铁画银钩","type":"multi_hit","power":0.48,"power_per_level":0.055,"hits":4,"cooldown":6.2,"range":85,"function_type":"damage","description":"多段枪击穿透近距离敌群，末段威力更高。"},
+    "iron_hook":{"damage_type":"physical","name":"铁画银钩","type":"multi_hit","power":0.55,"power_per_level":0.062,"hits":4,"cooldown":6.2,"range":85,"function_type":"damage","description":"多段枪击穿透近距离敌群，末段威力更高。"},
     "vajra_wall":{"damage_type":"none","name":"金刚铁壁","type":"taunt","power":0.28,"power_per_level":0.025,"cooldown":9.5,"range":240,"duration":5.0,"function_type":"defense","description":"获得护盾与减伤并强制周围敌人攻击自己。"},
     "endless_annihilation":{"damage_type":"physical","name":"无尽灭","type":"multi_hit","power":0.42,"power_per_level":0.055,"hits":6,"cooldown":8.2,"range":75,"function_type":"damage","description":"高速连斩，最后一击对低血目标造成额外威胁。"},
     "hundred_birds_phoenix":{"damage_type":"elemental","name":"百鸟朝凤","type":"burn_area","power":1.58,"power_per_level":0.08,"cooldown":8.5,"range":250,"dot_power":0.22,"duration":6.0,"function_type":"damage","description":"召来火凤轰击目标区域并附加燃烧。"},
     "colorful_wings":{"damage_type":"none","name":"彩翼","type":"team_hot","power":1.38,"power_per_level":0.08,"cooldown":9.0,"duration":7.0,"targets":4,"function_type":"healing","description":"为全队施加持续恢复，和急救型治疗形成差异。"},
-    "gather_gu":{"damage_type":"none","name":"聚蛊","type":"hero_summon","power":0.48,"power_per_level":0.055,"cooldown":11.0,"duration":9.0,"summon_cap":2,"function_type":"damage","description":"召唤至多两只药人，持续攻击并施加魂蛊。"},
+    "gather_gu":{"damage_type":"none","name":"聚蛊","type":"hero_summon","power":0.58,"power_per_level":0.065,"cooldown":10.5,"duration":10.5,"summon_cap":2,"function_type":"damage","description":"召唤至多两只药人，持续攻击并施加魂蛊。"},
     "boss_nidhogg_phases":{"name":"黑王终焉","type":"boss_area","power":1.45,"cooldown":6.5,"range":260,"function_type":"damage","description":"按血量阈值轮换龙威、护盾、范围吐息与最终狂暴。"},
     "boss_star_sword_array":{"name":"星辰剑阵","type":"boss_area","power":1.35,"cooldown":5.8,"range":280,"function_type":"damage","description":"星辰剑阵周期爆发，并在低血量阶段加速。"}
   },
@@ -60,7 +60,7 @@
     "shadow_blade_combo":{"name":"影刃连击","effect":"combo","value":0.48,"per_level":0.025,"description":"连续命中后追加影刃并强化暴击。"},
     "qin_resonance":{"name":"琴心共鸣","effect":"elemental_damage","value":0.2,"per_level":0.014,"description":"元素与燃烧技能交替时强化伤害。"},
     "pure_heart_benevolence":{"name":"素心仁术","effect":"healing","value":0.24,"per_level":0.018,"description":"强化持续治疗，并允许彩翼有限净化。"},
-    "medicine_avatar_resonance":{"name":"药人共鸣","effect":"summon_damage","value":0.2,"per_level":0.018,"description":"提高药人伤害与魂蛊联动，不增加召唤上限。"}
+    "medicine_avatar_resonance":{"name":"药人共鸣","effect":"summon_damage","value":0.24,"per_level":0.02,"description":"提高药人伤害与魂蛊联动，不增加召唤上限。"}
   },
   "general_skills": {
     "dz_dragon_flame":{"damage_type":"elemental","name":"龙焰爆发","world":"龙族","category":"active","function_type":"damage","effect":"burn","power":1.2,"power_per_level":0.07,"dot_power":0.22,"duration":6,"cooldown":8,"range":220,"description":"范围龙焰与持续燃烧。"},

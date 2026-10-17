@@ -25,10 +25,10 @@
     "wow_boss_lich_king":{"name":"巫妖王·阿尔萨斯","world":"魔兽世界","role":"冰冠最终首领","enemy_type":"boss","max_hp":3600,"attack":118,"defense":55,"move_speed":90,"attack_range":195,"attack_interval":0.88,"color":"273348","accent":"A7E9FF","skill":"wow_boss_frostfire","boss_id":"lich_king","boss_mechanic":"final_burst_phases"}
   },
   "skills": {
-    "wow_shield_wall":{"damage_type":"none","name":"盾墙","type":"taunt","power":0.24,"power_per_level":0.018,"cooldown":10.0,"range":230,"duration":4.5,"damage_reduction":0.26,"function_type":"defense","description":"嘲讽周围敌人，获得护盾并在4.5秒内减伤26%。"},
+    "wow_shield_wall":{"damage_type":"none","name":"盾墙","type":"taunt","power":0.28,"power_per_level":0.021,"cooldown":10.0,"range":230,"duration":5,"damage_reduction":0.26,"function_type":"defense","description":"嘲讽周围敌人，获得护盾并在4.5秒内减伤26%。"},
     "wow_divine_hymn":{"damage_type":"none","name":"神圣赞美诗","type":"team_hot","power":1.65,"power_per_level":0.08,"cooldown":10.5,"duration":7.0,"targets":4,"function_type":"healing","description":"为全队施加持续圣光治疗。"},
     "wow_bloodlust":{"damage_type":"none","name":"嗜血","type":"team_haste","power":0.28,"power_per_level":0.018,"cooldown":11.0,"duration":6.0,"function_type":"support","description":"压缩全队当前技能冷却，并在6秒内提高攻击速度。"},
-    "wow_howling_blast":{"damage_type":"elemental","name":"凛风冲击","type":"multi_hit_slow","power":0.55,"power_per_level":0.055,"hits":3,"cooldown":7.5,"range":185,"slow":0.35,"duration":4.0,"function_type":"damage","description":"冰霜多段攻击并减速目标。"},
+    "wow_howling_blast":{"damage_type":"elemental","name":"凛风冲击","type":"multi_hit_slow","power":0.65,"power_per_level":0.06,"hits":3,"cooldown":7.2,"range":185,"slow":0.35,"duration":4.0,"function_type":"damage","description":"冰霜多段攻击并减速目标。"},
     "wow_eye_beam":{"damage_type":"elemental","name":"眼棱","type":"multi_hit","power":0.48,"power_per_level":0.05,"hits":5,"cooldown":7.0,"range":175,"function_type":"damage","description":"以邪能眼棱快速连续攻击。"},
     "wow_blizzard":{"damage_type":"elemental","name":"暴风雪","type":"burn_area","power":1.20,"power_per_level":0.07,"dot_power":0.18,"cooldown":8.2,"range":245,"duration":5.0,"function_type":"damage","description":"在目标区域造成冰霜范围伤害，附加5秒冰霜持续伤害与减速（不视为燃烧）。"},
     "wow_boss_assault":{"damage_type":"physical","name":"首领强袭","type":"boss_area","power":1.0,"cooldown":6.8,"range":220},
