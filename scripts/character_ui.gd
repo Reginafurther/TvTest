@@ -20,6 +20,7 @@ var portrait_placeholder: Label
 var slot_buttons: Dictionary = {}
 var tabs: TabContainer
 var stats_text: RichTextLabel
+var damage_score_label: Label
 var skill_scroll: ScrollContainer
 var skills_box: VBoxContainer
 var inventory_list: ItemList
@@ -40,6 +41,7 @@ var skill_category_filter := "全部"
 var skills_dirty := true
 var skills_rendered_actor := ""
 var skill_scroll_restore_token := 0
+var copied_general_skill_loadout: Dictionary = {}
 
 func setup(owner_battle) -> void:
 	battle = owner_battle
@@ -220,10 +222,45 @@ func build_detail_column(parent: HBoxContainer) -> void:
 	tabs.custom_minimum_size = Vector2(610, 620)
 	tabs.tab_changed.connect(_refresh_visible_detail_tab)
 	parent.add_child(tabs)
+	var stats_page := HBoxContainer.new()
+	stats_page.name = "人物属性"
+	stats_page.add_theme_constant_override("separation", 12)
 	stats_text = RichTextLabel.new()
-	stats_text.name = "人物属性"
 	stats_text.bbcode_enabled = true
-	tabs.add_child(stats_text)
+	stats_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stats_page.add_child(stats_text)
+	var damage_column := VBoxContainer.new()
+	damage_column.custom_minimum_size = Vector2(172, 0)
+	stats_page.add_child(damage_column)
+	var damage_card := PanelContainer.new()
+	damage_card.tooltip_text = "根据最终攻击、暴击期望、攻速、对应伤害类型增伤、最终增伤及冷却缩减计算的理论输出评分，不考虑目标防御及技能直接效果。"
+	damage_card.add_theme_stylebox_override("panel", V035ThemeScript.box(Color("#FFF3D5"), Color("#C6924A"), 10, 6))
+	damage_column.add_child(damage_card)
+	var damage_box := VBoxContainer.new()
+	damage_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	damage_card.add_child(damage_box)
+	var damage_title := Label.new()
+	damage_title.text = "伤害能力"
+	damage_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	damage_title.tooltip_text = damage_card.tooltip_text
+	V035ThemeScript.label(damage_title, 15, Color("#6D4A24"))
+	damage_box.add_child(damage_title)
+	damage_score_label = Label.new()
+	damage_score_label.text = "—"
+	damage_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	damage_score_label.tooltip_text = damage_card.tooltip_text
+	V035ThemeScript.label(damage_score_label, 27, Color("#B87516"))
+	damage_box.add_child(damage_score_label)
+	var damage_hint := Label.new()
+	damage_hint.text = "理论输出评分"
+	damage_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	damage_hint.tooltip_text = damage_card.tooltip_text
+	V035ThemeScript.label(damage_hint, 11, Color("#8B7355"))
+	damage_box.add_child(damage_hint)
+	var damage_spacer := Control.new()
+	damage_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	damage_column.add_child(damage_spacer)
+	tabs.add_child(stats_page)
 	skill_scroll = ScrollContainer.new()
 	skill_scroll.name = "角色技能"
 	skill_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -433,11 +470,35 @@ func refresh_stats() -> void:
 	var breakthrough_stats: Dictionary = battle.breakthrough_base_stats(selected_actor)
 	var base: Dictionary = {"health": float(breakthrough_stats.max_hp) * (1.0 + (level - 1) * 0.08), "attack": float(breakthrough_stats.attack) * (1.0 + (level - 1) * 0.06), "defense": float(breakthrough_stats.defense) * (1.0 + (level - 1) * 0.05), "crit_chance": 0.05, "crit_damage": 1.5, "attack_speed": 0.0, "cooldown_reduction": 0.0, "physical_damage":0.0,"elemental_damage":0.0,"final_damage":0.0,"damage_reduction":0.0,"healing_effect":0.0}
 	var gear: Dictionary = battle.inventory.get_actor_stats(selected_actor)
-	var final: Dictionary = base.duplicate(true)
-	for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
-	var live = battle.get_hero(selected_actor)
-	if live != null: final = live.combat_snapshot()
+	var final: Dictionary = battle.actor_final_combat_snapshot(selected_actor)
+	if final.is_empty():
+		final = base.duplicate(true)
+		for key in gear: final[key] = float(final.get(key, 0)) + float(gear[key])
+	var damage_score := calculate_damage_capability(data, final)
+	damage_score_label.text = "—" if damage_score < 0.0 else format_damage_capability(damage_score)
+	damage_score_label.tooltip_text = ("普攻为治疗。\n" if damage_score < 0.0 else "") + "根据最终攻击、暴击期望、攻速、对应伤害类型增伤、最终增伤及冷却缩减计算的理论输出评分，不考虑目标防御及技能直接效果。"
 	stats_text.text = "[font_size=22][b]%s · 人物属性[/b][/font_size]\n冒险团共享等级 Lv.%d / 当前上限 Lv.%d\n\n[b]最终生效属性（基础 / 装备 / 最终）[/b]\n%s\n\n仅展示已接入实际战斗公式的属性；装备变更会即时刷新。" % [battle.actor_display_name(selected_actor), level, battle.progression.actor_level_cap(), stat_rows(base, gear, final)]
+
+static func calculate_damage_capability(actor_data: Dictionary, final_stats: Dictionary) -> float:
+	if str(actor_data.get("basic_action", "damage")) == "heal":
+		return -1.0
+	var damage_type := str(actor_data.get("basic_damage_type", "physical"))
+	if damage_type not in ["physical", "elemental"]:
+		return -1.0
+	var crit_expected := 1.0 + float(final_stats.get("crit_chance", 0.0)) * (float(final_stats.get("crit_damage", 1.0)) - 1.0)
+	var typed_bonus := float(final_stats.get("physical_damage" if damage_type == "physical" else "elemental_damage", 0.0))
+	return float(final_stats.get("attack", 0.0)) * crit_expected * (1.0 + typed_bonus) * (1.0 + float(final_stats.get("final_damage", 0.0))) * (1.0 + float(final_stats.get("attack_speed", 0.0))) * (1.0 + float(final_stats.get("cooldown_reduction", 0.0)) / 3.0)
+
+static func format_damage_capability(value: float) -> String:
+	var fixed := "%.1f" % value
+	var pieces := fixed.split(".")
+	var whole := str(pieces[0])
+	var groups: Array[String] = []
+	while whole.length() > 3:
+		groups.push_front(whole.substr(whole.length() - 3, 3))
+		whole = whole.substr(0, whole.length() - 3)
+	groups.push_front(whole)
+	return "%s.%s" % [",".join(groups), str(pieces[1])]
 
 func _show_breakthrough_dialog() -> void:
 	if selected_actor.is_empty(): return
@@ -489,7 +550,28 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 	add_skill_heading("专属被动 · %s Lv.%d" % [exclusive_passive.name, exclusive_passive_level], skill_numeric_description(exclusive_passive, exclusive_passive_level, "passive", true))
 	add_skill_upgrade_button("升级专属被动", "passive")
 	var equipped: Dictionary = p.equipped_general_skills[selected_actor]
-	add_skill_heading("通用技能配置", "3个主动槽按从左到右顺序自动释放；4个被动槽同时生效。\n释放优先级：%s" % " → ".join(p.skill_priorities[selected_actor]))
+	var loadout_header := HBoxContainer.new()
+	loadout_header.add_theme_constant_override("separation", 8)
+	var loadout_label := Label.new()
+	loadout_label.text = "通用技能配置\n3个主动槽按顺序自动释放；4个被动槽同时生效。释放优先级：%s" % " → ".join(p.skill_priorities[selected_actor])
+	loadout_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	loadout_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	V035ThemeScript.label(loadout_label, 16, Color("#493520"))
+	loadout_header.add_child(loadout_label)
+	var copy_button := Button.new()
+	copy_button.text = "复制技能"
+	copy_button.tooltip_text = "复制当前角色全部3个主动槽、4个被动槽及技能等级"
+	copy_button.pressed.connect(_copy_general_skill_loadout)
+	V035ThemeScript.button(copy_button, "blue")
+	loadout_header.add_child(copy_button)
+	var paste_button := Button.new()
+	paste_button.text = "粘贴技能"
+	paste_button.disabled = copied_general_skill_loadout.is_empty()
+	paste_button.tooltip_text = "尚未复制技能配置" if paste_button.disabled else "应用%s的整套通用技能配置" % str(copied_general_skill_loadout.get("source_name", "来源角色"))
+	paste_button.pressed.connect(_paste_general_skill_loadout)
+	V035ThemeScript.button(paste_button, "gold")
+	loadout_header.add_child(paste_button)
+	skills_box.add_child(loadout_header)
 	for category in ["active", "passive"]:
 		var slots: Array = equipped[category]
 		var row := HBoxContainer.new()
@@ -542,6 +624,47 @@ func refresh_skills(preserve_scroll: bool = true) -> void:
 	skills_dirty = false
 	skills_rendered_actor = selected_actor
 	call_deferred("_restore_skill_scroll", previous_scroll, restore_token)
+
+func _copy_general_skill_loadout() -> void:
+	if selected_actor.is_empty():
+		return
+	var equipped: Dictionary = battle.progression.equipped_general_skills.get(selected_actor, {})
+	var payload := {
+		"source_actor_id": selected_actor,
+		"source_name": battle.actor_display_name(selected_actor),
+		"active": [],
+		"passive": []
+	}
+	for category in ["active", "passive"]:
+		var slots: Array = equipped.get(category, [])
+		var expected_size := 3 if category == "active" else 4
+		for slot_index in range(expected_size):
+			var skill_id := str(slots[slot_index]) if slot_index < slots.size() else ""
+			payload[category].append({
+				"skill_id": skill_id,
+				"category": category,
+				"slot_index": slot_index,
+				"level": battle.progression.general_skill_level(selected_actor, skill_id) if not skill_id.is_empty() else 0
+			})
+	copied_general_skill_loadout = payload
+	feedback.text = "已复制%s的技能配置。" % str(payload.source_name)
+	refresh_skills(true)
+
+func _paste_general_skill_loadout() -> void:
+	if copied_general_skill_loadout.is_empty():
+		feedback.text = "请先复制一个角色的通用技能配置。"
+		return
+	var source_name := str(copied_general_skill_loadout.get("source_name", "来源角色"))
+	var target_name: String = battle.actor_display_name(selected_actor)
+	var result: Dictionary = battle.progression.apply_general_skill_loadout(selected_actor, copied_general_skill_loadout, battle.general_skills_config)
+	if not bool(result.get("ok", false)):
+		feedback.text = "粘贴失败：%s；目标配置未发生变化。" % str(result.get("error", "配置无效"))
+		return
+	battle.sync_actor_general_skill_loadout(selected_actor)
+	feedback.text = "已将%s的技能配置应用至%s。" % [source_name, target_name]
+	refresh_skills(true)
+	if tabs.current_tab == 0:
+		refresh_stats()
 
 func _disable_skill_button_focus(root: Node) -> void:
 	for child in root.get_children():

@@ -547,6 +547,65 @@ func equipped_skill_ids(actor_id: String, category: String) -> Array:
 		if not str(skill_id).is_empty(): result.append(str(skill_id))
 	return result
 
+func apply_general_skill_loadout(actor_id: String, loadout: Dictionary, skill_catalog: Dictionary) -> Dictionary:
+	# Copy/paste is intentionally a single data-layer transaction: validate the
+	# whole seven-slot payload before touching learned skills, levels or slots.
+	if actor_id not in roster:
+		return {"ok": false, "error": "目标角色尚未获得"}
+	ensure_growth_layout()
+	var next_equipped := {"active": [], "passive": []}
+	var requested_levels: Dictionary = {}
+	var seen: Dictionary = {}
+	for category in ["active", "passive"]:
+		var expected_size := 3 if category == "active" else 4
+		var rows = loadout.get(category, null)
+		if typeof(rows) != TYPE_ARRAY or rows.size() != expected_size:
+			return {"ok": false, "error": "%s槽位数量无效" % ("主动" if category == "active" else "被动")}
+		for slot_index in range(expected_size):
+			var row = rows[slot_index]
+			if typeof(row) != TYPE_DICTIONARY:
+				return {"ok": false, "error": "技能槽数据无效"}
+			if str(row.get("category", category)) != category or int(row.get("slot_index", slot_index)) != slot_index:
+				return {"ok": false, "error": "技能槽顺序或类别无效"}
+			var skill_id := str(row.get("skill_id", ""))
+			if skill_id.is_empty():
+				next_equipped[category].append("")
+				continue
+			if not skill_catalog.has(skill_id):
+				return {"ok": false, "error": "技能ID不存在：%s" % skill_id}
+			var skill_data = skill_catalog[skill_id]
+			if typeof(skill_data) != TYPE_DICTIONARY or str(skill_data.get("category", "")) != category:
+				return {"ok": false, "error": "技能类别与槽位不匹配：%s" % skill_id}
+			if seen.has(skill_id):
+				return {"ok": false, "error": "同一技能不能重复装备：%s" % skill_id}
+			seen[skill_id] = true
+			next_equipped[category].append(skill_id)
+			requested_levels[skill_id] = clampi(int(row.get("level", 1)), 1, general_skill_max_level())
+
+	var next_learned: Array = learned_general_skills[actor_id].duplicate()
+	var next_levels: Dictionary = general_skill_levels[actor_id].duplicate(true)
+	var learned_count := 0
+	var upgraded_count := 0
+	for skill_id in requested_levels:
+		if skill_id not in next_learned:
+			next_learned.append(skill_id)
+			learned_count += 1
+		var old_level := maxi(1, int(next_levels.get(skill_id, 1)))
+		var requested_level := int(requested_levels[skill_id])
+		if requested_level > old_level:
+			next_levels[skill_id] = requested_level
+			upgraded_count += 1
+		elif not next_levels.has(skill_id):
+			next_levels[skill_id] = old_level
+
+	learned_general_skills[actor_id] = next_learned
+	general_skill_levels[actor_id] = next_levels
+	equipped_general_skills[actor_id] = next_equipped
+	record_transaction("粘贴通用技能", "%s：%d主动槽+%d被动槽" % [actor_id, next_equipped.active.size(), next_equipped.passive.size()], 0)
+	changed.emit()
+	save_to_disk()
+	return {"ok": true, "error": "", "learned": learned_count, "upgraded": upgraded_count}
+
 func general_skill_level(actor_id: String, skill_id: String) -> int:
 	return maxi(1, int(general_skill_levels.get(actor_id, {}).get(skill_id, 1)))
 

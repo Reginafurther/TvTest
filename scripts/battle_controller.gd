@@ -444,6 +444,29 @@ func actor_display_name(actor_id: String) -> String:
 	var tier: int = int(progression.breakthrough_tier(actor_id, native_tier))
 	return "凡%d·%s" % [tier, original] if tier > native_tier else original
 
+func actor_final_combat_snapshot(actor_id: String) -> Dictionary:
+	var live = get_hero(actor_id)
+	if live != null:
+		return live.combat_snapshot()
+	var data: Dictionary = actors.get(actor_id, {}).duplicate(true)
+	if data.is_empty():
+		return {}
+	var breakthrough_stats := breakthrough_base_stats(actor_id)
+	for stat in ["max_hp", "attack", "defense"]:
+		data[stat] = float(breakthrough_stats.get(stat, data.get(stat, 0.0)))
+	var skill: Dictionary = skills.get(data.get("skill", ""), {})
+	var preview = BattleUnitScript.new()
+	preview.setup(actor_id, data, skill, "heroes", self)
+	preview.apply_equipment_stats(inventory.get_actor_stats(actor_id), equipment_config.get("rules", {}))
+	var snapshot: Dictionary = preview.combat_snapshot()
+	preview.free()
+	return snapshot
+
+func sync_actor_general_skill_loadout(actor_id: String) -> void:
+	var live = get_hero(actor_id)
+	if live != null and live.has_method("refresh_general_skill_loadout"):
+		live.refresh_general_skill_loadout()
+
 func tank_scoring_context(actor_id: String) -> Dictionary:
 	var base := breakthrough_base_stats(actor_id)
 	var level: int = progression.actor_level(actor_id)

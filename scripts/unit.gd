@@ -1836,6 +1836,25 @@ func refresh_progression_stats() -> void:
 	base_defense = float(actor_data.get("defense", 0)) * (1.0 + (actor_level - 1) * 0.05)
 	apply_equipment_stats(battle.inventory.get_actor_stats(actor_id), battle.equipment_config.get("rules", {}))
 
+func refresh_general_skill_loadout() -> void:
+	if faction != "heroes" or battle == null or battle.progression == null:
+		return
+	var old_timers: Dictionary = general_active_timers.duplicate(true)
+	general_active_ids = battle.progression.equipped_skill_ids(actor_id, "active")
+	general_passive_ids = battle.progression.equipped_skill_ids(actor_id, "passive")
+	general_active_timers.clear()
+	for general_id in general_active_ids:
+		# Existing equipped skills keep their current cooldown; a newly pasted
+		# skill is ready for the normal auto-cast loop immediately.
+		general_active_timers[general_id] = float(old_timers.get(general_id, 0.0))
+	general_passive_datas.clear()
+	for general_id in general_passive_ids:
+		var general_data: Dictionary = battle.general_skills_config.get(general_id, {})
+		if not general_data.is_empty():
+			general_passive_datas.append({"id": general_id, "data": general_data})
+	move_speed = float(actor_data.get("move_speed", 80))
+	apply_equipment_stats(battle.inventory.get_actor_stats(actor_id), battle.equipment_config.get("rules", {}))
+
 func effective_cooldown(base_cooldown: float) -> float:
 	var level_reduction := float(skill_data.get("cooldown_per_level", 0.0)) * (active_skill_level - 1)
 	var team_haste: float = battle.party_passive_value("team_haste") if faction == "heroes" else 0.0
