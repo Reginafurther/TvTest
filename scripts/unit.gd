@@ -16,6 +16,8 @@ const WARRIOR_TANK_FOLLOW_TOLERANCE := 28.0
 const REMOTE_GENERAL_MIN_CONFIGURED_RANGE := 180.0
 const RANGED_INNER_RANGE_RATIO := 0.70
 const RANGED_OUTER_RANGE_RATIO := 0.85
+const SINGLE_HIT_PROTECTION_RATIO := 0.65
+const COUNTER_INTERNAL_COOLDOWN := 2.0
 
 signal died(unit)
 signal combat_event(message: String)
@@ -110,6 +112,8 @@ var temporary_evasion_time := 0.0
 var temporary_evasion := 0.0
 var temporary_counter_time := 0.0
 var temporary_counter := 0.0
+var temporary_counter_skill_id := ""
+var counter_icd_remaining := 0.0
 var damage_share_time := 0.0
 var damage_share_ratio := 0.0
 var damage_share_source
@@ -253,6 +257,7 @@ func _physics_process(delta: float) -> void:
 	_tick_shield_layers(delta)
 	temporary_evasion_time = maxf(0.0, temporary_evasion_time - delta)
 	temporary_counter_time = maxf(0.0, temporary_counter_time - delta)
+	counter_icd_remaining = maxf(0.0, counter_icd_remaining - delta)
 	damage_share_time = maxf(0.0, damage_share_time - delta)
 	haste_time = maxf(0.0, haste_time - delta)
 	temporary_attack_bonus_time = maxf(0.0, temporary_attack_bonus_time - delta)
@@ -892,7 +897,7 @@ func try_use_general_skill(skill_id: String) -> bool:
 			temporary_evasion = power; temporary_evasion_time = float(data.get("duration", 4.0)); used = true
 			if skill_id == "nh_wave_shadow": haste_power = maxf(haste_power, power); haste_time = maxf(haste_time, float(data.get("duration", 5.0)))
 		"counter":
-			temporary_counter = power; temporary_counter_time = float(data.get("duration", 5.0)); used = true
+			temporary_counter = power; temporary_counter_time = float(data.get("duration", 5.0)); temporary_counter_skill_id = skill_id; used = true
 		"move_speed":
 			haste_power = power; haste_time = float(data.get("duration", 5.0)); used = true
 		"cooldown":
@@ -1019,7 +1024,7 @@ func try_use_skill() -> bool:
 					if passive_data.get("effect", "") == "boss_slayer" and victim.actor_data.has("boss_id"):
 						damage *= 1.0 + passive_value()
 						battle.note_passive(actor_id, passive_skill_id)
-					victim.take_damage(damage, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true})
+					victim.take_damage(damage, self, false, {"kind": "skill", "skill_id":str(actor_data.get("skill", "")), "allow_triggers": true, "is_boss_aoe":kind == "boss_area" and actor_data.has("boss_id")})
 				if actor_data.get("boss_id", "") == "mewtwo":
 					add_shield(max_hp * 0.12)
 				skill_timer = cooldown
@@ -1333,6 +1338,12 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	if vulnerability_time > 0.0: reduction_factor *= 1.0 + clampf(vulnerability_power, 0.0, 0.40)
 	result.reduction = 1.0 - reduction_factor
 	amount = maxf(1.0, roundf(amount * reduction_factor))
+	# Protection is applied after defense and all reductions, but before shields
+	# and HP loss. Each marked Boss-AOE hit or counter hit is capped separately.
+	if bool(safe_context.get("is_boss_aoe", false)) and faction == "heroes" and str(actor_data.get("combat_style", "")) == "melee" and str(actor_data.get("combat_role", "")) != "tank" and is_instance_valid(live_source) and live_source.actor_data.has("boss_id"):
+		amount = minf(amount, max_hp * SINGLE_HIT_PROTECTION_RATIO)
+	if bool(safe_context.get("is_counter_damage", false)) and is_player_ranged():
+		amount = minf(amount, max_hp * SINGLE_HIT_PROTECTION_RATIO)
 	if faction == "heroes" and str(actor_data.get("combat_role", "")) == "tank" and is_instance_valid(live_source) and live_source.faction != faction:
 		tank_engaged_this_wave = true
 	if shield > 0.0:
@@ -1360,16 +1371,8 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 	var recovery := passive_effect_total("damage_recovery")
 	if hp > 0.0 and recovery > 0.0:
 		heal(minf(max_hp * 0.04, amount * recovery), self, false)
-	if live_source != null and live_source != self:
-		if actor_data.get("boss_mechanic", "") == "counter_guard":
-			live_source.take_damage(amount * 0.18, self, false, {"kind":"effect", "allow_triggers":false})
-		if "counter" in rift_affixes:
-			live_source.take_damage(amount * 0.12, self, false, {"kind":"effect", "allow_triggers":false})
-		if temporary_counter_time > 0.0:
-			live_source.take_damage(attack * temporary_counter, self, false, {"kind":"effect", "damage_type":"physical", "skill_id":"tk_counter_stance", "allow_triggers":false})
-		var counter_chance := passive_effect_total("counter")
-		if counter_chance > 0.0 and randf() < counter_chance:
-			live_source.take_damage(attack * 0.65, self, false, {"kind":"effect", "allow_triggers":false})
+	if hp > 0.0 and live_source != null and live_source != self:
+		try_counter_attack(live_source, amount, safe_context)
 	if not battle.suppress_combat_visuals: queue_redraw()
 	if hp <= 0.0:
 		dead = true
@@ -1380,6 +1383,47 @@ func take_damage(raw_amount: float, source, critical: bool = false, context: Dic
 		tween.tween_property(self, "modulate:a", 0.0, 0.35)
 		tween.tween_callback(queue_free)
 	return result
+
+func try_counter_attack(attacker, received_damage: float, incoming_context: Dictionary = {}) -> bool:
+	if not is_instance_valid(attacker) or attacker.dead or counter_icd_remaining > 0.0:
+		return false
+	if not bool(incoming_context.get("allow_triggers", true)) or bool(incoming_context.get("is_counter_damage", false)):
+		return false
+	var counter_raw := 0.0
+	var counter_skill_id := ""
+	var counter_damage_type := "none"
+	if passive_skill_id == "low_hp_rage" and hp / maxf(1.0, max_hp) < 0.50:
+		counter_raw = received_damage * passive_value()
+		counter_skill_id = "passive:" + passive_skill_id
+	elif str(actor_data.get("boss_mechanic", "")) == "counter_guard":
+		counter_raw = received_damage * 0.18
+		counter_skill_id = "boss:counter_guard"
+	elif "counter" in rift_affixes:
+		counter_raw = received_damage * 0.12
+		counter_skill_id = "rift:counter"
+	elif temporary_counter_time > 0.0 and temporary_counter > 0.0:
+		counter_raw = attack * temporary_counter
+		counter_skill_id = temporary_counter_skill_id if not temporary_counter_skill_id.is_empty() else str(actor_data.get("skill", "temporary_counter"))
+		counter_damage_type = "physical"
+	else:
+		var counter_chance := passive_effect_total("counter")
+		if counter_chance <= 0.0 or randf() >= counter_chance:
+			return false
+		counter_raw = attack * 0.65
+		counter_skill_id = "passive:counter"
+	if counter_raw <= 0.0:
+		return false
+	var resolution: Dictionary = attacker.take_damage(counter_raw, self, false, {
+		"kind":"counter", "damage_type":counter_damage_type, "skill_id":counter_skill_id,
+		"allow_triggers":false, "is_counter_damage":true
+	})
+	var effective_damage := float(resolution.get("hp_damage", 0.0)) + float(resolution.get("shield_absorbed", 0.0))
+	if effective_damage <= 0.0:
+		return false
+	counter_icd_remaining = COUNTER_INTERNAL_COOLDOWN
+	if passive_skill_id == "low_hp_rage":
+		battle.note_passive(actor_id, passive_skill_id)
+	return true
 
 func resolve_damage_type(source, context: Dictionary) -> String:
 	var explicit := str(context.get("damage_type", ""))
@@ -1916,7 +1960,11 @@ func _draw() -> void:
 			var anchor := Vector2(float(anchor_data[0]), float(anchor_data[1])) if anchor_data.size() >= 2 else Vector2(0.5, 0.70)
 			var offset := Vector2(float(layout.get("offset_x", 0.0)), float(layout.get("offset_y", 0.0)))
 			draw_rect = Rect2(offset - draw_size * anchor, draw_size)
+		# Mirror only the artwork around the unit origin. UI markers and health bars
+		# remain in world orientation, and layout offsets mirror consistently.
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(facing, 1.0))
 		draw_texture_rect(artwork, draw_rect, false)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		health_bar_y = minf(health_bar_y, draw_rect.position.y - 8.0)
 		faction_marker_y = health_bar_y - 7.0
 	else:

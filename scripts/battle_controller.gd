@@ -1143,10 +1143,8 @@ func on_damage(source, target, amount: float, context: Dictionary) -> void:
 		return
 	if is_instance_valid(source) and is_instance_valid(target) and str(context.get("kind", "")) == "skill":
 		source.trigger_general_on_hit(target)
-	# Character passives remain intact; only equipment-triggered reflection was removed.
-	if is_instance_valid(source) and target.passive_skill_id == "low_hp_rage" and target.hp / target.max_hp < 0.5:
-		target.battle.note_passive(target.actor_id, target.passive_skill_id)
-		source.take_damage(amount * target.passive_value(), target, false, {"kind": "effect", "skill_id":"passive:" + str(target.passive_skill_id), "allow_triggers": false})
+	# All counter sources, including low_hp_rage, are resolved by BattleUnit's
+	# single counter gateway so they share one per-unit internal cooldown.
 
 func stats_damage_source_id(source, context: Dictionary) -> String:
 	var kind := str(context.get("kind", "skill"))
