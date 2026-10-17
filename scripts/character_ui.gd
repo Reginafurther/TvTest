@@ -815,7 +815,10 @@ func refresh_item_detail() -> void:
 	var target_slot: String = preferred_equipment_slot if preferred_equipment_slot in slots else str(slots[0])
 	if preferred_equipment_slot.is_empty() and "ring_1" in slots and battle.inventory.get_equipped_item(selected_actor, "ring_1") != null: target_slot = "ring_2"
 	var old = battle.inventory.get_equipped_item(selected_actor, target_slot)
-	var gain: float = battle.inventory.item_score(item) - (battle.inventory.item_score(old) if old != null else 0.0)
+	var score_profile: Dictionary = battle.equipment_scoring_profile(selected_actor)
+	var role := str(score_profile.combat_role)
+	var scoring_context: Dictionary = score_profile.scoring_context
+	var gain: float = battle.inventory.item_score(item, role, scoring_context) - (battle.inventory.item_score(old, role, scoring_context) if old != null else 0.0)
 	var legendary_line := "\n[color=#D93442]世界专属：%s[/color]" % str(item.world_affix.get("name", "")) if typeof(item.get("world_affix", {})) == TYPE_DICTIONARY and not item.get("world_affix", {}).is_empty() else ""
 	item_detail.text = "[b]%s[/b]　%s\n%s%s\n当前角色目标栏：%s　综合属性变化：[color=%s]%+.1f[/color]" % [item.name, "已锁定" if item.get("locked", false) else "未锁定", item_summary(item), legendary_line, battle.equipment_config.slots.get(target_slot, target_slot), "#3C9B58" if gain >= 0 else "#C84B45", gain]
 
@@ -891,8 +894,9 @@ func _inventory_action(action: String) -> void:
 	refresh_all(false)
 
 func _preview_optimization() -> void:
-	var role := str(battle.actors.get(selected_actor, {}).get("combat_role", ""))
-	var scoring_context: Dictionary = battle.tank_scoring_context(selected_actor) if role == "tank" else {}
+	var score_profile: Dictionary = battle.equipment_scoring_profile(selected_actor)
+	var role := str(score_profile.combat_role)
+	var scoring_context: Dictionary = score_profile.scoring_context
 	pending_optimization = battle.inventory.optimize_candidates(selected_actor, 0, 9, role, scoring_context)
 	if pending_optimization.is_empty():
 		feedback.text = "当前装备已是最优配置。"

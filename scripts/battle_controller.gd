@@ -475,6 +475,16 @@ func tank_scoring_context(actor_id: String) -> Dictionary:
 		"boss_attack": current_stage_boss_attack()
 	}
 
+func equipment_scoring_profile(actor_id: String) -> Dictionary:
+	var data: Dictionary = actors.get(actor_id, {})
+	var role := str(data.get("combat_role", ""))
+	var context: Dictionary = {
+		"basic_damage_type": "none" if str(data.get("basic_action", "damage")) == "heal" else str(data.get("basic_damage_type", "none"))
+	}
+	if role == "tank":
+		context.merge(tank_scoring_context(actor_id), true)
+	return {"combat_role": role, "scoring_context": context}
+
 func current_stage_boss_attack() -> float:
 	for enemy in enemies:
 		if is_instance_valid(enemy) and not enemy.dead and bool(enemy.actor_data.get("stage_boss", false)):

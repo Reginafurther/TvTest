@@ -378,6 +378,12 @@ func show_comparison(item: Dictionary) -> void:
 			text += "[color=%s]%s  %s%s[/color]\n" % [color, stat_name(stat), "+" if delta > 0 else "", format_value(stat, delta)]
 	if not changed:
 		text += "属性不变"
+	var old = inventory.get_equipped_item(actor_id, slot)
+	var score_profile: Dictionary = battle.equipment_scoring_profile(actor_id)
+	var role := str(score_profile.combat_role)
+	var scoring_context: Dictionary = score_profile.scoring_context
+	var score_gain: float = inventory.item_score(item, role, scoring_context) - (inventory.item_score(old, role, scoring_context) if old != null else 0.0)
+	text += "\n\n职业综合评分变化：[color=%s]%+.1f[/color]" % ["#76E59A" if score_gain >= 0.0 else "#FF847C", score_gain]
 	comparison.text = text
 
 func _on_inventory_selected(index: int) -> void:

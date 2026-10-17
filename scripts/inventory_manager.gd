@@ -233,7 +233,24 @@ func item_score(item: Dictionary, combat_role: String = "", scoring_context: Dic
 		)
 	var weights := {"attack":5.0,"defense":3.0,"health":0.3,"crit_chance":300.0,"crit_damage":120.0,"attack_speed":180.0,"cooldown_reduction":180.0,"physical_damage":140.0,"elemental_damage":140.0,"final_damage":260.0,"damage_reduction":240.0,"healing_effect":180.0}
 	match combat_role:
-		"healer": weights.merge({"attack":4.5,"defense":3.5,"health":0.45,"cooldown_reduction":300.0,"attack_speed":220.0,"healing_effect":520.0}, true)
+		"healer":
+			# Healer recommendations value healing throughput only. Defensive,
+			# critical and damage-only affixes remain real combat stats but must
+			# not influence manual comparisons or automatic equipment choices.
+			weights.merge({
+				"attack":4.5,
+				"health":0.0,
+				"defense":0.0,
+				"damage_reduction":0.0,
+				"final_damage":0.0,
+				"crit_chance":0.0,
+				"crit_damage":0.0,
+				"physical_damage":0.0,
+				"elemental_damage":0.0,
+				"healing_effect":520.0,
+				"cooldown_reduction":300.0,
+				"attack_speed":220.0
+			}, true)
 		"ranged_dps": weights.merge({"attack":5.8,"defense":1.8,"health":0.2,"crit_chance":360.0,"crit_damage":155.0,"elemental_damage":230.0,"cooldown_reduction":210.0}, true)
 		"melee_dps": weights.merge({"attack":6.2,"defense":2.5,"health":0.28,"crit_chance":350.0,"physical_damage":230.0,"attack_speed":220.0}, true)
 	var basic_damage_type := str(scoring_context.get("basic_damage_type", ""))
