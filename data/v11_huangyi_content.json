@@ -31,7 +31,7 @@
   "skills": {
     "hy_demon_seed_burst":{"damage_type":"elemental","name":"魔种爆发","type":"area_damage","power":1.34,"power_per_level":0.070,"cooldown":8.0,"range":210,"function_type":"damage","description":"引爆魔种，对范围敌人造成元素伤害。"},
     "hy_charm_mind":{"damage_type":"elemental","name":"姹女摄心","type":"nightmare","power":1.04,"power_per_level":0.058,"cooldown":8.2,"range":265,"duration":5.0,"attack_weaken":0.20,"function_type":"control","description":"精神冲击并控制目标，短时降低其攻击。"},
-    "hy_well_blade_eight":{"damage_type":"physical","name":"井中八法","type":"multi_hit","power":0.38,"power_per_level":0.030,"hits":5,"cooldown":7.2,"range":90,"function_type":"damage","description":"以井中月施展连续多段刀法。"},
+    "hy_well_blade_eight":{"damage_type":"physical","name":"井中八法","type":"multi_hit","power":0.49,"power_per_level":0.04,"hits":5,"cooldown":7,"range":90,"function_type":"damage","description":"以井中月施展连续多段刀法。"},
     "hy_vase_seal":{"damage_type":"none","name":"宝瓶印","type":"heal_aura","power":1.30,"power_per_level":0.068,"cooldown":7.0,"function_type":"healing","description":"治疗低血量队友并附加护盾。"},
     "hy_heavenly_demon_double_slash":{"damage_type":"physical","name":"天魔双斩","type":"execute_cone","power":0.76,"power_per_level":0.045,"hits":2,"cooldown":7.0,"range":110,"armor_break":0.24,"duration":5.0,"function_type":"damage","description":"高速双斩范围目标并破防。"},
     "hy_demon_from_heart":{"damage_type":"elemental","name":"魔由心生","type":"area_control","power":1.02,"power_per_level":0.058,"cooldown":8.5,"range":245,"duration":1.2,"function_type":"control","description":"范围精神伤害并控制敌人。"},
@@ -45,7 +45,7 @@
   "passives": {
     "hy_daoheart_seed_exclusive":{"name":"道心种魔大法","effect":"cast_momentum","value":0.08,"per_level":0.005,"elemental_bonus":0.12,"description":"提升元素伤害，连续施法进一步强化伤害。"},
     "hy_charm_art":{"name":"姹女大法","effect":"team_elemental_control","value":0.055,"per_level":0.004,"description":"提高全队元素伤害与控制抗性。"},
-    "hy_well_moon_intent":{"name":"井中月刀意","effect":"combo","value":0.20,"per_level":0.012,"description":"连续攻击时周期性强化物理伤害。"},
+    "hy_well_moon_intent":{"name":"井中月刀意","effect":"combo","value":0.24,"per_level":0.014,"description":"连续攻击时周期性强化物理伤害。"},
     "hy_longevity_exclusive":{"name":"长生诀","effect":"healing","value":0.20,"per_level":0.012,"regen":0.006,"description":"提升治疗效果与生命恢复。"},
     "hy_heavenly_demon_exclusive":{"name":"天魔大法","effect":"status_amplifier","value":0.19,"per_level":0.012,"description":"攻击异常状态目标时额外增伤。"},
     "hy_zen_demon_union":{"name":"禅魔合一","effect":"damage_reduction","value":0.13,"per_level":0.008,"control_resistance":0.16,"description":"受到伤害时减伤并提高控制抗性。"},
