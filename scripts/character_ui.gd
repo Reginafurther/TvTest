@@ -643,6 +643,7 @@ func skill_numeric_description(data: Dictionary, level: int, category: String, e
 	elif data.has("armor_break"): lines.append("降低防御：%.1f%%" % (float(data.armor_break) * 100.0))
 	if data.has("armor_ignore"): lines.append("无视防御：%.1f%%" % (float(data.armor_ignore) * 100.0))
 	if data.has("execute_bonus"): lines.append("低血量额外伤害：%.1f%%" % (float(data.execute_bonus) * 100.0))
+	if data.has("execute_threshold"): lines.append("低血量触发线：≤%.1f%%" % (float(data.execute_threshold) * 100.0))
 	if data.has("boss_cap"): lines.append("Boss单次伤害上限：%.1f%%最大生命" % (float(data.boss_cap) * 100.0))
 	if data.has("slow"): lines.append("减速：%.1f%%" % (float(data.slow) * 100.0))
 	if data.has("attack_speed_slow"): lines.append("普通攻击速度降低：%.1f%%" % (float(data.attack_speed_slow) * 100.0))

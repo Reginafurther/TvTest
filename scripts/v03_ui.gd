@@ -1066,13 +1066,13 @@ func build_settings() -> void:
 	difficulty_preview = battle.progression.combat_difficulty
 	var heading := Label.new(); heading.text = "战斗难度系数"; heading.add_theme_font_size_override("font_size", 21); content.add_child(heading)
 	var preview_label := Label.new(); preview_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; content.add_child(preview_label)
-	var slider := HSlider.new(); slider.min_value = 0.2; slider.max_value = 3.0; slider.step = 0.1; slider.value = difficulty_preview; slider.custom_minimum_size = Vector2(0, 34); content.add_child(slider)
+	var slider := HSlider.new(); slider.min_value = 1.0; slider.max_value = 8.0; slider.step = 0.1; slider.value = difficulty_preview; slider.custom_minimum_size = Vector2(0, 34); content.add_child(slider)
 	slider.value_changed.connect(func(value): difficulty_preview = snappedf(float(value), 0.1); _update_difficulty_preview(preview_label))
 	var presets := GridContainer.new(); presets.columns = 5; content.add_child(presets)
-	for spec in [["轻松", 0.5], ["标准", 1.0], ["挑战", 1.5], ["困难", 2.0], ["极限", 3.0]]:
+	for spec in [["基础", 1.0], ["挑战", 1.5], ["困难", 2.0], ["高压", 4.0], ["极限", 8.0]]:
 		var button := Button.new(); button.text = "%s %.1f×" % [spec[0], spec[1]]; button.size_flags_horizontal = Control.SIZE_EXPAND_FILL; button.pressed.connect(_set_difficulty_preview.bind(float(spec[1]), slider, preview_label)); presets.add_child(button)
 	var apply := Button.new(); apply.text = "应用难度（下一波开始生效）"; apply.pressed.connect(_apply_difficulty); V035ThemeScript.button(apply, "gold"); content.add_child(apply)
-	var formula := Label.new(); formula.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; formula.text = "新版1.0× = 原4.4×难度，调整后下一波敌人生效。大世界敌人在非线性难度倍率后额外应用生命80%、防御80%；大秘境不应用该削弱。玩家属性与奖励不变。"; content.add_child(formula)
+	var formula := Label.new(); formula.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; formula.text = "新版1.0× = 修改前3.0×难度，调整后下一波敌人生效。全局第1关固定为修改前1.4×；大世界敌人在非线性难度倍率后额外应用生命75%、防御75%，世界Boss攻击再提高15%；大秘境不应用这些世界系数。"; content.add_child(formula)
 	content.add_child(HSeparator.new())
 	var auto_heading := Label.new(); auto_heading.text = "自动装备处理（仅处理开启后新掉落的普通装备）"; auto_heading.add_theme_font_size_override("font_size", 21); content.add_child(auto_heading)
 	var auto_settings: Dictionary = battle.progression.auto_equipment_settings
@@ -1144,7 +1144,7 @@ func _auto_equipment_preview() -> String:
 
 func _update_difficulty_preview(label: Label) -> void:
 	var profile: Dictionary = battle.custom_difficulty_profile(difficulty_preview)
-	label.text = "新版难度 %.1f×（当前已应用 %.3f×）｜等价旧版 %.2f×\n难度曲线：生命 %.2f×、攻击 %.2f×、防御 %.2f×\n大世界实际：生命 %.2f×、攻击 %.2f×、防御 %.2f×；大秘境保留独立层数曲线，不应用80%%削弱" % [difficulty_preview, battle.progression.combat_difficulty, profile.equivalent_old_coefficient, profile.health, profile.attack, profile.defense, profile.world_health, profile.attack, profile.world_defense]
+	label.text = "新版难度 %.1f×（当前已应用 %.1f×）｜对应修改前 %.1f×\n难度曲线：生命 %.2f×、攻击 %.2f×、防御 %.2f×\n大世界实际：生命 %.2f×、攻击 %.2f×、防御 %.2f×；世界Boss攻击另×1.15；大秘境不应用75%%世界系数" % [difficulty_preview, battle.progression.combat_difficulty, profile.previous_ui_coefficient, profile.health, profile.attack, profile.defense, profile.world_health, profile.attack, profile.world_defense]
 
 func _set_difficulty_preview(value: float, slider: HSlider, label: Label) -> void:
 	difficulty_preview = value

@@ -200,6 +200,7 @@ func trigger_encounter(event_id: String) -> bool:
 		enemy.max_hp *= 2.8 if event_id == "hidden_boss" else 1.65
 		enemy.hp = enemy.max_hp
 		enemy.attack *= 1.8 if event_id == "hidden_boss" else 1.3
+		if event_id == "hidden_boss": battle.apply_world_boss_attack_adjustment(enemy)
 	battle.progression.save_to_disk(); changed.emit(); return true
 
 func on_enemy_defeated(unit) -> bool:

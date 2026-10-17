@@ -13,11 +13,13 @@ const MIGRATION_BACKUP_PATH := "user://wanjie_v09_progress.pre_v10_backup.json"
 const TEAM_MIGRATION_BACKUP_PATH := "user://wanjie_v10_progress.pre_team_backup.json"
 const TEST_PATH := "user://wanjie_v10_test_progress.json"
 const RESET_MARKER_PATH := "user://wanjie_reset_marker.json"
-const DIFFICULTY_CONFIG_VERSION := 3
-const PREVIOUS_DIFFICULTY_BASE := 2.5
-const CURRENT_DIFFICULTY_BASE := 4.4
-const MIN_COMBAT_DIFFICULTY := 0.2
-const MAX_COMBAT_DIFFICULTY := 3.0
+const DIFFICULTY_CONFIG_VERSION := 4
+const LEGACY_V2_DIFFICULTY_BASE := 2.5
+const PREVIOUS_DIFFICULTY_CURVE_BASE := 4.4
+const PREVIOUS_UI_TO_CURRENT_RATIO := 3.0
+const CURRENT_DIFFICULTY_CURVE_BASE := PREVIOUS_DIFFICULTY_CURVE_BASE * PREVIOUS_UI_TO_CURRENT_RATIO
+const MIN_COMBAT_DIFFICULTY := 1.0
+const MAX_COMBAT_DIFFICULTY := 8.0
 const MAIN_STAGE_LIMIT := 100
 const TEAM_PROGRESSION_VERSION := 1
 const HERO_IDS := ["zhang_fei", "dian_wei", "zhao_yun", "zhuge_liang", "liu_bei", "lu_bu", "guan_yu", "huang_zhong", "diao_chan", "zhou_yu", "pikachu", "snorlax", "gengar", "mewtwo", "bulbasaur", "charmander", "squirtle", "lucario", "gardevoir", "dragonite", "chen_motong", "chu_zihang", "yabuki_sakura", "lu_mingfei", "lu_mingze", "caesar", "eri_uesugi", "minamoto_chisei", "minamoto_chime", "zero", "blood_river", "iron_guard", "broken_dream", "divine_harmony", "plain_question", "nine_spirits", "varian_wrynn", "anduin_wrynn", "thrall", "arthas_menethil", "illidan_stormrage", "jaina_proudmoore", "guo_jing", "huang_rong", "yang_guo", "xiaolongnu", "zhang_wuji", "zhou_zhiruo", "qiao_feng", "duan_yu", "linghu_chong", "ren_yingying", "qin_gai_nie", "qin_wei_zhuang", "qin_jing_tianming", "qin_xiang_shaoyu", "qin_gao_jianli", "qin_xue_nv", "qin_duanmu_rong", "qin_shaosiming", "qin_xiaomeng", "qin_zhang_liang", "naruto_uzumaki", "naruto_sasuke", "naruto_sakura", "naruto_kakashi", "naruto_itachi", "naruto_shikamaru", "naruto_hinata", "naruto_gaara", "naruto_jiraiya", "naruto_tsunade", "hy_long_ying", "hy_wu_zhao", "hy_kou_zhong", "hy_xu_ziling", "hy_wan_wan", "hy_fa_ming", "hy_yan_fei", "hy_sun_en", "hy_ling_donglai", "hy_lang_fanyun"]
@@ -848,14 +850,18 @@ func apply_payload(parsed) -> bool:
 	var stored_difficulty_version := int(parsed.get("difficulty_config_version", 1))
 	if stored_difficulty_version < DIFFICULTY_CONFIG_VERSION:
 		var stored_difficulty := float(parsed.get("combat_difficulty", 1.5))
-		var equivalent_old_difficulty := stored_difficulty if stored_difficulty_version < 2 else stored_difficulty * PREVIOUS_DIFFICULTY_BASE
-		var unbounded_new_difficulty := equivalent_old_difficulty / CURRENT_DIFFICULTY_BASE
-		combat_difficulty = clampf(unbounded_new_difficulty, MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY)
+		var equivalent_curve_input := stored_difficulty
+		if stored_difficulty_version == 2:
+			equivalent_curve_input = stored_difficulty * LEGACY_V2_DIFFICULTY_BASE
+		elif stored_difficulty_version >= 3:
+			equivalent_curve_input = stored_difficulty * PREVIOUS_DIFFICULTY_CURVE_BASE
+		var unbounded_new_difficulty := equivalent_curve_input / CURRENT_DIFFICULTY_CURVE_BASE
+		combat_difficulty = snappedf(clampf(unbounded_new_difficulty, MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY), 0.1)
 		difficulty_config_version = DIFFICULTY_CONFIG_VERSION
-		difficulty_migration_record = {"source_version":stored_difficulty_version,"source_value":stored_difficulty,"equivalent_old_value":equivalent_old_difficulty,"migrated_value":combat_difficulty,"clamped":not is_equal_approx(unbounded_new_difficulty, combat_difficulty),"target_version":DIFFICULTY_CONFIG_VERSION}
-		record_transaction("难度配置迁移", "配置v%d %.4f×（等价旧版%.4f×）→ 配置v%d %.4f×（新版1.0×=旧版4.4×）%s" % [stored_difficulty_version, stored_difficulty, equivalent_old_difficulty, DIFFICULTY_CONFIG_VERSION, combat_difficulty, "，已按范围截断" if bool(difficulty_migration_record.clamped) else ""], 0)
+		difficulty_migration_record = {"source_version":stored_difficulty_version,"source_value":stored_difficulty,"equivalent_curve_input":equivalent_curve_input,"unbounded_value":unbounded_new_difficulty,"migrated_value":combat_difficulty,"clamped":not is_equal_approx(unbounded_new_difficulty, combat_difficulty),"target_version":DIFFICULTY_CONFIG_VERSION}
+		record_transaction("难度配置迁移", "配置v%d %.4f×（曲线输入%.4f）→ 配置v%d %.1f×（新版1.0×=修改前3.0×）%s" % [stored_difficulty_version, stored_difficulty, equivalent_curve_input, DIFFICULTY_CONFIG_VERSION, combat_difficulty, "，已按1.0～8.0范围截断" if bool(difficulty_migration_record.clamped) else ""], 0)
 	else:
-		combat_difficulty = clampf(float(parsed.get("combat_difficulty", 1.0)), MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY)
+		combat_difficulty = snappedf(clampf(float(parsed.get("combat_difficulty", 1.0)), MIN_COMBAT_DIFFICULTY, MAX_COMBAT_DIFFICULTY), 0.1)
 		difficulty_config_version = DIFFICULTY_CONFIG_VERSION
 		var stored_migration_record = parsed.get("difficulty_migration_record", {})
 		difficulty_migration_record = stored_migration_record.duplicate(true) if typeof(stored_migration_record) == TYPE_DICTIONARY else {}

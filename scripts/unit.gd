@@ -659,7 +659,7 @@ func basic_attack() -> void:
 	if passive_data.get("effect", "") == "boss_slayer" and target.actor_data.has("boss_id"):
 		amount *= 1.0 + passive_value()
 		battle.note_passive(actor_id, passive_skill_id)
-	if passive_data.get("effect", "") == "execute_damage" and target.hp / maxf(1.0, target.max_hp) <= 0.35:
+	if passive_data.get("effect", "") == "execute_damage" and target.hp / maxf(1.0, target.max_hp) <= float(passive_data.get("threshold", 0.35)):
 		amount *= 1.0 + passive_value()
 		battle.note_passive(actor_id, passive_skill_id)
 	if passive_data.get("effect", "") == "armor_ignore":
@@ -694,7 +694,9 @@ func basic_attack() -> void:
 	trigger_general_on_hit(target)
 	basic_attack_count = next_basic_count
 	if passive_data.get("effect", "") == "combo" and basic_attack_count % 3 == 0 and is_instance_valid(target) and not target.dead:
-		target.take_damage(attack * passive_value(), self, false, {"kind": "passive", "damage_type":"elemental" if passive_skill_id == "wow_windfury_weapon" else str(actor_data.get("basic_damage_type", "physical")), "allow_triggers": true})
+		var combo_critical := randf() < minf(0.75, crit_chance + conditional_crit)
+		var combo_damage := attack * passive_value() * (crit_damage if combo_critical else 1.0)
+		target.take_damage(combo_damage, self, combo_critical, {"kind": "passive", "damage_type":"elemental" if passive_skill_id == "wow_windfury_weapon" else str(actor_data.get("basic_damage_type", "physical")), "critical":combo_critical, "allow_triggers": true})
 		battle.note_passive(actor_id, passive_skill_id)
 	if passive_skill_id == "hyper_perception" and is_instance_valid(target):
 		for member in allied_units(4):
@@ -1066,8 +1068,8 @@ func try_use_skill() -> bool:
 				var victims: Array = battle.enemies_near(target.position, faction, 95.0, 5)
 				for victim in victims:
 					var damage := attack * power
-					if victim.hp / maxf(1.0, victim.max_hp) <= 0.35: damage *= 1.55
-					if passive_data.get("effect", "") == "execute_damage" and victim.hp / maxf(1.0, victim.max_hp) <= 0.35:
+					if victim.hp / maxf(1.0, victim.max_hp) <= float(skill_data.get("execute_threshold", 0.35)): damage *= float(skill_data.get("execute_multiplier", 1.55))
+					if passive_data.get("effect", "") == "execute_damage" and victim.hp / maxf(1.0, victim.max_hp) <= float(passive_data.get("threshold", 0.35)):
 						damage *= 1.0 + passive_value(); battle.note_passive(actor_id, passive_skill_id)
 					for _hit in range(int(skill_data.get("hits", 1))): victim.take_damage(damage, self, false, {"kind":"skill","skill_id":actor_data.skill,"allow_triggers":true,"multi_hit":int(skill_data.get("hits", 1)) > 1})
 					victim.apply_armor_break(minf(0.8, float(skill_data.get("armor_break", 0.18)) * armor_break_multiplier()), float(skill_data.get("duration", 5.0)))
@@ -1981,7 +1983,10 @@ func _draw() -> void:
 		# Draw a compact shadow first so long Chinese names stay readable over art.
 		draw_string(ThemeDB.fallback_font, Vector2(-91, boss_label_y + 1), boss_name, HORIZONTAL_ALIGNMENT_CENTER, 182, boss_font_size, Color("#2A1808"))
 		draw_string(ThemeDB.fallback_font, Vector2(-90, boss_label_y), boss_name, HORIZONTAL_ALIGNMENT_CENTER, 180, boss_font_size, Color("#FFE08A"))
-	draw_arc(Vector2.ZERO, 17, 0, TAU, 24, accent, 3)
+	# Textured units already have a clear silhouette. The old always-on accent arc
+	# crossed their waist/feet and looked like a ring baked into the artwork.
+	if artwork == null:
+		draw_arc(Vector2.ZERO, 17, 0, TAU, 24, accent, 3)
 	if faction == "heroes":
 		draw_circle(Vector2(0, faction_marker_y), 4, Color("#68D6FF"))
 	else:

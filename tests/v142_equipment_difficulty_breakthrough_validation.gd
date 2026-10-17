@@ -22,7 +22,7 @@ func _initialize() -> void:
 	battle.clear_combatants(); battle.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("V142_EQUIPMENT_DIFFICULTY_BREAKTHROUGH_PASS scoring=physical/elemental world_hp=0.80 world_def=0.80 rift=1.00 difficulty_base=4.4 migration=v3 remote_breakthrough=75%% checks=%d worlds=%d" % [remote_breakthrough_checks, remote_breakthrough_worlds.size()])
+		print("V142_EQUIPMENT_DIFFICULTY_BREAKTHROUGH_PASS scoring=physical/elemental world_hp=0.75 world_def=0.75 rift=1.00 difficulty_base=13.2 migration=v4 remote_breakthrough=75%% checks=%d worlds=%d" % [remote_breakthrough_checks, remote_breakthrough_worlds.size()])
 		quit(0)
 		return
 	for failure in failures: push_error("V142_EQUIPMENT_DIFFICULTY_BREAKTHROUGH_FAIL: " + failure)
@@ -68,17 +68,19 @@ func _validate_equipment_scoring() -> void:
 
 func _spawn_scaled_sample(rift: bool) -> Dictionary:
 	battle.clear_combatants()
+	battle.current_map_id = "guandu_road"
 	battle.active_rift_context = {"world":"three_kingdoms","floor":30} if rift else {}
 	var unit = battle.spawn_unit("yellow_turban", "enemies", Vector2(400, 260), {"max_hp":1000.0,"attack":500.0,"defense":100.0})
 	return {"health":unit.max_hp,"attack":unit.attack,"defense":unit.defense,"unit":unit}
 
 func _validate_difficulty_and_world_scaling() -> void:
-	for coefficient in [0.2, 0.5, 1.0, 2.0, 3.0]:
+	for coefficient in [1.0, 1.5, 2.0, 4.0, 8.0]:
 		var profile: Dictionary = battle.custom_difficulty_profile(coefficient)
-		close(float(profile.equivalent_old_coefficient), coefficient * 4.4, "旧版等价值 %.1f" % coefficient)
-		close(float(profile.health), pow(coefficient * 4.4, 0.55), "生命曲线 %.1f" % coefficient)
-		close(float(profile.attack), pow(coefficient * 4.4, 0.35), "攻击曲线 %.1f" % coefficient)
-		close(float(profile.defense), pow(coefficient * 4.4, 0.18), "防御曲线 %.1f" % coefficient)
+		close(float(profile.previous_ui_coefficient), coefficient * 3.0, "修改前界面等价值 %.1f" % coefficient)
+		close(float(profile.equivalent_old_coefficient), coefficient * 13.2, "曲线输入 %.1f" % coefficient)
+		close(float(profile.health), pow(coefficient * 13.2, 0.55), "生命曲线 %.1f" % coefficient)
+		close(float(profile.attack), pow(coefficient * 13.2, 0.35), "攻击曲线 %.1f" % coefficient)
+		close(float(profile.defense), pow(coefficient * 13.2, 0.18), "防御曲线 %.1f" % coefficient)
 	battle.progression.combat_difficulty = 1.0
 	var world := _spawn_scaled_sample(false)
 	var hp_once := float(world.health); var defense_once := float(world.defense)
@@ -86,26 +88,26 @@ func _validate_difficulty_and_world_scaling() -> void:
 	close(float(world.unit.max_hp), hp_once, "世界生命重复削弱")
 	close(float(world.unit.defense), defense_once, "世界防御重复削弱")
 	var rift := _spawn_scaled_sample(true)
-	close(float(world.health) / float(rift.health), 0.80, "大世界生命比例")
-	close(float(world.defense) / float(rift.defense), 0.80, "大世界防御比例")
+	close(float(world.health) / float(rift.health), 0.75, "大世界生命比例")
+	close(float(world.defense) / float(rift.defense), 0.75, "大世界防御比例")
 	close(float(world.attack) / float(rift.attack), 1.0, "大世界攻击不应削弱")
 	var rift_summon := _spawn_scaled_sample(true)
 	close(float(rift_summon.health), float(rift.health), "秘境召唤物生命被削弱")
 	close(float(rift_summon.defense), float(rift.defense), "秘境召唤物防御被削弱")
 
 func _validate_migration() -> void:
-	var old_v2 = ProgressionManagerScript.new()
-	old_v2.apply_payload({"version":"1.0","team_progression_version":1,"difficulty_config_version":2,"combat_difficulty":1.0,"transaction_log":[]})
-	close(old_v2.combat_difficulty, 2.5 / 4.4, "v2难度迁移保留精度")
-	if old_v2.difficulty_migration_record.is_empty(): failures.append("难度迁移未保留旧记录")
-	var count: int = old_v2.transaction_log.size()
+	var old_v3 = ProgressionManagerScript.new()
+	old_v3.apply_payload({"version":"1.0","team_progression_version":1,"difficulty_config_version":3,"combat_difficulty":3.0,"transaction_log":[]})
+	close(old_v3.combat_difficulty, 1.0, "v3难度3.0迁移为新版1.0")
+	if old_v3.difficulty_migration_record.is_empty(): failures.append("难度迁移未保留旧记录")
+	var count: int = old_v3.transaction_log.size()
 	var reloaded = ProgressionManagerScript.new()
-	reloaded.apply_payload({"version":"1.0","team_progression_version":1,"difficulty_config_version":3,"combat_difficulty":old_v2.combat_difficulty,"difficulty_migration_record":old_v2.difficulty_migration_record,"transaction_log":old_v2.transaction_log})
-	close(reloaded.combat_difficulty, 2.5 / 4.4, "v3难度重复加载")
+	reloaded.apply_payload({"version":"1.0","team_progression_version":1,"difficulty_config_version":4,"combat_difficulty":old_v3.combat_difficulty,"difficulty_migration_record":old_v3.difficulty_migration_record,"transaction_log":old_v3.transaction_log})
+	close(reloaded.combat_difficulty, 1.0, "v4难度重复加载")
 	if reloaded.transaction_log.size() != count: failures.append("难度迁移重复执行")
-	var legacy = ProgressionManagerScript.new(); legacy.apply_payload({"version":"0.8","team_progression_version":1,"combat_difficulty":4.4,"transaction_log":[]})
-	close(legacy.combat_difficulty, 1.0, "原始旧4.4迁移")
-	old_v2.free(); reloaded.free(); legacy.free()
+	var legacy = ProgressionManagerScript.new(); legacy.apply_payload({"version":"0.8","team_progression_version":1,"combat_difficulty":13.2,"transaction_log":[]})
+	close(legacy.combat_difficulty, 1.0, "原始曲线13.2迁移")
+	old_v3.free(); reloaded.free(); legacy.free()
 
 func _validate_breakthrough_health() -> void:
 	for actor_id_variant in ProgressionManagerScript.ALL_HERO_IDS:

@@ -13,8 +13,14 @@ const CraftingManagerScript = preload("res://scripts/crafting_manager.gd")
 const ShopManagerScript = preload("res://scripts/shop_manager.gd")
 const AdventureManagerScript = preload("res://scripts/adventure_manager.gd")
 const ResetManagerScript = preload("res://scripts/reset_manager.gd")
-const WORLD_ENEMY_HEALTH_MULTIPLIER := 0.80
-const WORLD_ENEMY_DEFENSE_MULTIPLIER := 0.80
+const WORLD_ENEMY_HEALTH_MULTIPLIER := 0.75
+const WORLD_ENEMY_DEFENSE_MULTIPLIER := 0.75
+const WORLD_BOSS_ATTACK_MULTIPLIER := 1.15
+const PREVIOUS_DIFFICULTY_CURVE_BASE := 4.4
+const PREVIOUS_UI_TO_CURRENT_RATIO := 3.0
+const FIRST_STAGE_PREVIOUS_DIFFICULTY := 1.4
+const MIN_CUSTOM_DIFFICULTY := 1.0
+const MAX_CUSTOM_DIFFICULTY := 8.0
 
 signal stats_changed(kills: int, elapsed: float, wave: int)
 signal party_changed(party: Array)
@@ -253,27 +259,40 @@ func difficulty_multiplier(curve_id: String, stage: int) -> float:
 	return stage_40_value + float(stage - 40) * stage_40_slope * 0.60
 
 func custom_difficulty_profile(value: float = -1.0) -> Dictionary:
-	var coefficient: float = clampf(progression.combat_difficulty, 0.2, 3.0) if value < 0.0 else snappedf(clampf(value, 0.2, 3.0), 0.1)
-	var equivalent_old_coefficient := 4.4 * coefficient
+	var coefficient: float = clampf(progression.combat_difficulty, MIN_CUSTOM_DIFFICULTY, MAX_CUSTOM_DIFFICULTY) if value < 0.0 else snappedf(clampf(value, MIN_CUSTOM_DIFFICULTY, MAX_CUSTOM_DIFFICULTY), 0.1)
+	return difficulty_profile_from_curve_input(PREVIOUS_DIFFICULTY_CURVE_BASE * PREVIOUS_UI_TO_CURRENT_RATIO * coefficient, coefficient, PREVIOUS_UI_TO_CURRENT_RATIO * coefficient)
+
+func difficulty_profile_from_curve_input(curve_input: float, coefficient: float, previous_ui_coefficient: float) -> Dictionary:
 	return {
 		"coefficient": coefficient,
-		"equivalent_old_coefficient": equivalent_old_coefficient,
-		"health": pow(equivalent_old_coefficient, 0.55),
-		"attack": pow(equivalent_old_coefficient, 0.35),
-		"defense": pow(equivalent_old_coefficient, 0.18),
-		"world_health": pow(equivalent_old_coefficient, 0.55) * WORLD_ENEMY_HEALTH_MULTIPLIER,
-		"world_defense": pow(equivalent_old_coefficient, 0.18) * WORLD_ENEMY_DEFENSE_MULTIPLIER
+		"previous_ui_coefficient": previous_ui_coefficient,
+		"equivalent_old_coefficient": curve_input,
+		"health": pow(curve_input, 0.55),
+		"attack": pow(curve_input, 0.35),
+		"defense": pow(curve_input, 0.18),
+		"world_health": pow(curve_input, 0.55) * WORLD_ENEMY_HEALTH_MULTIPLIER,
+		"world_defense": pow(curve_input, 0.18) * WORLD_ENEMY_DEFENSE_MULTIPLIER
 	}
+
+func combat_difficulty_profile() -> Dictionary:
+	var stage := int(worlds_config.get("maps", {}).get(current_map_id, {}).get("global_stage", 0))
+	if active_rift_context.is_empty() and stage == 1:
+		var curve_input := PREVIOUS_DIFFICULTY_CURVE_BASE * FIRST_STAGE_PREVIOUS_DIFFICULTY
+		var fixed := difficulty_profile_from_curve_input(curve_input, FIRST_STAGE_PREVIOUS_DIFFICULTY / PREVIOUS_UI_TO_CURRENT_RATIO, FIRST_STAGE_PREVIOUS_DIFFICULTY)
+		fixed["first_stage_fixed"] = true
+		return fixed
+	return custom_difficulty_profile()
 
 func apply_custom_difficulty(unit) -> void:
 	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("custom_difficulty_applied"): return
-	var profile := custom_difficulty_profile()
+	var profile := combat_difficulty_profile()
 	unit.max_hp *= float(profile.health)
 	unit.hp = unit.max_hp
 	unit.attack *= float(profile.attack)
 	unit.defense *= float(profile.defense)
 	unit.set_meta("custom_difficulty_applied", true)
 	unit.set_meta("custom_difficulty_coefficient", float(profile.coefficient))
+	unit.set_meta("first_stage_difficulty_fixed", bool(profile.get("first_stage_fixed", false)))
 
 func apply_world_enemy_adjustment(unit) -> void:
 	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("world_stats_adjusted"): return
@@ -284,6 +303,12 @@ func apply_world_enemy_adjustment(unit) -> void:
 	unit.hp = unit.max_hp
 	unit.defense *= WORLD_ENEMY_DEFENSE_MULTIPLIER
 	unit.set_meta("world_stats_adjusted", true)
+
+func apply_world_boss_attack_adjustment(unit) -> void:
+	if not is_instance_valid(unit) or unit.faction != "enemies" or unit.has_meta("world_boss_attack_adjusted"): return
+	if not active_rift_context.is_empty() or str(unit.enemy_type) != "boss": return
+	unit.attack *= WORLD_BOSS_ATTACK_MULTIPLIER
+	unit.set_meta("world_boss_attack_adjusted", true)
 
 func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary = {}):
 	var unit = BattleUnitScript.new()
@@ -306,6 +331,7 @@ func spawn_unit(id: String, faction: String, pos: Vector2, overrides: Dictionary
 		unit.enemy_type = str(data.get("enemy_type", "normal"))
 		apply_custom_difficulty(unit)
 		apply_world_enemy_adjustment(unit)
+		apply_world_boss_attack_adjustment(unit)
 	unit.position = pos
 	unit.died.connect(_on_unit_died)
 	unit.combat_event.connect(_on_combat_event)
@@ -436,14 +462,14 @@ func current_stage_boss_attack() -> float:
 	var value := float(template.get("attack", 1.0))
 	var v08_scales: Dictionary = progression.progression_config.get("combat_difficulty", {}).get("v08_applied_scales", {})
 	value *= float(v08_scales.get("attack", 1.0))
-	value *= float(custom_difficulty_profile().attack)
+	value *= float(combat_difficulty_profile().attack)
 	var stage := int(map_data.get("global_stage", 1))
 	if template_id.begins_with("stage_guardian") or stage > 40:
 		value *= difficulty_multiplier("guardian_attack", stage)
 	else:
 		var final_scale: Dictionary = progression.progression_config.get("combat_difficulty", {}).get("final_boss", {}).get(str(stage), {})
 		value *= float(final_scale.get("attack", 1.0))
-	return maxf(1.0, value)
+	return maxf(1.0, value * WORLD_BOSS_ATTACK_MULTIPLIER)
 
 func breakthrough_actor(actor_id: String) -> bool:
 	if not progression.breakthrough_actor(actor_id, native_world_tier(actor_id), maximum_unlocked_world_tier()): return false

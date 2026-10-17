@@ -23,7 +23,7 @@ func _initialize() -> void:
 	battle.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("V14_COMPREHENSIVE_VALIDATION_PASS descriptions=46 diao_damage=55% diao_cd=8.20/6.36 zhou_burn_bonus=51% equipment_slots=9 world_defense_ratio=0.80 rift_ratio=1.00 nine_yin=20%-200% beiming=4%-40% huang_compensation=116% war_banner_triggers=0s/12s")
+		print("V14_COMPREHENSIVE_VALIDATION_PASS descriptions=46 diao_damage=55% diao_cd=8.20/6.36 zhou_burn_bonus=51% equipment_slots=9 world_defense_ratio=0.75 rift_ratio=1.00 nine_yin=20%-200% beiming=4%-40% huang_compensation=116% war_banner_triggers=0s/12s")
 		quit(0)
 		return
 	for failure in failures: push_error("V14_COMPREHENSIVE_VALIDATION_FAIL: " + failure)
@@ -38,19 +38,19 @@ func _validate_three_kingdoms_catalog() -> void:
 		"dian_wei":"对单体造成190% → 412.3%攻击力的物理伤害；自身生命不高于40%时，本次伤害额外×1.45。",
 		"zhuge_liang":"立即缩短全队当前专属主动技能的剩余冷却20% → 38%。",
 		"lu_bu":"对周围最多12名敌人造成165% → 358.05%攻击力的范围物理伤害。",
-		"guan_yu":"最多攻击5名敌人，每名敌人受到162% → 336.96%攻击力的物理伤害，降低防御18%持续5秒；目标生命不高于35%时，本次伤害额外×1.55。",
+		"guan_yu":"最多攻击5名敌人，每名敌人受到162% → 336.96%攻击力的物理伤害，降低防御40%持续5秒；目标生命不高于70%时，本次伤害额外×1.55。",
 		"huang_zhong":"对单体造成215% → 427.85%攻击力的物理伤害，忽略目标42%的防御效果，并绕过闪避判定。",
 		"diao_chan":"对目标固定造成55%攻击力的伤害，施加2.2秒硬直控制、降低防御16%持续5秒，并推进最多4名队友的当前技能冷却。升级只缩短技能冷却。",
 		"zhou_yu":"最多攻击8名敌人，立即造成42% → 87.36%攻击力的元素伤害，并附加每秒24%攻击力、持续6秒的燃烧。"
 	}
 	var passive_descriptions := {
-		"zhao_yun":"每累计3次普通攻击，额外追加一次55% → 100%攻击力的物理伤害，更换目标不会重置计数。",
+		"zhao_yun":"每累计3次普通攻击，额外追加一次55% → 300%攻击力的物理伤害，更换目标不会重置计数。",
 		"liu_bei":"提高自身治疗效果18% → 40.5%，同时增强「仁德之援」的治疗量和附加护盾量。",
 		"zhang_fei":"常驻降低受到的伤害15% → 28.5%，与装备减伤独立计算。",
 		"dian_wei":"自身生命低于40%时，普通攻击伤害提高35% → 71%；生命低于50%时，受到有效伤害会按该比例反击攻击者。",
 		"zhuge_liang":"诸葛亮存活并在战场时，全队专属主动技能的冷却缩短8% → 18.8%。",
 		"lu_bu":"对Boss造成的伤害提高22% → 49%，作用于普通攻击及专属范围主动技能。",
-		"guan_yu":"攻击生命不高于35%的敌人时，额外提高22% → 44.5%的伤害，包括普通攻击及专属主动技能。",
+		"guan_yu":"攻击生命不高于70%的敌人时，额外提高22% → 44.5%的伤害，包括普通攻击及专属主动技能。",
 		"huang_zhong":"普通攻击和专属主动「百步穿杨」额外获得16% → 34%的防御穿透。",
 		"diao_chan":"「闭月离间」命中后，立即缩短最多4名队友当前技能的剩余冷却8% → 18.8%。",
 		"zhou_yu":"提高燃烧伤害，对燃烧目标额外增伤。"
@@ -241,6 +241,7 @@ func _validate_party_equipment_exchange() -> void:
 
 func _spawn_defense_sample(enemy_type: String, rift: bool) -> float:
 	battle.clear_combatants()
+	battle.current_map_id = "guandu_road"
 	battle.active_rift_context = {"world":"three_kingdoms", "floor":30} if rift else {}
 	var unit = battle.spawn_unit("yellow_turban", "enemies", Vector2(400, 260), {"defense":100.0, "enemy_type":enemy_type})
 	return float(unit.defense)
@@ -249,7 +250,7 @@ func _validate_world_defense_context() -> void:
 	for enemy_type in ["normal", "elite", "boss"]:
 		var world_defense := _spawn_defense_sample(enemy_type, false)
 		var rift_defense := _spawn_defense_sample(enemy_type, true)
-		if absf(world_defense / rift_defense - 0.80) > 0.0001: failures.append("%s世界防御/秘境防御不是0.80：%.4f" % [enemy_type, world_defense / rift_defense])
+		if absf(world_defense / rift_defense - 0.75) > 0.0001: failures.append("%s世界防御/秘境防御不是0.75：%.4f" % [enemy_type, world_defense / rift_defense])
 	var rift_summon := _spawn_defense_sample("normal", true)
 	if not is_equal_approx(rift_summon, _spawn_defense_sample("normal", true)): failures.append("秘境召唤怪防御被重复调整")
 
